@@ -78,7 +78,7 @@ export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
   let allResults = [];
   let page = 1;
-  const perPage = 100;
+  const perPage = 50;
   let fetched = [];
 
   console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
