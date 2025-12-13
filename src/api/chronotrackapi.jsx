@@ -1,26 +1,20 @@
-// src/api/chronotrackapi.jsx (PRODUCTION WORKING VERSION - matches local success)
+// src/api/chronotrackapi.jsx (FIXED VERSION)
 import axios from 'axios';
-
 const baseUrl = '/chrono-api'; // Proxy to https://api.chronotrack.com
-
 let accessToken = null;
 let tokenExpiration = 0;
-
 const fetchAccessToken = async () => {
   try {
     const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
     const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
     const username = import.meta.env.VITE_CHRONOTRACK_USER;
     const password = import.meta.env.VITE_CHRONOTRACK_PASS;
-
     if (!clientId || !clientSecret || !username || !password) {
       throw new Error('Missing ChronoTrack credentials in environment variables');
     }
-
     const credentials = btoa(`${clientId}:${clientSecret}`);
-
-    // CORRECT ENDPOINT: GET /oauth2/token (per ChronoTrack docs)
-    const response = await axios.get(`${baseUrl}/oauth2/token`, {
+    // CORRECT ENDPOINT: GET /api/oauth2/token (updated with /api prefix per docs)
+    const response = await axios.get(`${baseUrl}/api/oauth2/token`, {
       headers: { Authorization: `Basic ${credentials}` },
       params: {
         grant_type: 'password',
@@ -28,14 +22,10 @@ const fetchAccessToken = async () => {
         password,
       },
     });
-
     const { access_token, expires_in } = response.data;
-
     if (!access_token) throw new Error('No access token returned');
-
     accessToken = access_token;
     tokenExpiration = Date.now() + expires_in * 1000;
-
     console.log('[ChronoTrack] Token acquired successfully');
     return access_token;
   } catch (err) {
@@ -45,14 +35,12 @@ const fetchAccessToken = async () => {
     throw new Error('Could not authenticate with ChronoTrack API.');
   }
 };
-
 const getAuthHeader = async () => {
   if (!accessToken || Date.now() >= tokenExpiration) {
     await fetchAccessToken();
   }
   return `Bearer ${accessToken}`;
 };
-
 export const fetchEvents = async () => {
   try {
     const authHeader = await getAuthHeader();
@@ -60,7 +48,6 @@ export const fetchEvents = async () => {
       headers: { Authorization: authHeader },
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
-
     const events = response.data.event || [];
     return events.map(event => ({
       id: event.event_id,
@@ -72,7 +59,6 @@ export const fetchEvents = async () => {
     throw new Error('Could not load events from ChronoTrack.');
   }
 };
-
 export const fetchRacesForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
@@ -80,7 +66,6 @@ export const fetchRacesForEvent = async (eventId) => {
       headers: { Authorization: authHeader },
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
-
     const races = response.data.event_race || [];
     return races.map(race => ({
       race_id: race.race_id,
@@ -91,7 +76,6 @@ export const fetchRacesForEvent = async (eventId) => {
     throw new Error('Could not load races for the selected event.');
   }
 };
-
 export const fetchResultsForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
@@ -99,7 +83,6 @@ export const fetchResultsForEvent = async (eventId) => {
     let page = 1;
     const perPage = 100;
     let fetched = [];
-
     do {
       const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
         headers: { Authorization: authHeader },
@@ -109,12 +92,10 @@ export const fetchResultsForEvent = async (eventId) => {
           results_per_page: perPage,
         },
       });
-
       fetched = response.data.event_results || [];
       allResults = [...allResults, ...fetched];
       page++;
     } while (fetched.length === perPage);
-
     return allResults.map(result => ({
       first_name: result.results_first_name || '',
       last_name: result.results_last_name || '',
