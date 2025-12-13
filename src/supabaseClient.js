@@ -1,6 +1,19 @@
+// src/supabaseClient.js
+
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://frurvzrazckqqtyqsdmy.supabase.co';  // Replace with your actual URL
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZydXJ2enJhemNrcXF0eXFzZG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1Njk1NzQsImV4cCI6MjA4MTE0NTU3NH0.HEtfpyZw0PnzuC9tSqgJcTfx1v3DpjvqtptwrFDL07c';  // From Supabase dashboard
+// These values come from your .env file (Vite automatically prefixes with VITE_)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Optional: throw early if missing (helps catch config errors in dev)
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase URL or Anon Key. Check your .env file and ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.');
+}
+
+// Create the Supabase client (v2 syntax)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false, // Set to true if you plan to use authentication later
+  },
+});
