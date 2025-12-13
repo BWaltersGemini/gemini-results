@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL FIXED VERSION - POST for token request)
+// src/api/chronotrackapi.jsx (Updated with POST for token request + added fetchResultsForRace)
 
 import axios from 'axios';
 
@@ -20,9 +20,9 @@ const fetchAccessToken = async () => {
 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
 
-    // CRITICAL FIX: Use POST for token request with form data
-    // ChronoTrack docs show GET, but real server requires POST (common in OAuth2)
-    const response = await axios.post(`${baseUrl}/oauth2/token`, 
+    // Using POST with form body (standard OAuth2 practice, even if old docs say GET)
+    const response = await axios.post(
+      `${baseUrl}/oauth2/token`,
       new URLSearchParams({
         grant_type: 'password',
         username,
@@ -65,16 +65,13 @@ const getAuthHeader = async () => {
 export const fetchEvents = async () => {
   try {
     const authHeader = await getAuthHeader();
-
     const response = await axios.get(`${baseUrl}/api/event`, {
       headers: { Authorization: authHeader },
       params: {
         client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
       },
     });
-
     const events = response.data.event || [];
-
     return events.map((event) => ({
       id: event.event_id,
       name: event.event_name,
@@ -89,16 +86,13 @@ export const fetchEvents = async () => {
 export const fetchRacesForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
-
     const response = await axios.get(`${baseUrl}/api/event/${eventId}/race`, {
       headers: { Authorization: authHeader },
       params: {
         client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
       },
     });
-
     const races = response.data.event_race || [];
-
     return races.map((race) => ({
       race_id: race.race_id,
       race_name: race.race_name || `Race ${race.race_id}`,
@@ -112,7 +106,6 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
-
     let allResults = [];
     let page = 1;
     const perPage = 100;
@@ -127,7 +120,6 @@ export const fetchResultsForEvent = async (eventId) => {
           results_per_page: perPage,
         },
       });
-
       fetched = response.data.event_results || [];
       allResults = [...allResults, ...fetched];
       page++;
@@ -152,5 +144,47 @@ export const fetchResultsForEvent = async (eventId) => {
   } catch (err) {
     console.error('Failed to fetch results:', err.response?.data || err.message);
     throw new Error('Could not load results from ChronoTrack.');
+  }
+};
+
+export const fetchResultsForRace = async (raceId) => {
+  try {
+    const authHeader = await getAuthHeader();
+    let allResults = [];
+    let page = 1;
+    const perPage = 100;
+    let fetched = [];
+
+    do {
+      const response = await axios.get(`${baseUrl}/api/race/${raceId}/result`, {
+        headers: { Authorization: authHeader },
+        params: {
+          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+          page,
+          results_per_page: perPage,
+        },
+      });
+      fetched = response.data.race_results || response.data.result || [];
+      allResults = [...allResults, ...fetched];
+      page++;
+    } while (fetched.length === perPage);
+
+    return allResults.map((result) => ({
+      first_name: result.results_first_name || '',
+      last_name: result.results_last_name || '',
+      chip_time: result.results_time || '',
+      clock_time: result.results_gun_time || '',
+      place: result.results_rank || '',
+      gender_place: result.results_primary_bracket_rank || '',
+      age_group_name: result.results_primary_bracket_name || '',
+      age_group_place: result.results_primary_bracket_place || '',
+      pace: result.results_pace || '',
+      age: result.results_age || '',
+      gender: result.results_sex || '',
+      bib: result.results_bib || '',
+    }));
+  } catch (err) {
+    console.error('Failed to fetch results for race:', err.response?.data || err.message);
+    throw new Error('Could not load results for the selected race.');
   }
 };
