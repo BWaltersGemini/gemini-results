@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/chrono-api/(.*)",
+      "destination": "https://api.chronotrack.com/$1"
+    }
+  ]
+}
