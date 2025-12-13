@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL PRODUCTION VERSION - Dec 2025)
+// src/api/chronotrackapi.jsx (WORKING VERSION - matches local success)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api'; // Proxy to https://api.chronotrack.com
@@ -6,9 +6,6 @@ const baseUrl = '/chrono-api'; // Proxy to https://api.chronotrack.com
 let accessToken = null;
 let tokenExpiration = 0;
 
-/**
- * Fetch OAuth2 token - CORRECT PRODUCTION ENDPOINT
- */
 const fetchAccessToken = async () => {
   try {
     const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
@@ -17,49 +14,37 @@ const fetchAccessToken = async () => {
     const password = import.meta.env.VITE_CHRONOTRACK_PASS;
 
     if (!clientId || !clientSecret || !username || !password) {
-      throw new Error('Missing ChronoTrack credentials in environment variables');
+      throw new Error('Missing ChronoTrack credentials');
     }
 
     const credentials = btoa(`${clientId}:${clientSecret}`);
 
-    // CORRECT: POST to /api/oauth2/token
-    const response = await axios.post(
-      `${baseUrl}/api/oauth2/token`,
-      new URLSearchParams({
+    // CORRECT: GET to /oauth2/token (per ChronoTrack docs)
+    const response = await axios.get(`${baseUrl}/oauth2/token`, {
+      headers: { Authorization: `Basic ${credentials}` },
+      params: {
         grant_type: 'password',
         username,
         password,
-      }),
-      {
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    );
+      },
+    });
 
     const { access_token, expires_in } = response.data;
 
-    if (!access_token) {
-      throw new Error('No access token returned from ChronoTrack');
-    }
+    if (!access_token) throw new Error('No access token returned');
 
     accessToken = access_token;
     tokenExpiration = Date.now() + expires_in * 1000;
 
-    console.log('[ChronoTrack] Token acquired successfully');
+    console.log('[ChronoTrack] Token acquired');
     return access_token;
   } catch (err) {
-    console.error('[ChronoTrack] Token fetch failed:', err.response?.data || err.message);
+    console.error('[ChronoTrack] Token failed:', err.response?.data || err.message);
     accessToken = null;
-    tokenExpiration = 0;
     throw new Error('Could not authenticate with ChronoTrack API.');
   }
 };
 
-/**
- * Get valid Bearer token (auto-refresh)
- */
 const getAuthHeader = async () => {
   if (!accessToken || Date.now() >= tokenExpiration) {
     await fetchAccessToken();
@@ -67,9 +52,6 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
-/**
- * Fetch all events
- */
 export const fetchEvents = async () => {
   try {
     const authHeader = await getAuthHeader();
@@ -90,9 +72,6 @@ export const fetchEvents = async () => {
   }
 };
 
-/**
- * Fetch races for an event
- */
 export const fetchRacesForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
@@ -112,16 +91,13 @@ export const fetchRacesForEvent = async (eventId) => {
   }
 };
 
-/**
- * Fetch all results for an event (with pagination)
- */
 export const fetchResultsForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
     let allResults = [];
     let page = 1;
-    const resultsPerPage = 100;
-    let fetchedResults = [];
+    const perPage = 100;
+    let fetched = [];
 
     do {
       const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
@@ -129,14 +105,14 @@ export const fetchResultsForEvent = async (eventId) => {
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
           page,
-          results_per_page: resultsPerPage,
+          results_per_page: perPage,
         },
       });
 
-      fetchedResults = response.data.event_results || [];
-      allResults = [...allResults, ...fetchedResults];
+      fetched = response.data.event_results || [];
+      allResults = [...allResults, ...fetched];
       page++;
-    } while (fetchedResults.length === resultsPerPage);
+    } while (fetched.length === perPage);
 
     return allResults.map(result => ({
       first_name: result.results_first_name || '',
@@ -155,53 +131,7 @@ export const fetchResultsForEvent = async (eventId) => {
       race_name: result.results_race_name || '',
     }));
   } catch (err) {
-    console.error('Failed to fetch results for event:', err.response?.data || err.message);
-    throw new Error('Could not load results for the selected event.');
-  }
-};
-
-/**
- * Optional: Fetch results for a specific race (if needed in future)
- */
-export const fetchResultsForRace = async (raceId) => {
-  try {
-    const authHeader = await getAuthHeader();
-    let allResults = [];
-    let page = 1;
-    const resultsPerPage = 100;
-    let fetchedResults = [];
-
-    do {
-      const response = await axios.get(`${baseUrl}/api/race/${raceId}/result`, {
-        headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          page,
-          results_per_page: resultsPerPage,
-        },
-      });
-
-      fetchedResults = response.data.race_results || response.data.result || [];
-      allResults = [...allResults, ...fetchedResults];
-      page++;
-    } while (fetchedResults.length === resultsPerPage);
-
-    return allResults.map(result => ({
-      first_name: result.results_first_name || '',
-      last_name: result.results_last_name || '',
-      chip_time: result.results_time || '',
-      clock_time: result.results_gun_time || '',
-      place: result.results_rank || '',
-      gender_place: result.results_primary_bracket_rank || '',
-      age_group_name: result.results_primary_bracket_name || '',
-      age_group_place: result.results_primary_bracket_place || '',
-      pace: result.results_pace || '',
-      age: result.results_age || '',
-      gender: result.results_sex || '',
-      bib: result.results_bib || '',
-    }));
-  } catch (err) {
-    console.error('Failed to fetch results for race:', err.response?.data || err.message);
-    throw new Error('Could not load results for the selected race.');
+    console.error('Failed to fetch results:', err.response?.data || err.message);
+    throw err;
   }
 };
