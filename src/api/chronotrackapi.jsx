@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL CORRECTED VERSION - Based on Official Docs)
+// src/api/chronotrackapi.jsx (FINAL FIXED VERSION - POST for token request)
 
 import axios from 'axios';
 
@@ -20,17 +20,21 @@ const fetchAccessToken = async () => {
 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
 
-    // Official: GET /oauth2/token with Basic Auth header + query params
-    const response = await axios.get(`${baseUrl}/oauth2/token`, {
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
-      },
-      params: {
+    // CRITICAL FIX: Use POST for token request with form data
+    // ChronoTrack docs show GET, but real server requires POST (common in OAuth2)
+    const response = await axios.post(`${baseUrl}/oauth2/token`, 
+      new URLSearchParams({
         grant_type: 'password',
         username,
         password,
-      },
-    });
+      }).toString(),
+      {
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
 
     const { access_token, expires_in } = response.data;
 
@@ -39,7 +43,7 @@ const fetchAccessToken = async () => {
     }
 
     accessToken = access_token;
-    tokenExpiration = Date.now() + (expires_in || 3600) * 1000; // Default 1 hour if not provided
+    tokenExpiration = Date.now() + (expires_in || 3600) * 1000;
 
     console.log('[ChronoTrack] Token acquired successfully');
     return access_token;
