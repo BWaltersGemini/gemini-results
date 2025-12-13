@@ -1,14 +1,16 @@
-// src/context/RaceContext.jsx (Final: Removed auto-selection of first event)
+// src/context/RaceContext.jsx (FULLY UPDATED: Complete pagination fetch + Supabase storage with deduplication)
+
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
+import { supabase } from '../supabaseClient'; // Adjust path if your file is named differently
 
 export const RaceContext = createContext();
 
 export function RaceProvider({ children }) {
-  const [events, setEvents] = useState([]);                    // All ChronoTrack events
-  const [selectedEvent, setSelectedEvent] = useState(null);    // Selected event (has event_id)
-  const [races, setRaces] = useState([]);                      // Races within selected event
-  const [selectedRace, setSelectedRace] = useState(null);      // Optional: if multiple races
+  const [events, setEvents] = useState([]); // All ChronoTrack events
+  const [selectedEvent, setSelectedEvent] = useState(null); // Selected event (has event_id)
+  const [races, setRaces] = useState([]); // Races within selected event
+  const [selectedRace, setSelectedRace] = useState(null); // Optional: if multiple races
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
@@ -30,9 +32,6 @@ export function RaceProvider({ children }) {
         const fetchedEvents = await fetchEvents();
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
         setEvents(fetchedEvents);
-
-        // REMOVED AUTO-SELECTION
-        // No longer auto-select first event — allows clean landing on /results
       } catch (err) {
         console.error('[RaceContext] Failed to load events:', err);
         setError(err.message || 'Failed to load events.');
@@ -52,17 +51,13 @@ export function RaceProvider({ children }) {
       setSelectedRace(null);
       return;
     }
-
     console.log('[RaceContext] Selected event changed:', selectedEvent);
-
     const loadRaces = async () => {
       console.log(`[RaceContext] Fetching races for event ID: ${selectedEvent.id}`);
       try {
         const fetchedRaces = await fetchRacesForEvent(selectedEvent.id);
         console.log(`[RaceContext] Races fetched for event ${selectedEvent.id}:`, fetchedRaces);
         setRaces(fetchedRaces);
-
-        // Auto-select first race if multiple
         if (fetchedRaces.length > 0) {
           console.log('[RaceContext] Auto-selecting first race:', fetchedRaces[0]);
           setSelectedRace(fetchedRaces[0]);
@@ -77,7 +72,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results when event changes
+  // Load results when event changes + STORE IN SUPABASE
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[RaceContext] No selected event - clearing results');
@@ -86,25 +81,79 @@ export function RaceProvider({ children }) {
     }
 
     console.log(`[RaceContext] Starting to fetch results for event ID: ${selectedEvent.id}`);
-
     const loadResults = async () => {
       try {
         setLoadingResults(true);
         setError(null);
         console.log(`[RaceContext] Calling fetchResultsForEvent(${selectedEvent.id})`);
+        
         const allResults = await fetchResultsForEvent(selectedEvent.id);
-        console.log(`[RaceContext] Results fetched successfully for event ${selectedEvent.id}. Count:`, allResults.length);
+        console.log(`[RaceContext] Results fetched successfully for event ${selectedEvent.id}. Count: ${allResults.length}`);
         console.log('[RaceContext] Sample result:', allResults[0] || 'No results');
+
+        // ──────────────────────── SUPABASE STORAGE ────────────────────────
+        if (allResults.length > 0) {
+          // Check if this event already has data
+          const { data: existing, error: checkError } = await supabase
+            .from('chronotrack_results')
+            .select('id')
+            .eq('event_id', selectedEvent.id.toString())
+            .limit(1);
+
+          if (checkError) {
+            console.error('[Supabase] Check error:', checkError);
+          } else if (existing.length === 0) {
+            console.log('[Supabase] No existing data for this event – inserting all results');
+
+            const toInsert = allResults.map(r => ({
+              event_id: selectedEvent.id.toString(),
+              race_id: r.race_id || null,
+              bib: r.bib || null,
+              first_name: r.first_name || null,
+              last_name: r.last_name || null,
+              gender: r.gender || null,
+              age: r.age ? parseInt(r.age, 10) : null,
+              city: r.city || null,
+              state: r.state || null,
+              chip_time: r.chip_time || null,
+              clock_time: r.clock_time || null,
+              place: r.place ? parseInt(r.place, 10) : null,
+              gender_place: r.gender_place ? parseInt(r.gender_place, 10) : null,
+              age_group_name: r.age_group_name || null,
+              age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
+              pace: r.pace || null,
+            }));
+
+            // Insert in chunks of 500 (Supabase limit)
+            const chunkSize = 500;
+            for (let i = 0; i < toInsert.length; i += chunkSize) {
+              const chunk = toInsert.slice(i, i + chunkSize);
+              const { error: insertError } = await supabase
+                .from('chronotrack_results')
+                .insert(chunk)
+                .onConflict('event_id,bib,first_name,last_name,chip_time')
+                .ignore();
+
+              if (insertError) {
+                console.error('[Supabase] Insert chunk error:', insertError);
+              } else {
+                console.log(`[Supabase] Inserted chunk ${i / chunkSize + 1} (${chunk.length} rows)`);
+              }
+            }
+            console.log(`[Supabase] Successfully stored ${toInsert.length} results`);
+          } else {
+            console.log('[Supabase] Results already exist for this event – skipping insert');
+          }
+        }
+        // ───────────────────────────────────────────────────────────────────
 
         setResults(allResults);
 
-        // Extract unique divisions
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         console.log('[RaceContext] Unique divisions:', divisions);
         setUniqueDivisions(divisions);
       } catch (err) {
         console.error(`[RaceContext] Failed to load results for event ${selectedEvent.id}:`, err);
-        console.error('[RaceContext] Error details:', err.message, err.stack);
         setError(err.message || 'Failed to load results.');
         setResults([]);
       } finally {
@@ -112,6 +161,7 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Results loading complete. loadingResults:', false);
       }
     };
+
     loadResults();
   }, [selectedEvent]);
 
