@@ -1,8 +1,8 @@
-// src/context/RaceContext.jsx (FINAL: Full pagination + working Supabase upsert storage)
+// src/context/RaceContext.jsx (FINAL VERSION: Full pagination + working Supabase upsert storage)
 
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
-import { supabase } from '../supabaseClient'; // Adjust path if needed
+import { supabase } from '../supabaseClient'; // Adjust path if your file is named differently
 
 export const RaceContext = createContext();
 
@@ -72,7 +72,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results when event changes + STORE IN SUPABASE
+  // Load results when event changes + STORE IN SUPABASE USING UPSERT
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[RaceContext] No selected event - clearing results');
@@ -124,7 +124,7 @@ export function RaceProvider({ children }) {
               pace: r.pace || null,
             }));
 
-            // Use upsert with ignoreDuplicates to skip existing rows
+            // Upsert in chunks of 500
             const chunkSize = 500;
             for (let i = 0; i < toInsert.length; i += chunkSize) {
               const chunk = toInsert.slice(i, i + chunkSize);
