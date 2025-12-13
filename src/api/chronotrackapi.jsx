@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (WORKING VERSION - matches local success)
+// src/api/chronotrackapi.jsx (PRODUCTION WORKING VERSION - matches local success)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api'; // Proxy to https://api.chronotrack.com
@@ -14,12 +14,12 @@ const fetchAccessToken = async () => {
     const password = import.meta.env.VITE_CHRONOTRACK_PASS;
 
     if (!clientId || !clientSecret || !username || !password) {
-      throw new Error('Missing ChronoTrack credentials');
+      throw new Error('Missing ChronoTrack credentials in environment variables');
     }
 
     const credentials = btoa(`${clientId}:${clientSecret}`);
 
-    // CORRECT: GET to /oauth2/token (per ChronoTrack docs)
+    // CORRECT ENDPOINT: GET /oauth2/token (per ChronoTrack docs)
     const response = await axios.get(`${baseUrl}/oauth2/token`, {
       headers: { Authorization: `Basic ${credentials}` },
       params: {
@@ -36,11 +36,12 @@ const fetchAccessToken = async () => {
     accessToken = access_token;
     tokenExpiration = Date.now() + expires_in * 1000;
 
-    console.log('[ChronoTrack] Token acquired');
+    console.log('[ChronoTrack] Token acquired successfully');
     return access_token;
   } catch (err) {
-    console.error('[ChronoTrack] Token failed:', err.response?.data || err.message);
+    console.error('[ChronoTrack] Token fetch failed:', err.response?.data || err.message);
     accessToken = null;
+    tokenExpiration = 0;
     throw new Error('Could not authenticate with ChronoTrack API.');
   }
 };
