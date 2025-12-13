@@ -1,8 +1,8 @@
-// src/context/RaceContext.jsx (FULLY UPDATED: Complete pagination fetch + Supabase storage with deduplication)
+// src/context/RaceContext.jsx (FINAL: Full pagination + working Supabase upsert storage)
 
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
-import { supabase } from '../supabaseClient'; // Adjust path if your file is named differently
+import { supabase } from '../supabaseClient'; // Adjust path if needed
 
 export const RaceContext = createContext();
 
@@ -86,12 +86,12 @@ export function RaceProvider({ children }) {
         setLoadingResults(true);
         setError(null);
         console.log(`[RaceContext] Calling fetchResultsForEvent(${selectedEvent.id})`);
-        
+
         const allResults = await fetchResultsForEvent(selectedEvent.id);
         console.log(`[RaceContext] Results fetched successfully for event ${selectedEvent.id}. Count: ${allResults.length}`);
         console.log('[RaceContext] Sample result:', allResults[0] || 'No results');
 
-        // ──────────────────────── SUPABASE STORAGE ────────────────────────
+        // ──────────────────────── SUPABASE STORAGE (UPSERT) ────────────────────────
         if (allResults.length > 0) {
           // Check if this event already has data
           const { data: existing, error: checkError } = await supabase
@@ -103,7 +103,7 @@ export function RaceProvider({ children }) {
           if (checkError) {
             console.error('[Supabase] Check error:', checkError);
           } else if (existing.length === 0) {
-            console.log('[Supabase] No existing data for this event – inserting all results');
+            console.log('[Supabase] No existing data – upserting all results');
 
             const toInsert = allResults.map(r => ({
               event_id: selectedEvent.id.toString(),
@@ -124,31 +124,28 @@ export function RaceProvider({ children }) {
               pace: r.pace || null,
             }));
 
-            // Insert in chunks of 500 (Supabase limit)
+            // Use upsert with ignoreDuplicates to skip existing rows
             const chunkSize = 500;
             for (let i = 0; i < toInsert.length; i += chunkSize) {
               const chunk = toInsert.slice(i, i + chunkSize);
-              const { error: insertError } = await supabase
+              const { error } = await supabase
                 .from('chronotrack_results')
-                .insert(chunk)
-                .onConflict('event_id,bib,first_name,last_name,chip_time')
-                .ignore();
+                .upsert(chunk, { ignoreDuplicates: true });
 
-              if (insertError) {
-                console.error('[Supabase] Insert chunk error:', insertError);
+              if (error) {
+                console.error('[Supabase] Upsert chunk error:', error);
               } else {
-                console.log(`[Supabase] Inserted chunk ${i / chunkSize + 1} (${chunk.length} rows)`);
+                console.log(`[Supabase] Upserted chunk ${Math.floor(i / chunkSize) + 1} (${chunk.length} rows)`);
               }
             }
-            console.log(`[Supabase] Successfully stored ${toInsert.length} results`);
+            console.log(`[Supabase] Finished upserting ${toInsert.length} results`);
           } else {
-            console.log('[Supabase] Results already exist for this event – skipping insert');
+            console.log('[Supabase] Results already exist – skipping insert');
           }
         }
-        // ───────────────────────────────────────────────────────────────────
+        // ───────────────────────────────────────────────────────────────────────────
 
         setResults(allResults);
-
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         console.log('[RaceContext] Unique divisions:', divisions);
         setUniqueDivisions(divisions);
