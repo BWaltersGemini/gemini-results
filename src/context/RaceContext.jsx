@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL WORKING VERSION: Upsert + full pagination)
+// src/context/RaceContext.jsx (FINAL: Smart caching - Supabase first, then ChronoTrack fallback + upsert storage)
 
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -72,7 +72,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results when event changes + STORE IN SUPABASE USING UPSERT
+  // Load results when event changes - SUPABASE FIRST, THEN CHRONOTRACK FALLBACK
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[RaceContext] No selected event - clearing results');
@@ -85,25 +85,32 @@ export function RaceProvider({ children }) {
       try {
         setLoadingResults(true);
         setError(null);
-        console.log(`[RaceContext] Calling fetchResultsForEvent(${selectedEvent.id})`);
+        console.log(`[RaceContext] Checking Supabase cache for event ${selectedEvent.id}`);
 
-        const allResults = await fetchResultsForEvent(selectedEvent.id);
-        console.log(`[RaceContext] Results fetched successfully for event ${selectedEvent.id}. Count: ${allResults.length}`);
-        console.log('[RaceContext] Sample result:', allResults[0] || 'No results');
+        let allResults = [];
 
-        // ──────────────────────── SUPABASE STORAGE (UPSERT) ────────────────────────
-        if (allResults.length > 0) {
-          const { data: existing, error: checkError } = await supabase
-            .from('chronotrack_results')
-            .select('id')
-            .eq('event_id', selectedEvent.id.toString())
-            .limit(1);
+        // 1. Try Supabase first (fast & offline-friendly)
+        const { data: cachedResults, error: cacheError } = await supabase
+          .from('chronotrack_results')
+          .select('*')
+          .eq('event_id', selectedEvent.id.toString())
+          .order('place', { ascending: true });
 
-          if (checkError) {
-            console.error('[Supabase] Check error:', checkError);
-          } else if (existing.length === 0) {
-            console.log('[Supabase] No existing data – upserting all results');
+        if (cacheError) {
+          console.error('[Supabase] Cache read error:', cacheError);
+        }
 
+        if (cachedResults && cachedResults.length > 0) {
+          console.log(`[Supabase] Loaded ${cachedResults.length} results from cache`);
+          allResults = cachedResults;
+        } else {
+          // 2. No cache → fetch fresh from ChronoTrack
+          console.log('[RaceContext] No cached results – fetching from ChronoTrack API');
+          allResults = await fetchResultsForEvent(selectedEvent.id);
+          console.log(`[RaceContext] Fresh results fetched. Count: ${allResults.length}`);
+
+          if (allResults.length > 0) {
+            console.log('[Supabase] Caching fresh results in Supabase');
             const toInsert = allResults.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -133,15 +140,12 @@ export function RaceProvider({ children }) {
               if (error) {
                 console.error('[Supabase] Upsert chunk error:', error);
               } else {
-                console.log(`[Supabase] Upserted chunk ${Math.floor(i / chunkSize) + 1} (${chunk.length} rows)`);
+                console.log(`[Supabase] Cached chunk ${Math.floor(i / chunkSize) + 1} (${chunk.length} rows)`);
               }
             }
-            console.log(`[Supabase] Finished upserting ${toInsert.length} results`);
-          } else {
-            console.log('[Supabase] Results already exist – skipping insert');
+            console.log(`[Supabase] Successfully cached ${toInsert.length} results`);
           }
         }
-        // ───────────────────────────────────────────────────────────────────────────
 
         setResults(allResults);
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
