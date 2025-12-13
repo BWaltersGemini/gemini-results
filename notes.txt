@@ -1,0 +1,78 @@
+
+API Key:	KnToq5rEYqYGv4urMd7ZRSBwiqBDGIxz
+API Secret:	7GHXLrLxgCsr7xaqzrFlvSmm6Wv3jHak
+
+Timer	Gemini Timing
+API Key	7ut5NPYjvVeMJ2rdvnDV5DZvDZIBME9K
+API Secret	J0w8Sv7xRBrYhvthLtayqDwhbvfxEP1e
+
+curl -X GET "https://api.runsignup.com/rest/races?events=T&start_date=2024-01-01&results_per_page=1000&api_key=7ut5NPYjvVeMJ2rdvnDV5DZvDZIBME9K&api_secret=J0w8Sv7xRBrYhvthLtayqDwhbvfxEP1e&partner_id=893&format=json"
+
+curl "https://api.runsignup.com/rest/races?partner_id=893&events=T&api_key=7ut5NPYjvVeMJ2rdvnDV5DZvDZIBME9K&api_secret=J0w8Sv7xRBrYhvthLtayqDwhbvfxEP1e&format=json"
+
+curl -X GET "https://api.runsignup.com/rest/races?events=T&start_date=2020-01-01&results_per_page=1000&api_key=KnToq5rEYqYGv4urMd7ZRSBwiqBDGIxz&api_secret=7GHXLrLxgCsr7xaqzrFlvSmm6Wv3jHak&format=json"
+
+
+
+curl -X GET "https://api.runsignup.com/rest/v1/results?event_id=860870&api_key=KnToq5rEYqYGv4urMd7ZRSBwiqBDGIxz" \
+  -H "Accept: application/json"
+
+
+curl -X GET "https://api.runsignup.com/rest/race/166066/results/get-results?event_id=860870&api_key=KnToq5rEYqYGv4urMd7ZRSBwiqBDGIxz&&api_secret=7GHXLrLxgCsr7xaqzrFlvSmm6Wv3jHak" \
+  -H "Accept: application/json"
+
+curl -X GET "https://api.runsignup.com/rest/race/166066/results/get-results?event_id=860870&api_key=KnToq5rEYqYGv4urMd7ZRSBwiqBDGIxz&api_secret=7GHXLrLxgCsr7xaqzrFlvSmm6Wv3jHak&format=json" -H "Accept: application/json"
+
+curl -X GET "https://api.runsignup.com/rest/races?events=T&api_key=KnToq5rEYqYGv4urMd7ZRSBwiqBDGIxz&api_secret=7GHXLrLxgCsr7xaqzrFlvSmm6Wv3jHak&format=json"
+
+
+VITE_CHRONOTRACK_CLIENT_ID=c5dcbff1
+VITE_CHRONOTRACK_SECRET=83bba0fa35021548b9e704d850a04b2e93f50c9b
+
+Invoke-WebRequest -Method Get -Uri "https://api-test.chronotrack.com/api/event?client_id=c5dcbff1" -Headers @{Authorization = "Bearer d74fe15996b1143ba46ed68b02556e1c574ffd0d"}
+
+StatusCode        : 200
+StatusDescription : OK
+Content           : {"access_token":"d74fe15996b1143ba46ed68b02556e1c574ffd0d","token_type":"bearer","expires_in":25919
+                    9,"refresh_token":"8b33a91db79a4a8e42e85c9e2d6ee1cfb52dcefa"}
+RawContent        : HTTP/1.1 200 OK
+                    Transfer-Encoding: chunked
+                    Connection: keep-alive
+                    Pragma: no-cache,no-cache
+                    Cache-Control: no-store, no-cache, must-revalidate,no-store
+                    Content-Type: application/json
+                    Date: Wed, ...
+Forms             : {}
+Headers           : {[Transfer-Encoding, chunked], [Connection, keep-alive], [Pragma, no-cache,no-cache],
+                    [Cache-Control, no-store, no-cache, must-revalidate,no-store]...}
+Images            : {}
+InputFields       : {}
+Links             : {}
+ParsedHtml        : mshtml.HTMLDocumentClass
+RawContentLength  : 160
+
+$clientId = 'c5dcbff1'
+$clientSecret = '83bba0fa35021548b9e704d850a04b2e93f50c9b'
+$base64Auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${clientId}:${clientSecret}"))
+
+Invoke-WebRequest -Method Get -Uri "https://api-test.chronotrack.com/oauth2/token?grant_type=password&username=lyric@everlyagency.com&password=newpass8221" -Headers @{Authorization = "Basic $base64Auth"}
+
+$clientId = 'c5dcbff1'
+$clientSecret = '83bba0fa35021548b9e704d850a04b2e93f50c9b'
+$base64Auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$clientId:$clientSecret"))
+
+curl -X GET "https://api-test.chronotrack.com/oauth2/token?grant_type=password&username=lyric@everlyagency.com&password=newpass8221" `
+-H "Authorization: Basic $base64Auth"
+
+curl -X GET "https://api-test.chronotrack.com/api/oauth2/token?grant_type=password&username=lyric@everlyagency.com&password=newpass8221" \
+-H "Authorization: Basic $(echo -n 'c5dcbff1:83bba0fa35021548b9e704d850a04b2e93f50c9b' | base64)"
+
+curl -X GET "https://api-test.chronotrack.com/api/oauth2/token?grant_type=password&username=lyric@everlyagency.com&password=newpass8221" \
+-H "Authorization: Basic $(echo -n 'b8c7ef4e:7ce890909b50ea6afb71dcf7dfe95fde31e78805' | base64)"
+
+curl -X GET "https://api-test.chronotrack.com/api/oauth2/token?grant_type=password&username=brandon@geminitiming.com&password=Br@nd0n81Chronotrack" \
+-H "Authorization: Basic $(echo -n 'c5dcbff1:83bba0fa35021548b9e704d850a04b2e93f50c9b' | base64)"
+
+
+curl -X GET "https://api.chronotrack.com/api/oauth2/token?grant_type=password&username=lyric@everlyagency.com&password=newpass8221" \
+-H "Authorization: Basic $(echo -n 'c5dcbff1:83bba0fa35021548b9e704d850a04b2e93f50c9b' | base64)"

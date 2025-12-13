@@ -1,0 +1,147 @@
+// src/context/RaceContext.jsx (Final: Removed auto-selection of first event)
+import { createContext, useState, useEffect } from 'react';
+import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
+
+export const RaceContext = createContext();
+
+export function RaceProvider({ children }) {
+  const [events, setEvents] = useState([]);                    // All ChronoTrack events
+  const [selectedEvent, setSelectedEvent] = useState(null);    // Selected event (has event_id)
+  const [races, setRaces] = useState([]);                      // Races within selected event
+  const [selectedRace, setSelectedRace] = useState(null);      // Optional: if multiple races
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [error, setError] = useState(null);
+  const [filterGender, setFilterGender] = useState('');
+  const [filterDivision, setFilterDivision] = useState('');
+  const [uniqueDivisions, setUniqueDivisions] = useState([]);
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
+  const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
+
+  // Load all events on mount
+  useEffect(() => {
+    const loadEvents = async () => {
+      console.log('[RaceContext] Starting to fetch events...');
+      try {
+        setLoading(true);
+        setError(null);
+        const fetchedEvents = await fetchEvents();
+        console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
+        setEvents(fetchedEvents);
+
+        // REMOVED AUTO-SELECTION
+        // No longer auto-select first event — allows clean landing on /results
+      } catch (err) {
+        console.error('[RaceContext] Failed to load events:', err);
+        setError(err.message || 'Failed to load events.');
+      } finally {
+        setLoading(false);
+        console.log('[RaceContext] Events loading complete. loading:', false);
+      }
+    };
+    loadEvents();
+  }, []);
+
+  // Load races when event changes
+  useEffect(() => {
+    if (!selectedEvent) {
+      console.log('[RaceContext] No selected event - clearing races');
+      setRaces([]);
+      setSelectedRace(null);
+      return;
+    }
+
+    console.log('[RaceContext] Selected event changed:', selectedEvent);
+
+    const loadRaces = async () => {
+      console.log(`[RaceContext] Fetching races for event ID: ${selectedEvent.id}`);
+      try {
+        const fetchedRaces = await fetchRacesForEvent(selectedEvent.id);
+        console.log(`[RaceContext] Races fetched for event ${selectedEvent.id}:`, fetchedRaces);
+        setRaces(fetchedRaces);
+
+        // Auto-select first race if multiple
+        if (fetchedRaces.length > 0) {
+          console.log('[RaceContext] Auto-selecting first race:', fetchedRaces[0]);
+          setSelectedRace(fetchedRaces[0]);
+        } else {
+          console.warn(`[RaceContext] No races found for event ${selectedEvent.id}`);
+        }
+      } catch (err) {
+        console.error(`[RaceContext] Failed to load races for event ${selectedEvent.id}:`, err);
+        setRaces([]);
+      }
+    };
+    loadRaces();
+  }, [selectedEvent]);
+
+  // Load results when event changes
+  useEffect(() => {
+    if (!selectedEvent) {
+      console.log('[RaceContext] No selected event - clearing results');
+      setResults([]);
+      return;
+    }
+
+    console.log(`[RaceContext] Starting to fetch results for event ID: ${selectedEvent.id}`);
+
+    const loadResults = async () => {
+      try {
+        setLoadingResults(true);
+        setError(null);
+        console.log(`[RaceContext] Calling fetchResultsForEvent(${selectedEvent.id})`);
+        const allResults = await fetchResultsForEvent(selectedEvent.id);
+        console.log(`[RaceContext] Results fetched successfully for event ${selectedEvent.id}. Count:`, allResults.length);
+        console.log('[RaceContext] Sample result:', allResults[0] || 'No results');
+
+        setResults(allResults);
+
+        // Extract unique divisions
+        const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
+        console.log('[RaceContext] Unique divisions:', divisions);
+        setUniqueDivisions(divisions);
+      } catch (err) {
+        console.error(`[RaceContext] Failed to load results for event ${selectedEvent.id}:`, err);
+        console.error('[RaceContext] Error details:', err.message, err.stack);
+        setError(err.message || 'Failed to load results.');
+        setResults([]);
+      } finally {
+        setLoadingResults(false);
+        console.log('[RaceContext] Results loading complete. loadingResults:', false);
+      }
+    };
+    loadResults();
+  }, [selectedEvent]);
+
+  // Debug: Log when results change
+  useEffect(() => {
+    console.log('[RaceContext] Results state updated. Length:', results.length);
+  }, [results]);
+
+  return (
+    <RaceContext.Provider value={{
+      events,
+      selectedEvent,
+      setSelectedEvent,
+      races,
+      selectedRace,
+      results,
+      loading,
+      loadingResults,
+      error,
+      filterGender,
+      setFilterGender,
+      filterDivision,
+      setFilterDivision,
+      uniqueDivisions,
+      globalFilter,
+      setGlobalFilter,
+      eventLogos,
+      ads,
+    }}>
+      {children}
+    </RaceContext.Provider>
+  );
+}
