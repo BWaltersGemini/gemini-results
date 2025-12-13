@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (Updated with POST for token request + added fetchResultsForRace)
+// src/api/chronotrackapi.jsx (Updated: GET for token request + added fetchResultsForRace)
 
 import axios from 'axios';
 
@@ -20,21 +20,17 @@ const fetchAccessToken = async () => {
 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
 
-    // Using POST with form body (standard OAuth2 practice, even if old docs say GET)
-    const response = await axios.post(
-      `${baseUrl}/oauth2/token`,
-      new URLSearchParams({
+    // Using GET with query params - matches official ChronoTrack API docs exactly
+    const response = await axios.get(`${baseUrl}/oauth2/token`, {
+      headers: {
+        Authorization: `Basic ${basicAuth}`,
+      },
+      params: {
         grant_type: 'password',
         username,
         password,
-      }).toString(),
-      {
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    );
+      },
+    });
 
     const { access_token, expires_in } = response.data;
 
