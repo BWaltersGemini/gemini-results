@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (CORRECTED FOR BASIC AUTH ON TOKEN REQUEST)
+// src/api/chronotrackapi.jsx (FINAL CORRECTED VERSION - Based on Official Docs)
 
 import axios from 'axios';
 
@@ -18,10 +18,9 @@ const fetchAccessToken = async () => {
       throw new Error('Missing ChronoTrack credentials in environment variables');
     }
 
-    // Manually create Basic Auth header for client credentials
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
 
-    // Token endpoint: /oauth2/token (no /api prefix)
+    // Official: GET /oauth2/token with Basic Auth header + query params
     const response = await axios.get(`${baseUrl}/oauth2/token`, {
       headers: {
         Authorization: `Basic ${basicAuth}`,
@@ -40,7 +39,7 @@ const fetchAccessToken = async () => {
     }
 
     accessToken = access_token;
-    tokenExpiration = Date.now() + expires_in * 1000;
+    tokenExpiration = Date.now() + (expires_in || 3600) * 1000; // Default 1 hour if not provided
 
     console.log('[ChronoTrack] Token acquired successfully');
     return access_token;
@@ -62,13 +61,17 @@ const getAuthHeader = async () => {
 export const fetchEvents = async () => {
   try {
     const authHeader = await getAuthHeader();
+
     const response = await axios.get(`${baseUrl}/api/event`, {
       headers: { Authorization: authHeader },
-      params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+      params: {
+        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+      },
     });
 
     const events = response.data.event || [];
-    return events.map(event => ({
+
+    return events.map((event) => ({
       id: event.event_id,
       name: event.event_name,
       date: new Date(event.event_start_time * 1000).toISOString().split('T')[0],
@@ -82,13 +85,17 @@ export const fetchEvents = async () => {
 export const fetchRacesForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
+
     const response = await axios.get(`${baseUrl}/api/event/${eventId}/race`, {
       headers: { Authorization: authHeader },
-      params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+      params: {
+        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+      },
     });
 
     const races = response.data.event_race || [];
-    return races.map(race => ({
+
+    return races.map((race) => ({
       race_id: race.race_id,
       race_name: race.race_name || `Race ${race.race_id}`,
     }));
@@ -101,6 +108,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
+
     let allResults = [];
     let page = 1;
     const perPage = 100;
@@ -121,7 +129,7 @@ export const fetchResultsForEvent = async (eventId) => {
       page++;
     } while (fetched.length === perPage);
 
-    return allResults.map(result => ({
+    return allResults.map((result) => ({
       first_name: result.results_first_name || '',
       last_name: result.results_last_name || '',
       chip_time: result.results_time || '',
