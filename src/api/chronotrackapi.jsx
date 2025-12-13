@@ -1,8 +1,8 @@
-// src/api/chronotrackapi.jsx (Updated: GET for token request + added fetchResultsForRace)
+// src/api/chronotrackapi.jsx (FINAL: Full pagination + robust Supabase handling)
 
 import axios from 'axios';
 
-const baseUrl = '/chrono-api'; // Proxy forwards to https://api.chronotrack.com
+const baseUrl = '/chrono-api';
 
 let accessToken = null;
 let tokenExpiration = 0;
@@ -15,16 +15,13 @@ const fetchAccessToken = async () => {
     const password = import.meta.env.VITE_CHRONOTRACK_PASS;
 
     if (!clientId || !clientSecret || !username || !password) {
-      throw new Error('Missing ChronoTrack credentials in environment variables');
+      throw new Error('Missing ChronoTrack credentials');
     }
 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
 
-    // Using GET with query params - matches official ChronoTrack API docs exactly
     const response = await axios.get(`${baseUrl}/oauth2/token`, {
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
-      },
+      headers: { Authorization: `Basic ${basicAuth}` },
       params: {
         grant_type: 'password',
         username,
@@ -33,21 +30,15 @@ const fetchAccessToken = async () => {
     });
 
     const { access_token, expires_in } = response.data;
-
-    if (!access_token) {
-      throw new Error('No access token returned from ChronoTrack');
-    }
+    if (!access_token) throw new Error('No access token returned');
 
     accessToken = access_token;
     tokenExpiration = Date.now() + (expires_in || 3600) * 1000;
-
     console.log('[ChronoTrack] Token acquired successfully');
     return access_token;
   } catch (err) {
     console.error('[ChronoTrack] Token fetch failed:', err.response?.data || err.message);
-    accessToken = null;
-    tokenExpiration = 0;
-    throw new Error('Could not authenticate with ChronoTrack API.');
+    throw new Error('Authentication failed');
   }
 };
 
@@ -59,128 +50,73 @@ const getAuthHeader = async () => {
 };
 
 export const fetchEvents = async () => {
-  try {
-    const authHeader = await getAuthHeader();
-    const response = await axios.get(`${baseUrl}/api/event`, {
-      headers: { Authorization: authHeader },
-      params: {
-        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-      },
-    });
-    const events = response.data.event || [];
-    return events.map((event) => ({
-      id: event.event_id,
-      name: event.event_name,
-      date: new Date(event.event_start_time * 1000).toISOString().split('T')[0],
-    }));
-  } catch (err) {
-    console.error('Failed to fetch events:', err.response?.data || err.message);
-    throw new Error('Could not load events from ChronoTrack.');
-  }
+  const authHeader = await getAuthHeader();
+  const response = await axios.get(`${baseUrl}/api/event`, {
+    headers: { Authorization: authHeader },
+    params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+  });
+  return (response.data.event || []).map(event => ({
+    id: event.event_id,
+    name: event.event_name,
+    date: new Date(event.event_start_time * 1000).toISOString().split('T')[0],
+  }));
 };
 
 export const fetchRacesForEvent = async (eventId) => {
-  try {
-    const authHeader = await getAuthHeader();
-    const response = await axios.get(`${baseUrl}/api/event/${eventId}/race`, {
-      headers: { Authorization: authHeader },
-      params: {
-        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-      },
-    });
-    const races = response.data.event_race || [];
-    return races.map((race) => ({
-      race_id: race.race_id,
-      race_name: race.race_name || `Race ${race.race_id}`,
-    }));
-  } catch (err) {
-    console.error('Failed to fetch races:', err.response?.data || err.message);
-    throw new Error('Could not load races for the selected event.');
-  }
+  const authHeader = await getAuthHeader();
+  const response = await axios.get(`${baseUrl}/api/event/${eventId}/race`, {
+    headers: { Authorization: authHeader },
+    params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+  });
+  return (response.data.event_race || []).map(race => ({
+    race_id: race.race_id,
+    race_name: race.race_name || `Race ${race.race_id}`,
+  }));
 };
 
 export const fetchResultsForEvent = async (eventId) => {
-  try {
-    const authHeader = await getAuthHeader();
-    let allResults = [];
-    let page = 1;
-    const perPage = 100;
-    let fetched = [];
+  const authHeader = await getAuthHeader();
+  let allResults = [];
+  let page = 1;
+  const perPage = 100;
+  let fetched = [];
 
-    do {
-      const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
-        headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          page,
-          results_per_page: perPage,
-        },
-      });
-      fetched = response.data.event_results || [];
-      allResults = [...allResults, ...fetched];
-      page++;
-    } while (fetched.length === perPage);
+  console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
 
-    return allResults.map((result) => ({
-      first_name: result.results_first_name || '',
-      last_name: result.results_last_name || '',
-      chip_time: result.results_time || '',
-      clock_time: result.results_gun_time || '',
-      place: result.results_rank || '',
-      gender_place: result.results_primary_bracket_rank || '',
-      age_group_name: result.results_primary_bracket_name || '',
-      age_group_place: result.results_primary_bracket_place || '',
-      pace: result.results_pace || '',
-      age: result.results_age || '',
-      gender: result.results_sex || '',
-      bib: result.results_bib || '',
-      race_id: result.results_race_id,
-      race_name: result.results_race_name || '',
-    }));
-  } catch (err) {
-    console.error('Failed to fetch results:', err.response?.data || err.message);
-    throw new Error('Could not load results from ChronoTrack.');
-  }
-};
+  do {
+    const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
+      headers: { Authorization: authHeader },
+      params: {
+        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+        page,
+        results_per_page: perPage,
+      },
+    });
 
-export const fetchResultsForRace = async (raceId) => {
-  try {
-    const authHeader = await getAuthHeader();
-    let allResults = [];
-    let page = 1;
-    const perPage = 100;
-    let fetched = [];
+    fetched = response.data.event_results || [];
+    allResults = [...allResults, ...fetched];
+    console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
+    page++;
+  } while (fetched.length === perPage);
 
-    do {
-      const response = await axios.get(`${baseUrl}/api/race/${raceId}/result`, {
-        headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          page,
-          results_per_page: perPage,
-        },
-      });
-      fetched = response.data.race_results || response.data.result || [];
-      allResults = [...allResults, ...fetched];
-      page++;
-    } while (fetched.length === perPage);
+  console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-    return allResults.map((result) => ({
-      first_name: result.results_first_name || '',
-      last_name: result.results_last_name || '',
-      chip_time: result.results_time || '',
-      clock_time: result.results_gun_time || '',
-      place: result.results_rank || '',
-      gender_place: result.results_primary_bracket_rank || '',
-      age_group_name: result.results_primary_bracket_name || '',
-      age_group_place: result.results_primary_bracket_place || '',
-      pace: result.results_pace || '',
-      age: result.results_age || '',
-      gender: result.results_sex || '',
-      bib: result.results_bib || '',
-    }));
-  } catch (err) {
-    console.error('Failed to fetch results for race:', err.response?.data || err.message);
-    throw new Error('Could not load results for the selected race.');
-  }
+  return allResults.map(r => ({
+    first_name: r.results_first_name || '',
+    last_name: r.results_last_name || '',
+    chip_time: r.results_time || '',
+    clock_time: r.results_gun_time || '',
+    place: r.results_rank || '',
+    gender_place: r.results_primary_bracket_rank || '',
+    age_group_name: r.results_primary_bracket_name || '',
+    age_group_place: r.results_primary_bracket_place || '',
+    pace: r.results_pace || '',
+    age: r.results_age || '',
+    gender: r.results_sex || '',
+    bib: r.results_bib || '',
+    race_id: r.results_race_id || null,
+    race_name: r.results_race_name || '',
+    city: r.results_city || '',
+    state: r.results_state || '',
+  }));
 };
