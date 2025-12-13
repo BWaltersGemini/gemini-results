@@ -1,16 +1,16 @@
-// src/context/RaceContext.jsx (FINAL VERSION: Full pagination + working Supabase upsert storage)
+// src/context/RaceContext.jsx (FINAL WORKING VERSION: Upsert + full pagination)
 
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
-import { supabase } from '../supabaseClient'; // Adjust path if your file is named differently
+import { supabase } from '../supabaseClient';
 
 export const RaceContext = createContext();
 
 export function RaceProvider({ children }) {
-  const [events, setEvents] = useState([]); // All ChronoTrack events
-  const [selectedEvent, setSelectedEvent] = useState(null); // Selected event (has event_id)
-  const [races, setRaces] = useState([]); // Races within selected event
-  const [selectedRace, setSelectedRace] = useState(null); // Optional: if multiple races
+  const [events, setEvents] = useState([]);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [races, setRaces] = useState([]);
+  const [selectedRace, setSelectedRace] = useState(null);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
@@ -93,7 +93,6 @@ export function RaceProvider({ children }) {
 
         // ──────────────────────── SUPABASE STORAGE (UPSERT) ────────────────────────
         if (allResults.length > 0) {
-          // Check if this event already has data
           const { data: existing, error: checkError } = await supabase
             .from('chronotrack_results')
             .select('id')
@@ -124,7 +123,6 @@ export function RaceProvider({ children }) {
               pace: r.pace || null,
             }));
 
-            // Upsert in chunks of 500
             const chunkSize = 500;
             for (let i = 0; i < toInsert.length; i += chunkSize) {
               const chunk = toInsert.slice(i, i + chunkSize);
