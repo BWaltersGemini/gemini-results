@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (Full updated version with ChronoTrack API toggle)
+// src/pages/AdminPage.jsx (COMPLETE FINAL VERSION — All features, fixed refresh, correct table name)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -10,6 +10,8 @@ export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+
   const [editedEvents, setEditedEvents] = useState(() => {
     const stored = localStorage.getItem('editedEvents');
     return stored ? JSON.parse(stored) : {};
@@ -43,10 +45,9 @@ export default function AdminPage() {
   });
   const [chronotrackEnabled, setChronotrackEnabled] = useState(() => {
     const stored = localStorage.getItem('chronotrackEnabled');
-    return stored === null || stored === 'true'; // Default: ON
+    return stored === null || stored === 'true';
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [chronoEvents, setChronoEvents] = useState([]);
   const [masterGroups, setMasterGroups] = useState(() => {
     const stored = localStorage.getItem('masterGroups');
@@ -70,7 +71,7 @@ export default function AdminPage() {
     localStorage.setItem('chronotrackEnabled', chronotrackEnabled);
   }, [chronotrackEnabled]);
 
-  // Fetch events only if ChronoTrack is enabled
+  // Fetch events when logged in
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
       const fetchRaces = async () => {
@@ -95,6 +96,7 @@ export default function AdminPage() {
     e.preventDefault();
     if (username === 'G3M1N1_1912' && password === 'Br@nd0n81') {
       setIsLoggedIn(true);
+      setError(null);
     } else {
       setError('Invalid credentials');
     }
@@ -134,7 +136,10 @@ export default function AdminPage() {
   };
 
   const toggleEventVisibility = (eventId) => {
-    setHiddenEvents(prev => prev.includes(eventId) ? prev.filter(id => id !== eventId) : [...prev, eventId]);
+    setHiddenEvents(prev => prev.includes(eventId)
+      ? prev.filter(id => id !== eventId)
+      : [...prev, eventId]
+    );
   };
 
   const toggleRaceVisibility = (eventId, raceId) => {
@@ -142,13 +147,18 @@ export default function AdminPage() {
       const races = prev[eventId] || [];
       return {
         ...prev,
-        [eventId]: races.includes(raceId) ? races.filter(id => id !== raceId) : [...races, raceId],
+        [eventId]: races.includes(raceId)
+          ? races.filter(id => id !== raceId)
+          : [...races, raceId],
       };
     });
   };
 
   const toggleMasterVisibility = (masterKey) => {
-    setHiddenMasters(prev => prev.includes(masterKey) ? prev.filter(id => id !== masterKey) : [...prev, masterKey]);
+    setHiddenMasters(prev => prev.includes(masterKey)
+      ? prev.filter(k => k !== masterKey)
+      : [...prev, masterKey]
+    );
   };
 
   const toggleShowAds = (masterKey) => {
@@ -201,6 +211,7 @@ export default function AdminPage() {
     alert('All changes saved successfully!');
   };
 
+  // FIXED: Correct table name + full refresh
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) {
       setRefreshStatus('Please select an event first');
@@ -210,19 +221,34 @@ export default function AdminPage() {
       setRefreshStatus('ChronoTrack API is disabled');
       return;
     }
+
     setRefreshStatus('Fetching fresh results from ChronoTrack...');
     try {
       const allResults = await fetchResultsForEvent(selectedEventId);
-      setRefreshStatus('Saving to server cache...');
-      const { error: supabaseError } = await supabase
-        .from('event_results')
-        .upsert({ event_id: selectedEventId, results_json: allResults }, { onConflict: 'event_id' });
-      if (supabaseError) throw supabaseError;
-      localStorage.setItem(`results_${selectedEventId}`, JSON.stringify(allResults));
-      setRefreshStatus(`Success! ${allResults.length} results published for all users instantly.`);
+      setRefreshStatus(`Fetched ${allResults.length} results. Updating cache...`);
+
+      // Delete old results for this event
+      const { error: deleteError } = await supabase
+        .from('chronotrack_results')
+        .delete()
+        .eq('event_id', selectedEventId);
+
+      if (deleteError) throw deleteError;
+
+      // Insert fresh results in chunks
+      const chunkSize = 500;
+      for (let i = 0; i < allResults.length; i += chunkSize) {
+        const chunk = allResults.slice(i, i + chunkSize);
+        const { error: insertError } = await supabase
+          .from('chronotrack_results')
+          .insert(chunk);
+        if (insertError) throw insertError;
+      }
+
+      setRefreshStatus(`Success! ${allResults.length} results refreshed and published to all users.`);
     } catch (err) {
       console.error('Refresh & publish failed:', err);
-      setRefreshStatus('Failed to refresh and publish results');
+      setRefreshStatus(`Error: ${err.message || 'Failed to refresh results'}`);
     }
   };
 
@@ -295,11 +321,11 @@ export default function AdminPage() {
           <p className="mb-4 text-gray-700">
             Force a fresh fetch from ChronoTrack and publish the latest results to all users instantly.
           </p>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <select
               value={selectedEventId}
               onChange={(e) => setSelectedEventId(e.target.value)}
-              className="p-3 border border-gray-300 rounded-lg"
+              className="p-3 border border-gray-300 rounded-lg w-full sm:w-auto"
               disabled={!chronotrackEnabled}
             >
               <option value="">Select Event</option>
@@ -312,12 +338,16 @@ export default function AdminPage() {
             <button
               onClick={handleRefreshAndPublish}
               disabled={!selectedEventId || !chronotrackEnabled}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg transition"
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg transition w-full sm:w-auto"
             >
               Refresh & Publish Results
             </button>
           </div>
-          {refreshStatus && <p className="mt-6 text-lg font-medium text-green-800">{refreshStatus}</p>}
+          {refreshStatus && (
+            <p className={`mt-6 text-lg font-medium ${refreshStatus.includes('Success') ? 'text-green-800' : 'text-red-700'}`}>
+              {refreshStatus}
+            </p>
+          )}
         </section>
 
         {/* Manage Events */}
@@ -424,7 +454,7 @@ export default function AdminPage() {
           </div>
         </section>
 
-        <button onClick={handleSaveChanges} className="mt-8 bg-gemini-blue text-white px-8 py-4 rounded-xl hover:bg-gemini-blue/90 font-bold text-lg">
+        <button onClick={handleSaveChanges} className="mt-12 bg-gemini-blue text-white px-10 py-5 rounded-xl hover:bg-gemini-blue/90 font-bold text-xl">
           Save All Changes
         </button>
       </div>
