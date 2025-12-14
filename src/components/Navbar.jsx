@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (Optimized for Mobile: Hamburger menu + always-visible search)
+// src/components/Navbar.jsx (FIXED: Mobile dropdown shows full race name + date properly)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -69,7 +69,7 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 w-full bg-white shadow-md z-50">
-      {/* Top Bar: Logo + Hamburger + Search */}
+      {/* Top Bar: Logo + Hamburger */}
       <div className="px-4 py-3 flex items-center justify-between">
         <Link to="/" onClick={closeAll}>
           <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
@@ -112,7 +112,7 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Search Bar - Always visible, full width on mobile */}
+      {/* Search Bar - Always visible */}
       <div className="bg-white py-3 border-t border-gray-200">
         <div className="px-4 relative">
           <input
@@ -136,7 +136,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Event Dropdown List */}
+      {/* Event Dropdown List - FIXED for mobile */}
       {isListOpen && (
         <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
           {loading ? (
@@ -153,13 +153,18 @@ export default function Navbar() {
               <div
                 key={event.id}
                 onClick={() => handleEventSelect(event)}
-                className={`p-4 hover:bg-gemini-light-gray cursor-pointer border-b border-gray-100 last:border-0 ${
+                className={`p-4 hover:bg-gemini-light-gray cursor-pointer border-b border-gray-100 last:border-0 transition ${
                   selectedEvent?.id === event.id ? 'bg-gemini-light-gray font-semibold' : ''
                 }`}
               >
-                <div className="flex justify-between items-center">
-                  <span>{event.name}</span>
-                  <span className="text-sm text-gray-500">{event.date}</span>
+                {/* Mobile: Stacked layout | Desktop: Side-by-side */}
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center">
+                  <span className="font-medium text-base md:text-lg truncate">
+                    {event.name}
+                  </span>
+                  <span className="text-sm text-gray-500 mt-1 md:mt-0 md:ml-4">
+                    {event.date}
+                  </span>
                 </div>
               </div>
             ))
@@ -167,15 +172,13 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Menu Overlay (unchanged) */}
       {isMobileMenuOpen && (
         <>
-          {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          {/* Menu Panel */}
           <div className="fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-40 md:hidden overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-8">
