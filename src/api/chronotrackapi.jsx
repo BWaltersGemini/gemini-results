@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL: Includes country + intermediate splits)
+// src/api/chronotrackapi.jsx (FINAL — Includes country + splits, robust parsing)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -101,8 +101,8 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
   return allResults.map(r => {
-    // Extract splits if available (common structure: r.splits or r.interval_results)
-    const rawSplits = r.splits || r.interval_results || [];
+    // Extract splits — common keys: splits, interval_results, or nested under results
+    const rawSplits = r.splits || r.interval_results || r.results_splits || [];
     const splits = Array.isArray(rawSplits)
       ? rawSplits.map(split => ({
           name: split.interval_name || split.split_name || 'Split',
@@ -118,20 +118,20 @@ export const fetchResultsForEvent = async (eventId) => {
       last_name: r.results_last_name || '',
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
-      place: r.results_rank || '',
-      gender_place: r.results_primary_bracket_rank || '',
+      place: r.results_rank ? parseInt(r.results_rank, 10) : null,
+      gender_place: r.results_primary_bracket_rank ? parseInt(r.results_primary_bracket_rank, 10) : null,
       age_group_name: r.results_primary_bracket_name || '',
-      age_group_place: r.results_primary_bracket_place || '',
+      age_group_place: r.results_primary_bracket_place ? parseInt(r.results_primary_bracket_place, 10) : null,
       pace: r.results_pace || '',
-      age: r.results_age || '',
+      age: r.results_age ? parseInt(r.results_age, 10) : null,
       gender: r.results_sex || '',
       bib: r.results_bib || '',
       race_id: r.results_race_id || null,
       race_name: r.results_race_name || '',
       city: r.results_city || '',
       state: r.results_state || '',
-      country: r.results_country || r.country || '', // Added: country field
-      splits, // Added: array of intermediate splits
+      country: r.results_country || r.country || '', // Added country
+      splits, // Added intermediate splits
     };
   });
 };
