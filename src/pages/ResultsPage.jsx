@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Desktop full table intact, Mobile card layout, no overlap)
+// src/pages/ResultsPage.jsx (FINAL — Perfect mobile spacing, desktop full table intact)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -169,16 +169,16 @@ export default function ResultsPage() {
           </p>
         )}
 
-        {/* Event Header */}
-        <div className="text-center mb-12">
+        {/* Event Header — Tight spacing on mobile */}
+        <div className="text-center mb-6 md:mb-12">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
             {selectedEvent.name}
           </h1>
-          <p className="text-xl sm:text-2xl text-gray-600 mt-4">{formattedDate}</p>
+          <p className="text-xl sm:text-2xl text-gray-600 mt-2 md:mt-4">{formattedDate}</p>
         </div>
 
-        {/* Extra space on mobile only to clear open search dropdown */}
-        <div className="h-64 md:h-0" />
+        {/* Extra space on mobile only — enough for dropdown without hiding race name */}
+        <div className="h-48 md:h-0" />
 
         {loadingResults ? (
           <div className="text-center py-24">
@@ -203,7 +203,7 @@ export default function ResultsPage() {
           <>
             {/* Jump Links */}
             {racesToShow.length > 1 && (
-              <div className="w-full text-center mb-12">
+              <div className="w-full text-center mb-8 md:mb-12">
                 <p className="text-lg font-semibold text-gray-700 mb-4">Jump to Race:</p>
                 <div className="flex flex-wrap justify-center gap-3 px-4">
                   {racesToShow.map(r => (
@@ -240,12 +240,12 @@ export default function ResultsPage() {
 
               return (
                 <section key={race.race_id} ref={el => (raceRefs.current[race.race_id] = el)} className="mb-20 scroll-mt-32">
-                  <h3 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center text-gemini-dark-gray mb-10">
+                  <h3 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center text-gemini-dark-gray mb-8 md:mb-10">
                     {race.race_name}
                   </h3>
 
                   {/* Filters */}
-                  <div className="w-full bg-white rounded-2xl shadow-lg p-6 mb-10">
+                  <div className="w-full bg-white rounded-2xl shadow-lg p-6 mb-8 md:mb-10">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <input
                         type="text"
@@ -294,14 +294,11 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  {/* Results Table — Mobile cards, Desktop full table */}
+                  {/* Results Table — Responsive */}
                   <div className="w-full">
-                    {/* Use Tailwind's responsive classes to hide/show based on screen size */}
-                    {/* Mobile: Cards */}
                     <div className="md:hidden">
                       <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
                     </div>
-                    {/* Desktop: Full table */}
                     <div className="hidden md:block">
                       <ResultsTable data={display} onNameClick={handleNameClick} isMobile={false} />
                     </div>
@@ -309,7 +306,7 @@ export default function ResultsPage() {
 
                   {/* Pagination */}
                   {sorted.length > pageSize && (
-                    <div className="text-center mt-12">
+                    <div className="text-center mt-10 md:mt-12">
                       <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
                         <button
                           onClick={() => setCurrentPages(p => ({
