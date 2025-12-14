@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FIXED: Leaderboard readable + full-width on all screens)
+// src/pages/ResultsPage.jsx (FINAL — Mobile-perfect, no layout shift, fully polished)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -34,7 +34,7 @@ export default function ResultsPage() {
     });
   };
 
-  // NO EVENT SELECTED: Recent races landing
+  // ——— NO EVENT SELECTED → Recent Races Landing ———
   if (!selectedEvent) {
     const recentEvents = [...events]
       .filter(e => new Date(e.date) <= new Date())
@@ -69,9 +69,14 @@ export default function ResultsPage() {
                   >
                     <div className="h-48 bg-gray-50 p-6 flex items-center justify-center">
                       {eventLogos[event.id] ? (
-                        <img src={eventLogos[event.id]} alt={`${event.name} Logo`} className="max-h-36 max-w-full object-contain" />
+                        <img
+                          src={eventLogos[event.id]}
+                          alt={`${event.name} Logo`}
+                          className="max-h-36 max-w-full object-contain"
+                          loading="eager"
+                        />
                       ) : (
-                        <div className="text-6xl opacity-30 group-hover:opacity-50">🏁</div>
+                        <div className="text-6xl opacity-30 group-hover:opacity-50">Finish Flag</div>
                       )}
                     </div>
                     <div className="p-8 text-center">
@@ -96,17 +101,18 @@ export default function ResultsPage() {
 
           <div className="text-center mt-20">
             <p className="text-lg text-gray-600 mb-6">Or use the search bar above to find any race</p>
-            <div className="text-6xl">🔍</div>
+            <div className="text-6xl">Search</div>
           </div>
         </div>
       </div>
     );
   }
 
-  // FULL RESULTS VIEW
+  // ——— FULL RESULTS VIEW ———
   const formattedDate = formatDate(selectedEvent.date);
   const isUpcoming = new Date(selectedEvent.date) > new Date();
 
+  // Deduplicate results
   const uniqueResults = results.reduce((acc, current) => {
     const key = [
       (current.bib || '').toString().trim(),
@@ -122,6 +128,7 @@ export default function ResultsPage() {
     return acc;
   }, { seen: new Set(), results: [] }).results;
 
+  // Group by race
   const grouped = {};
   uniqueResults.forEach(r => {
     const id = r.race_id || 'overall';
@@ -153,22 +160,26 @@ export default function ResultsPage() {
           </p>
         )}
 
-        {/* Event Header - full width on mobile */}
+        {/* Event Header — FIXED layout shift */}
         <div className="text-center mb-12">
-          <img
-            src={eventLogos[selectedEvent.id] || '/GRR.png'}
-            alt="Event Logo"
-            className="mx-auto max-h-40 mb-8"
-          />
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight">
+          <div className="mx-auto w-40 h-40 mb-8 flex items-center justify-center bg-gray-50 rounded-full overflow-hidden">
+            <img
+              src={eventLogos[selectedEvent.id] || '/GRR.png'}
+              alt="Event Logo"
+              className="max-h-36 max-w-full object-contain"
+              loading="eager"
+            />
+          </div>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
             {selectedEvent.name}
           </h1>
           <p className="text-xl sm:text-2xl text-gray-600 mt-4">{formattedDate}</p>
         </div>
 
+        {/* Loading / Upcoming / Empty States */}
         {loadingResults ? (
           <div className="text-center py-24">
-            <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
+            <div className="text-7xl animate-spin inline-block mb-6">Runner</div>
             <p className="text-2xl text-gray-700">Loading results...</p>
           </div>
         ) : uniqueResults.length === 0 && isUpcoming ? (
@@ -179,7 +190,7 @@ export default function ResultsPage() {
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               This race is upcoming. Results will appear after finishers cross the line.
             </p>
-            <div className="text-7xl mt-8">⏱️</div>
+            <div className="text-7xl mt-8">Timer</div>
           </div>
         ) : uniqueResults.length === 0 ? (
           <div className="text-center py-24">
@@ -187,11 +198,11 @@ export default function ResultsPage() {
           </div>
         ) : (
           <>
-            {/* Jump Links - full width */}
+            {/* Jump Links */}
             {racesToShow.length > 1 && (
-              <div className="text-center mb-12">
+              <div className="w-full text-center mb-12">
                 <p className="text-lg font-semibold text-gray-700 mb-4">Jump to Race:</p>
-                <div className="flex flex-wrap justify-center gap-3">
+                <div className="flex flex-wrap justify-center gap-3 px-4">
                   {racesToShow.map(r => (
                     <button
                       key={r.race_id}
@@ -205,7 +216,7 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {/* Race Sections - full width containers */}
+            {/* Race Sections */}
             {racesToShow.map(race => {
               const raceResults = grouped[race.race_id] || [];
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
@@ -232,15 +243,16 @@ export default function ResultsPage() {
                     {race.race_name}
                   </h3>
 
-                  {/* Leaderboard - FIXED readability */}
+                  {/* Leaderboard */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12 w-full">
+                    {/* Top Males */}
                     <div className="bg-white rounded-2xl shadow-lg p-6">
                       <h4 className="text-2xl font-bold text-gemini-blue mb-6">Top Males</h4>
                       {topM.length === 0 ? (
                         <p className="text-gray-500 text-center py-8">No male finishers yet</p>
                       ) : (
                         topM.map((w, i) => (
-                          <div key={i} className="mb-5 p-4 bg-gemini-light-gray/50 rounded-xl"> {/* Darker background */}
+                          <div key={i} className="mb-5 p-4 bg-gemini-light-gray/60 rounded-xl">
                             <p className="font-bold text-lg text-gemini-dark-gray">{i + 1}. {w.first_name} {w.last_name}</p>
                             <p className="text-gray-700">Time: {w.chip_time || 'N/A'}</p>
                             <p className="text-gray-600 text-sm">Age: {w.age || 'N/A'}</p>
@@ -249,13 +261,14 @@ export default function ResultsPage() {
                       )}
                     </div>
 
+                    {/* Top Females */}
                     <div className="bg-white rounded-2xl shadow-lg p-6">
                       <h4 className="text-2xl font-bold text-gemini-red mb-6">Top Females</h4>
                       {topF.length === 0 ? (
                         <p className="text-gray-500 text-center py-8">No female finishers yet</p>
                       ) : (
                         topF.map((w, i) => (
-                          <div key={i} className="mb-5 p-4 bg-gemini-light-gray/50 rounded-xl">
+                          <div key={i} className="mb-5 p-4 bg-gemini-light-gray/60 rounded-xl">
                             <p className="font-bold text-lg text-gemini-dark-gray">{i + 1}. {w.first_name} {w.last_name}</p>
                             <p className="text-gray-700">Time: {w.chip_time || 'N/A'}</p>
                             <p className="text-gray-600 text-sm">Age: {w.age || 'N/A'}</p>
@@ -265,35 +278,101 @@ export default function ResultsPage() {
                     </div>
                   </div>
 
-                  {/* Filters - full width on mobile */}
+                  {/* Filters */}
                   <div className="w-full bg-white rounded-2xl shadow-lg p-6 mb-10">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <input
                         type="text"
                         placeholder="Search by name or bib..."
                         value={filters.search}
-                        onChange={e => setRaceFilters(p => ({ ...p, [race.race_id]: { ...p[race.race_id], search: e.target.value } }))}
+                        onChange={e => setRaceFilters(p => ({
+                          ...p,
+                          [race.race_id]: { ...p[race.race_id], search: e.target.value }
+                        }))}
                         className="p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
                       />
-                      {/* ... gender and division selects unchanged ... */}
+                      <select
+                        value={filters.gender}
+                        onChange={e => setRaceFilters(p => ({
+                          ...p,
+                          [race.race_id]: { ...p[race.race_id], gender: e.target.value }
+                        }))}
+                        className="p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+                      >
+                        <option value="">All Genders</option>
+                        <option value="M">Male</option>
+                        <option value="F">Female</option>
+                      </select>
+                      <select
+                        value={filters.division}
+                        onChange={e => setRaceFilters(p => ({
+                          ...p,
+                          [race.race_id]: { ...p[race.race_id], division: e.target.value }
+                        }))}
+                        className="p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+                      >
+                        <option value="">All Divisions</option>
+                        {uniqueDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
                     </div>
-                    {/* Clear button unchanged */}
+                    {(filters.search || filters.gender || filters.division) && (
+                      <button
+                        onClick={() => setRaceFilters(p => ({
+                          ...p,
+                          [race.race_id]: { search: '', gender: '', division: '' }
+                        }))}
+                        className="mt-4 text-gemini-red hover:underline font-medium"
+                      >
+                        Clear all filters
+                      </button>
+                    )}
                   </div>
 
-                  {/* Table - full width */}
+                  {/* Results Table */}
                   <div className="w-full">
                     <div className="overflow-x-auto rounded-2xl shadow-lg bg-white">
                       <ResultsTable data={display} onNameClick={handleNameClick} />
                     </div>
-                    <p className="text-center text-sm text-gray-500 mt-3">← Scroll horizontally on mobile →</p>
+                    <p className="text-center text-sm text-gray-500 mt-3">
+                      ← Scroll horizontally on mobile →
+                    </p>
                   </div>
 
-                  {/* Pagination unchanged */}
+                  {/* Pagination */}
+                  {sorted.length > pageSize && (
+                    <div className="text-center mt-12">
+                      <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+                        <button
+                          onClick={() => setCurrentPages(p => ({
+                            ...p,
+                            [race.race_id]: Math.max(1, (p[race.race_id] || 1) - 1)
+                          }))}
+                          disabled={page === 1}
+                          className="px-8 py-4 bg-gemini-blue text-white rounded-xl font-semibold disabled:bg-gray-300 hover:bg-gemini-blue/90 transition"
+                        >
+                          ← Previous
+                        </button>
+                        <span className="text-lg font-medium">
+                          Page {page} of {totalPages} ({sorted.length} results)
+                        </span>
+                        <button
+                          onClick={() => setCurrentPages(p => ({
+                            ...p,
+                            [race.race_id]: page + 1
+                          }))}
+                          disabled={page >= totalPages}
+                          className="px-8 py-4 bg-gemini-blue text-white rounded-xl font-semibold disabled:bg-gray-300 hover:bg-gemini-blue/90 transition"
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
               );
             })}
 
-            {/* Sponsors - full width grid */}
+            {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20 w-full">
                 <h3 className="text-3xl font-bold text-center text-gemini-dark-gray mb-10">
