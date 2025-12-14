@@ -1,8 +1,7 @@
-// src/context/RaceContext.jsx (FINAL: Smart live updates on race day)
+// src/context/RaceContext.jsx (FINAL: Always fetch fresh if cache empty + live polling on race day)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
-import crypto from 'crypto'; // For hashing (browser built-in)
 
 export const RaceContext = createContext();
 
@@ -34,10 +33,8 @@ export function RaceProvider({ children }) {
         place: r.place,
         gender_place: r.gender_place,
         age_group_place: r.age_group_place,
-        // Add more fields if needed
-      })).sort((a, b) => a.place - b.place) // Normalize order
+      })).sort((a, b) => a.place - b.place)
     );
-    // Browser crypto subtle (async) — fallback to simple hash
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
@@ -111,7 +108,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + live polling on race day
+  // Load results + live polling
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -158,18 +155,18 @@ export function RaceProvider({ children }) {
         const isRaceDay = selectedEvent.date === todayStr;
         setIsLiveRace(isRaceDay);
 
-        // On race day or forced, fetch fresh from ChronoTrack
-        if (isRaceDay || forceFresh) {
-          console.log('[RaceContext] Race day detected — fetching fresh results');
+        // ALWAYS fetch fresh if cache is empty, or on race day / forceFresh
+        if (allCached.length === 0 || isRaceDay || forceFresh) {
+          console.log('[RaceContext] Cache empty or race day — fetching fresh from ChronoTrack');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
 
           const freshHash = hashResults(fresh);
           if (freshHash !== currentHash && fresh.length > 0) {
-            console.log('[RaceContext] New/changed results detected — updating');
+            console.log('[RaceContext] New/changed results — updating cache and state');
             currentHash = freshHash;
 
-            // Upsert only new/changed into Supabase
+            // Map and upsert fresh data
             const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -180,6 +177,7 @@ export function RaceProvider({ children }) {
               age: r.age ? parseInt(r.age, 10) : null,
               city: r.city || null,
               state: r.state || null,
+              country: r.country || null, // if added
               chip_time: r.chip_time || null,
               clock_time: r.clock_time || null,
               place: r.place ? parseInt(r.place, 10) : null,
@@ -187,6 +185,7 @@ export function RaceProvider({ children }) {
               age_group_name: r.age_group_name || null,
               age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
               pace: r.pace || null,
+              splits: r.splits || [], // if added
             }));
 
             const chunkSize = 500;
@@ -194,13 +193,13 @@ export function RaceProvider({ children }) {
               const chunk = toUpsert.slice(i, i + chunkSize);
               const { error } = await supabase
                 .from('chronotrack_results')
-                .upsert(chunk, { onConflict: 'event_id,bib,place' }); // Adjust conflict keys if needed
+                .upsert(chunk, { ignoreDuplicates: true });
               if (error) console.error('[Supabase] Upsert error:', error);
             }
 
             allResults = fresh;
-          } else {
-            console.log('[RaceContext] No changes — keeping cache');
+          } else if (allCached.length === 0 && fresh.length === 0) {
+            console.log('[RaceContext] No results from ChronoTrack either');
           }
         }
 
@@ -220,7 +219,7 @@ export function RaceProvider({ children }) {
     // Poll every 2 minutes on race day
     const todayStr = new Date().toISOString().split('T')[0];
     if (selectedEvent.date === todayStr) {
-      interval = setInterval(() => loadResults(true), 120000); // 2 minutes
+      interval = setInterval(() => loadResults(true), 120000);
       console.log('[RaceContext] Live polling started (every 2 min)');
     }
 
@@ -254,7 +253,7 @@ export function RaceProvider({ children }) {
       setGlobalFilter,
       eventLogos,
       ads,
-      isLiveRace, // Expose for UI badge
+      isLiveRace,
     }}>
       {children}
     </RaceContext.Provider>
