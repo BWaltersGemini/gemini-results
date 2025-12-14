@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Correct table name, full refresh, all features)
+// src/pages/AdminPage.jsx (COMPLETE FINAL — Fixed refresh with event_id, full features)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -66,7 +66,7 @@ export default function AdminPage() {
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Persist toggle
+  // Persist ChronoTrack toggle
   useEffect(() => {
     localStorage.setItem('chronotrackEnabled', chronotrackEnabled);
   }, [chronotrackEnabled]);
@@ -211,7 +211,7 @@ export default function AdminPage() {
     alert('All changes saved successfully!');
   };
 
-  // Refresh & Publish — Correct table name + full clear/insert
+  // Refresh & Publish — Fixed with explicit event_id
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) {
       setRefreshStatus('Please select an event first');
@@ -225,9 +225,9 @@ export default function AdminPage() {
     setRefreshStatus('Fetching fresh results from ChronoTrack...');
     try {
       const allResults = await fetchResultsForEvent(selectedEventId);
-      setRefreshStatus(`Fetched ${allResults.length} results. Updating cache...`);
+      setRefreshStatus(`Fetched ${allResults.length} results. Clearing old cache...`);
 
-      // Clear old results
+      // Clear old results for this event
       const { error: deleteError } = await supabase
         .from('chronotrack_results')
         .delete()
@@ -235,17 +235,40 @@ export default function AdminPage() {
 
       if (deleteError) throw deleteError;
 
-      // Insert fresh in chunks
+      setRefreshStatus('Inserting fresh results...');
+
+      // Insert fresh results — explicitly include event_id
+      const toInsert = allResults.map(r => ({
+        event_id: selectedEventId, // ← Critical fix
+        race_id: r.race_id || null,
+        bib: r.bib || null,
+        first_name: r.first_name || null,
+        last_name: r.last_name || null,
+        gender: r.gender || null,
+        age: r.age ? parseInt(r.age, 10) : null,
+        city: r.city || null,
+        state: r.state || null,
+        country: r.country || null,
+        chip_time: r.chip_time || null,
+        clock_time: r.clock_time || null,
+        place: r.place ? parseInt(r.place, 10) : null,
+        gender_place: r.gender_place ? parseInt(r.gender_place, 10) : null,
+        age_group_name: r.age_group_name || null,
+        age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
+        pace: r.pace || null,
+        splits: r.splits || [],
+      }));
+
       const chunkSize = 500;
-      for (let i = 0; i < allResults.length; i += chunkSize) {
-        const chunk = allResults.slice(i, i + chunkSize);
+      for (let i = 0; i < toInsert.length; i += chunkSize) {
+        const chunk = toInsert.slice(i, i + chunkSize);
         const { error: insertError } = await supabase
           .from('chronotrack_results')
           .insert(chunk);
         if (insertError) throw insertError;
       }
 
-      setRefreshStatus(`Success! ${allResults.length} results refreshed and published.`);
+      setRefreshStatus(`Success! ${allResults.length} results refreshed and published to all users.`);
     } catch (err) {
       console.error('Refresh & publish failed:', err);
       setRefreshStatus(`Error: ${err.message || 'Unknown error'}`);
@@ -287,7 +310,7 @@ export default function AdminPage() {
       <div className="max-w-7xl mx-auto px-6">
         <h1 className="text-5xl font-bold text-center mb-12 text-gemini-dark-gray">Admin Dashboard</h1>
 
-        {/* ChronoTrack Toggle */}
+        {/* ChronoTrack API Toggle */}
         <section className="mb-12 bg-white p-8 rounded-2xl shadow-xl border-2 border-gemini-blue">
           <h2 className="text-3xl font-bold mb-6 text-gemini-dark-gray">ChronoTrack API Control</h2>
           <div className="flex items-center justify-between max-w-lg">
@@ -310,9 +333,12 @@ export default function AdminPage() {
               />
             </button>
           </div>
+          <p className="mt-6 text-sm text-gray-600 max-w-3xl">
+            Turn off to stop all ChronoTrack API calls. Useful for maintenance, testing, or switching to cached data only.
+          </p>
         </section>
 
-        {/* Refresh & Publish */}
+        {/* Refresh & Publish Results */}
         <section className="mb-12 p-8 bg-green-50 rounded-xl border border-green-200">
           <h2 className="text-3xl font-bold mb-6">Refresh & Publish Results</h2>
           <p className="mb-4 text-gray-700">
@@ -347,8 +373,109 @@ export default function AdminPage() {
           )}
         </section>
 
-        {/* The rest of your admin UI (event management, logos, ads, etc.) */}
-        {/* ... (keep your existing code here — unchanged from your last working version) ... */}
+        {/* Manage Events */}
+        <section className="mb-12">
+          <h2 className="text-3xl font-bold mb-6">Manage Events</h2>
+          {chronoEvents.map((event) => {
+            const currentMaster = Object.keys(masterGroups).find(key => masterGroups[key].includes(event.id)) || 'None';
+            return (
+              <div key={event.id} className="mb-4 p-6 bg-white rounded-xl shadow">
+                <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleExpandEvent(event.id)}>
+                  <div className="flex flex-col space-y-1 flex-1">
+                    <span className="text-sm text-gray-500">Original: {event.name}</span>
+                    <input
+                      type="text"
+                      value={editedEvents[event.id]?.name || event.name}
+                      onChange={e => handleEditName(event.id, e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      className="text-2xl font-bold p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                  <span className="ml-2 text-xl text-gray-600">({formatDate(event.date)})</span>
+                  <span>{expandedEvents[event.id] ? '▲' : '▼'}</span>
+                </div>
+                <div className="flex items-center mt-2">
+                  <input
+                    type="checkbox"
+                    checked={!hiddenEvents.includes(event.id)}
+                    onChange={() => toggleEventVisibility(event.id)}
+                    className="mr-2"
+                  />
+                  <span>Visible in App</span>
+                </div>
+                <div className="mt-4">
+                  <p className="font-bold">Current Master: {currentMaster}</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      list="master-keys"
+                      placeholder="Enter or select Master Key"
+                      value={newMasterKeys[event.id] || ''}
+                      onChange={e => setNewMasterKeys(prev => ({ ...prev, [event.id]: e.target.value }))}
+                      className="p-2 border border-gray-300 rounded flex-1"
+                    />
+                    <datalist id="master-keys">
+                      {Object.keys(masterGroups).map(key => (
+                        <option key={key} value={key} />
+                      ))}
+                    </datalist>
+                    <button
+                      onClick={() => assignToMaster(event.id, newMasterKeys[event.id])}
+                      className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+                    >
+                      Assign
+                    </button>
+                  </div>
+                </div>
+                {expandedEvents[event.id] && raceEvents[event.id] && (
+                  <div className="mt-4">
+                    <h3 className="text-xl font-bold mb-2">Races</h3>
+                    {raceEvents[event.id].map(race => (
+                      <div key={race.race_id} className="flex items-center mb-1 ml-4">
+                        <input
+                          type="checkbox"
+                          checked={! (hiddenRaces[event.id] || []).includes(race.race_id)}
+                          onChange={() => toggleRaceVisibility(event.id, race.race_id)}
+                          className="mr-2"
+                        />
+                        <div className="flex flex-col space-y-1 flex-1">
+                          <span className="text-sm text-gray-500">Original: {race.race_name}</span>
+                          <input
+                            type="text"
+                            value={editedEvents[event.id]?.races?.[race.race_id] || race.race_name}
+                            onChange={e => handleEditRaceName(event.id, race.race_id, e.target.value)}
+                            className="w-full p-1 border border-gray-300 rounded"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
+
+        {/* API Frequency */}
+        <section className="mb-12">
+          <h2 className="text-3xl font-bold mb-4">API Frequency (minutes)</h2>
+          <input
+            type="number"
+            value={apiFrequency}
+            onChange={handleFrequencyChange}
+            className="w-full max-w-xs p-4 rounded-lg border border-gray-300"
+          />
+        </section>
+
+        {/* Upload Advertisements */}
+        <section className="mb-12">
+          <h2 className="text-3xl font-bold mb-4">Upload Advertisements</h2>
+          <input type="file" onChange={e => handleFileUpload(e, 'ad')} accept="image/*" multiple />
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            {ads.map((ad, index) => (
+              <img key={index} src={ad} alt={`Ad ${index}`} className="w-full h-auto rounded" />
+            ))}
+          </div>
+        </section>
 
         <button onClick={handleSaveChanges} className="mt-12 bg-gemini-blue text-white px-10 py-5 rounded-xl hover:bg-gemini-blue/90 font-bold text-xl">
           Save All Changes
