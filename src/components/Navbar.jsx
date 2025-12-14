@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (Updated: Added Admin Login + Race Directors Hub)
+// src/components/Navbar.jsx (Optimized for Mobile: Hamburger menu + always-visible search)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -15,6 +15,7 @@ export default function Navbar() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isListOpen, setIsListOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (selectedEvent) {
@@ -38,6 +39,7 @@ export default function Navbar() {
     setSelectedEvent(event);
     setSearchTerm(event.name || '');
     setIsListOpen(false);
+    setIsMobileMenuOpen(false);
     navigate('/results');
   };
 
@@ -60,16 +62,21 @@ export default function Navbar() {
     }
   };
 
+  const closeAll = () => {
+    setIsListOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
   return (
     <nav className="fixed top-0 w-full bg-white shadow-md z-50">
-      {/* Top Bar */}
-      <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-        <Link to="/">
-          <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-10" />
+      {/* Top Bar: Logo + Hamburger + Search */}
+      <div className="px-4 py-3 flex items-center justify-between">
+        <Link to="/" onClick={closeAll}>
+          <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
         </Link>
 
-        {/* Main Navigation */}
-        <div className="flex items-center space-x-8">
+        {/* Desktop Navigation Links */}
+        <div className="hidden md:flex items-center space-x-8">
           <Link
             to="/results"
             onClick={handleResultsClick}
@@ -80,30 +87,34 @@ export default function Navbar() {
           <Link to="/contact" className="text-gray-700 hover:text-gemini-blue font-medium">
             Contact
           </Link>
-
-          {/* Admin & Race Director Links (subtle, right-aligned) */}
           <div className="flex items-center space-x-6 border-l border-gray-300 pl-8">
-            <Link
-              to="/admin"
-              className="text-sm text-gray-600 hover:text-gemini-blue font-medium transition"
-            >
+            <Link to="/admin" className="text-sm text-gray-600 hover:text-gemini-blue font-medium">
               Admin Login
             </Link>
             <a
-              href="https://youkeepmoving.com/race-directors" // Update with your actual URL
+              href="https://youkeepmoving.com/race-directors"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-gray-600 hover:text-gemini-blue font-medium transition"
+              className="text-sm text-gray-600 hover:text-gemini-blue font-medium"
             >
               Race Directors Hub
             </a>
           </div>
         </div>
+
+        {/* Hamburger Button (Mobile only) */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="md:hidden text-3xl text-gray-700 focus:outline-none"
+          aria-label="Toggle menu"
+        >
+          {isMobileMenuOpen ? '✕' : '☰'}
+        </button>
       </div>
 
-      {/* Search Bar with Dropdown */}
-      <div className="bg-white py-4 shadow-sm border-t">
-        <div className="max-w-2xl mx-auto px-6 relative">
+      {/* Search Bar - Always visible, full width on mobile */}
+      <div className="bg-white py-3 border-t border-gray-200">
+        <div className="px-4 relative">
           <input
             type="text"
             value={searchTerm}
@@ -113,48 +124,111 @@ export default function Navbar() {
             }}
             onFocus={handleInputFocus}
             placeholder="Search Race Results..."
-            className="w-full p-3 border border-gray-300 rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-gemini-blue focus:border-transparent"
+            className="w-full p-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gemini-blue"
           />
           <button
             onClick={handleToggleOpen}
-            className="absolute right-10 top-1/2 transform -translate-y-1/2 text-gemini-blue text-2xl font-light"
+            className="absolute right-8 top-1/2 -translate-y-1/2 text-gemini-blue text-2xl"
             aria-label="Toggle event list"
           >
             {isListOpen ? '▲' : '▼'}
           </button>
-
-          {/* Dropdown List */}
-          {isListOpen && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50">
-              {loading ? (
-                <div className="p-6 text-center text-gray-600">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gemini-blue"></div>
-                  <p className="mt-2">Loading events...</p>
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="p-6 text-center text-gray-600">
-                  {searchTerm ? 'No events match your search' : 'No events available'}
-                </div>
-              ) : (
-                filtered.map((event) => (
-                  <div
-                    key={event.id}
-                    onClick={() => handleEventSelect(event)}
-                    className={`p-4 hover:bg-gemini-light-gray cursor-pointer border-b border-gray-100 last:border-0 transition ${
-                      selectedEvent?.id === event.id ? 'bg-gemini-light-gray font-semibold' : ''
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span>{event.name}</span>
-                      <span className="text-sm text-gray-500 ml-4">{event.date}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Event Dropdown List */}
+      {isListOpen && (
+        <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gemini-blue"></div>
+              <p className="mt-4 text-gray-600">Loading events...</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="p-8 text-center text-gray-600">
+              {searchTerm ? 'No events match your search' : 'No events available'}
+            </p>
+          ) : (
+            filtered.map((event) => (
+              <div
+                key={event.id}
+                onClick={() => handleEventSelect(event)}
+                className={`p-4 hover:bg-gemini-light-gray cursor-pointer border-b border-gray-100 last:border-0 ${
+                  selectedEvent?.id === event.id ? 'bg-gemini-light-gray font-semibold' : ''
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <span>{event.name}</span>
+                  <span className="text-sm text-gray-500">{event.date}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          {/* Menu Panel */}
+          <div className="fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-40 md:hidden overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-xl font-bold">Menu</h3>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-3xl text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <Link
+                  to="/results"
+                  onClick={(e) => {
+                    handleResultsClick(e);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="block text-lg font-medium text-gray-700 hover:text-gemini-blue"
+                >
+                  {selectedEvent ? `← All Results` : `Results`}
+                </Link>
+                <Link
+                  to="/contact"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block text-lg font-medium text-gray-700 hover:text-gemini-blue"
+                >
+                  Contact
+                </Link>
+
+                <div className="pt-6 border-t border-gray-300">
+                  <Link
+                    to="/admin"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block text-base text-gray-600 hover:text-gemini-blue py-2"
+                  >
+                    Admin Login
+                  </Link>
+                  <a
+                    href="https://youkeepmoving.com/race-directors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-base text-gray-600 hover:text-gemini-blue py-2"
+                  >
+                    Race Directors Hub
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </nav>
   );
 }
