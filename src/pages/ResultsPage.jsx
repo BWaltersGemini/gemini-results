@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Perfect mobile spacing, desktop full table intact)
+// src/pages/ResultsPage.jsx (FINAL — Race logo added, responsive size, no layout shift, mobile/desktop perfect)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -169,15 +169,25 @@ export default function ResultsPage() {
           </p>
         )}
 
-        {/* Event Header — Tight spacing on mobile */}
+        {/* Event Header — Logo + Name + Date */}
         <div className="text-center mb-6 md:mb-12">
+          {/* Logo — Responsive size, fixed container to prevent shift */}
+          <div className="mx-auto w-32 h-32 md:w-40 md:h-40 mb-6 flex items-center justify-center bg-gray-50 rounded-full overflow-hidden">
+            <img
+              src={eventLogos[selectedEvent.id] || '/GRR.png'}
+              alt="Race Logo"
+              className="max-h-24 md:max-h-36 max-w-full object-contain"
+              loading="eager"
+            />
+          </div>
+
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
             {selectedEvent.name}
           </h1>
           <p className="text-xl sm:text-2xl text-gray-600 mt-2 md:mt-4">{formattedDate}</p>
         </div>
 
-        {/* Extra space on mobile only — enough for dropdown without hiding race name */}
+        {/* Extra space on mobile only to clear open search dropdown */}
         <div className="h-48 md:h-0" />
 
         {loadingResults ? (
