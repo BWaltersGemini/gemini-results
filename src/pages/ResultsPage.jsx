@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Everything polished, logo, country, splits ready, mobile/desktop perfect)
+// src/pages/ResultsPage.jsx (FINAL — Everything polished: logo, mobile/desktop perfect, safe guards)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -77,7 +77,7 @@ export default function ResultsPage() {
                           loading="eager"
                         />
                       ) : (
-                        <div className="text-6xl opacity-30 group-hover:opacity-50">Finish Flag</div>
+                        <div className="text-6xl opacity-30 group-hover:opacity-50">🏁</div>
                       )}
                     </div>
                     <div className="p-8 text-center">
@@ -104,7 +104,7 @@ export default function ResultsPage() {
 
           <div className="text-center mt-20">
             <p className="text-lg text-gray-600 mb-6">Or use the search bar above to find any race</p>
-            <div className="text-6xl">Search</div>
+            <div className="text-6xl">🔍</div>
           </div>
         </div>
       </div>
@@ -187,13 +187,13 @@ export default function ResultsPage() {
           <p className="text-xl sm:text-2xl text-gray-600 mt-2 md:mt-4">{formattedDate}</p>
         </div>
 
-        {/* Extra space on mobile only — clears open search dropdown */}
+        {/* Extra space on mobile only to clear open search dropdown */}
         <div className="h-48 md:h-0" />
 
         {/* Loading / Upcoming / Empty States */}
         {loadingResults ? (
           <div className="text-center py-24">
-            <div className="text-7xl animate-spin inline-block mb-6">Runner</div>
+            <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
             <p className="text-2xl text-gray-700">Loading results...</p>
           </div>
         ) : uniqueResults.length === 0 && isUpcoming ? (
@@ -204,7 +204,7 @@ export default function ResultsPage() {
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               This race is upcoming. Results will appear after finishers cross the line.
             </p>
-            <div className="text-7xl mt-8">Timer</div>
+            <div className="text-7xl mt-8">⏱️</div>
           </div>
         ) : uniqueResults.length === 0 ? (
           <div className="text-center py-24">
@@ -235,7 +235,7 @@ export default function ResultsPage() {
               const raceResults = grouped[race.race_id] || [];
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const filtered = raceResults.filter(r => {
-                const matchesSearch = !filters.search ||
+                const matchesSearch = !filters.search || 
                   `${r.first_name} ${r.last_name}`.toLowerCase().includes(filters.search.toLowerCase()) ||
                   (r.bib && r.bib.toString().includes(filters.search));
                 const matchesGender = !filters.gender || r.gender === filters.gender;
@@ -305,7 +305,7 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  {/* Results Table — Mobile cards, Desktop full table */}
+                  {/* Results Table — Responsive */}
                   <div className="w-full">
                     <div className="md:hidden">
                       <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
