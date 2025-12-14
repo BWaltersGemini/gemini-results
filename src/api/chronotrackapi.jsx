@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Full fields, integer parsing, country & splits)
+// src/api/chronotrackapi.jsx (FINAL — Integer parsing for places, country & splits included)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';

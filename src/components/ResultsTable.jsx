@@ -1,4 +1,4 @@
-// src/components/ResultsTable.jsx (FINAL — Mobile cards, Desktop centered full table with country)
+// src/components/ResultsTable.jsx (FINAL — Mobile cards, Desktop full table centered, country column)
 import {
   useReactTable,
   getCoreRowModel,
@@ -33,7 +33,7 @@ export default function ResultsTable({ data = [], onNameClick, isMobile = false 
     { accessorKey: 'pace', header: 'Pace', cell: info => info.getValue() || '—' },
     { accessorKey: 'age', header: 'Age', cell: info => info.getValue() || '—' },
     { accessorKey: 'gender', header: 'Gender', cell: info => info.getValue() || '—' },
-    { accessorKey: 'country', header: 'Country', cell: info => info.getValue() || '—' }, // NEW
+    { accessorKey: 'country', header: 'Country', cell: info => info.getValue() || '—' },
   ];
 
   const table = useReactTable({
