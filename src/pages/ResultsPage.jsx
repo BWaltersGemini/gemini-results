@@ -68,7 +68,7 @@ export default function ResultsPage() {
                     onClick={() => goToRaceResults(event)}
                     className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
                   >
-                    <div className="h-48 bg-gray-50 p-6 flex items-center justify-center">
+                    <div className="h-16 bg-gray-50 p-6 flex items-center justify-center">
                       {eventLogos[event.id] ? (
                         <img
                           src={eventLogos[event.id]}
@@ -188,7 +188,7 @@ export default function ResultsPage() {
         </div>
 
         {/* Extra space on mobile only to clear open search dropdown */}
-        <div className="h-48 md:h-0" />
+        <div className="h-16 md:h-0" />
 
         {loadingResults ? (
           <div className="text-center py-24">
