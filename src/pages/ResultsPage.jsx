@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Race logo added, responsive size, no layout shift, mobile/desktop perfect)
+// src/pages/ResultsPage.jsx (FINAL — Everything polished, logo, country, splits ready, mobile/desktop perfect)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -35,7 +35,7 @@ export default function ResultsPage() {
     });
   };
 
-  // NO EVENT SELECTED — Recent races landing
+  // ——— NO EVENT SELECTED → Recent races landing ———
   if (!selectedEvent) {
     const recentEvents = [...events]
       .filter(e => e.date && new Date(e.date) <= new Date())
@@ -68,7 +68,7 @@ export default function ResultsPage() {
                     onClick={() => goToRaceResults(event)}
                     className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
                   >
-                    <div className="h-1 bg-gray-50 p-6 flex items-center justify-center">
+                    <div className="h-48 bg-gray-50 p-6 flex items-center justify-center">
                       {eventLogos[event.id] ? (
                         <img
                           src={eventLogos[event.id]}
@@ -77,7 +77,7 @@ export default function ResultsPage() {
                           loading="eager"
                         />
                       ) : (
-                        <div className="text-6xl opacity-30 group-hover:opacity-50">🏁</div>
+                        <div className="text-6xl opacity-30 group-hover:opacity-50">Finish Flag</div>
                       )}
                     </div>
                     <div className="p-8 text-center">
@@ -104,14 +104,14 @@ export default function ResultsPage() {
 
           <div className="text-center mt-20">
             <p className="text-lg text-gray-600 mb-6">Or use the search bar above to find any race</p>
-            <div className="text-6xl">🔍</div>
+            <div className="text-6xl">Search</div>
           </div>
         </div>
       </div>
     );
   }
 
-  // FULL RESULTS VIEW — Safety guard
+  // ——— FULL RESULTS VIEW ———
   if (!selectedEvent || !selectedEvent.date) {
     return (
       <div className="text-center py-24">
@@ -171,7 +171,7 @@ export default function ResultsPage() {
 
         {/* Event Header — Logo + Name + Date */}
         <div className="text-center mb-6 md:mb-12">
-          {/* Logo — Responsive size, fixed container to prevent shift */}
+          {/* Logo — Responsive, fixed container */}
           <div className="mx-auto w-32 h-32 md:w-40 md:h-40 mb-6 flex items-center justify-center bg-gray-50 rounded-full overflow-hidden">
             <img
               src={eventLogos[selectedEvent.id] || '/GRR.png'}
@@ -187,12 +187,13 @@ export default function ResultsPage() {
           <p className="text-xl sm:text-2xl text-gray-600 mt-2 md:mt-4">{formattedDate}</p>
         </div>
 
-        {/* Extra space on mobile only to clear open search dropdown */}
-        <div className="h-1 md:h-0" />
+        {/* Extra space on mobile only — clears open search dropdown */}
+        <div className="h-48 md:h-0" />
 
+        {/* Loading / Upcoming / Empty States */}
         {loadingResults ? (
           <div className="text-center py-24">
-            <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
+            <div className="text-7xl animate-spin inline-block mb-6">Runner</div>
             <p className="text-2xl text-gray-700">Loading results...</p>
           </div>
         ) : uniqueResults.length === 0 && isUpcoming ? (
@@ -203,7 +204,7 @@ export default function ResultsPage() {
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               This race is upcoming. Results will appear after finishers cross the line.
             </p>
-            <div className="text-7xl mt-8">⏱️</div>
+            <div className="text-7xl mt-8">Timer</div>
           </div>
         ) : uniqueResults.length === 0 ? (
           <div className="text-center py-24">
@@ -234,7 +235,7 @@ export default function ResultsPage() {
               const raceResults = grouped[race.race_id] || [];
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const filtered = raceResults.filter(r => {
-                const matchesSearch = !filters.search || 
+                const matchesSearch = !filters.search ||
                   `${r.first_name} ${r.last_name}`.toLowerCase().includes(filters.search.toLowerCase()) ||
                   (r.bib && r.bib.toString().includes(filters.search));
                 const matchesGender = !filters.gender || r.gender === filters.gender;
@@ -304,7 +305,7 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  {/* Results Table — Responsive */}
+                  {/* Results Table — Mobile cards, Desktop full table */}
                   <div className="w-full">
                     <div className="md:hidden">
                       <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />

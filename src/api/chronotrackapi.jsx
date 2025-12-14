@@ -1,9 +1,7 @@
-// src/api/chronotrackapi.jsx (FINAL: Full pagination + robust Supabase handling)
-
+// src/api/chronotrackapi.jsx (FINAL: Includes country + intermediate splits)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
-
 let accessToken = null;
 let tokenExpiration = 0;
 
@@ -19,7 +17,6 @@ const fetchAccessToken = async () => {
     }
 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
-
     const response = await axios.get(`${baseUrl}/oauth2/token`, {
       headers: { Authorization: `Basic ${basicAuth}` },
       params: {
@@ -55,6 +52,7 @@ export const fetchEvents = async () => {
     headers: { Authorization: authHeader },
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
+
   return (response.data.event || []).map(event => ({
     id: event.event_id,
     name: event.event_name,
@@ -68,6 +66,7 @@ export const fetchRacesForEvent = async (eventId) => {
     headers: { Authorization: authHeader },
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
+
   return (response.data.event_race || []).map(race => ({
     race_id: race.race_id,
     race_name: race.race_name || `Race ${race.race_id}`,
@@ -101,22 +100,38 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  return allResults.map(r => ({
-    first_name: r.results_first_name || '',
-    last_name: r.results_last_name || '',
-    chip_time: r.results_time || '',
-    clock_time: r.results_gun_time || '',
-    place: r.results_rank || '',
-    gender_place: r.results_primary_bracket_rank || '',
-    age_group_name: r.results_primary_bracket_name || '',
-    age_group_place: r.results_primary_bracket_place || '',
-    pace: r.results_pace || '',
-    age: r.results_age || '',
-    gender: r.results_sex || '',
-    bib: r.results_bib || '',
-    race_id: r.results_race_id || null,
-    race_name: r.results_race_name || '',
-    city: r.results_city || '',
-    state: r.results_state || '',
-  }));
+  return allResults.map(r => {
+    // Extract splits if available (common structure: r.splits or r.interval_results)
+    const rawSplits = r.splits || r.interval_results || [];
+    const splits = Array.isArray(rawSplits)
+      ? rawSplits.map(split => ({
+          name: split.interval_name || split.split_name || 'Split',
+          distance: split.interval_distance || null,
+          time: split.interval_time || split.split_time || null,
+          pace: split.interval_pace || split.split_pace || null,
+          place: split.interval_place || split.split_place || null,
+        }))
+      : [];
+
+    return {
+      first_name: r.results_first_name || '',
+      last_name: r.results_last_name || '',
+      chip_time: r.results_time || '',
+      clock_time: r.results_gun_time || '',
+      place: r.results_rank || '',
+      gender_place: r.results_primary_bracket_rank || '',
+      age_group_name: r.results_primary_bracket_name || '',
+      age_group_place: r.results_primary_bracket_place || '',
+      pace: r.results_pace || '',
+      age: r.results_age || '',
+      gender: r.results_sex || '',
+      bib: r.results_bib || '',
+      race_id: r.results_race_id || null,
+      race_name: r.results_race_name || '',
+      city: r.results_city || '',
+      state: r.results_state || '',
+      country: r.results_country || r.country || '', // Added: country field
+      splits, // Added: array of intermediate splits
+    };
+  });
 };
