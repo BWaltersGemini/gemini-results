@@ -5,10 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
 
-  // This makes all asset paths relative (./assets/...) instead of absolute (/)
-  This is REQUIRED for Vercel/Netlify SPAs when using client-side routing
-  Without it → refresh on /results → MIME type error + blank page
-  base: './',
+  base: './', // Makes asset paths relative — fixes refresh/MIME issues on Vercel
 
   server: {
     proxy: {
