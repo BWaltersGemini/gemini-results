@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (FIXED: Selected event row visible on all backgrounds)
+// src/components/Navbar.jsx (FINAL: Mobile-optimized, readable dropdown, selected state visible)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -69,7 +69,7 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 w-full bg-white shadow-md z-50">
-      {/* Top Bar */}
+      {/* Top Bar: Logo + Desktop Links + Mobile Hamburger */}
       <div className="px-4 py-3 flex items-center justify-between">
         <Link to="/" onClick={closeAll}>
           <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
@@ -112,7 +112,7 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Search Bar */}
+      {/* Search Bar - Always visible */}
       <div className="bg-white py-3 border-t border-gray-200">
         <div className="px-4 relative">
           <input
@@ -136,7 +136,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Event Dropdown List - Now with visible selected state */}
+      {/* Event Dropdown List - Fully readable */}
       {isListOpen && (
         <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
           {loading ? (
@@ -155,9 +155,9 @@ export default function Navbar() {
                 onClick={() => handleEventSelect(event)}
                 className={`p-4 cursor-pointer border-b border-gray-100 last:border-0 transition
                   hover:bg-gemini-light-gray
-                  ${selectedEvent?.id === event.id 
-                    ? 'bg-gemini-blue/10 font-bold text-gemini-blue border-l-4 border-gemini-blue' 
-                    : ''
+                  ${selectedEvent?.id === event.id
+                    ? 'bg-gemini-blue/10 font-bold text-gemini-blue border-l-4 border-gemini-blue'
+                    : 'text-gray-900' // Normal items: dark, readable text
                   }`}
               >
                 <div className="flex flex-col md:flex-row md:justify-between md:items-center">
@@ -174,7 +174,7 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* Mobile Menu (unchanged) */}
+      {/* Mobile Slide-in Menu */}
       {isMobileMenuOpen && (
         <>
           <div
@@ -202,7 +202,7 @@ export default function Navbar() {
                   }}
                   className="block text-lg font-medium text-gray-700 hover:text-gemini-blue"
                 >
-                  {selectedEvent ? `← All Results` : `Results`}
+                  {selectedEvent ? '← All Results' : 'Results'}
                 </Link>
                 <Link
                   to="/contact"
