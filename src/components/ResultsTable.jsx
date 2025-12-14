@@ -1,4 +1,4 @@
-// src/components/ResultsTable.jsx (MOBILE CARD LAYOUT: Vertical cards on mobile, full table on desktop)
+// src/components/ResultsTable.jsx (FINAL: Centered on desktop, mobile cards, no horizontal scroll)
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,7 +7,6 @@ import {
 } from '@tanstack/react-table';
 
 export default function ResultsTable({ data, onNameClick, isMobile = false }) {
-  // Desktop columns (full table)
   const desktopColumns = [
     {
       accessorFn: row => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
@@ -41,7 +40,7 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
     getSortedRowModel: getSortedRowModel(),
   });
 
-  // Mobile: Card layout (no table)
+  // Mobile: Vertical cards
   if (isMobile) {
     if (data.length === 0) {
       return (
@@ -66,7 +65,7 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
             </div>
             <div className="flex justify-between items-baseline mb-3">
               <span className="text-2xl font-bold text-gemini-dark-gray">
-                {row.place || '—'}
+                #{row.place || '—'}
               </span>
               <span className="text-xl font-semibold text-gemini-dark-gray">
                 {row.chip_time || '—'}
@@ -83,58 +82,60 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
     );
   }
 
-  // Desktop: Traditional table
+  // Desktop: Centered full table
   return (
-    <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px]">
-          <thead className="bg-gemini-blue text-white sticky top-0 z-10">
-            {table.getHeaderGroups().map(headerGroup => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map(header => (
-                  <th
-                    key={header.id}
-                    className="px-4 py-4 text-left text-sm font-semibold uppercase tracking-wider cursor-pointer hover:bg-gemini-blue/90 transition"
-                    onClick={header.column.getToggleSortingHandler()}
-                  >
-                    <div className="flex items-center gap-2">
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() && (
-                        <span className="text-lg">
-                          {header.column.getIsSorted() === 'asc' ? '↑' : '↓'}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {table.getRowModel().rows.length === 0 ? (
-              <tr>
-                <td colSpan={desktopColumns.length} className="text-center py-16 text-gray-500 text-lg">
-                  No participants match current filters.
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map((row, index) => (
-                <tr
-                  key={row.id}
-                  className={`hover:bg-gemini-light-gray/50 transition ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  }`}
-                >
-                  {row.getVisibleCells().map(cell => (
-                    <td key={cell.id} className="px-4 py-5 text-sm text-gray-800">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext()) || '—'}
-                    </td>
+    <div className="w-full max-w-7xl mx-auto px-4">
+      <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px]">
+            <thead className="bg-gemini-blue text-white sticky top-0 z-10">
+              {table.getHeaderGroups().map(headerGroup => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map(header => (
+                    <th
+                      key={header.id}
+                      className="px-4 py-4 text-left text-sm font-semibold uppercase tracking-wider cursor-pointer hover:bg-gemini-blue/90 transition"
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      <div className="flex items-center gap-2">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getIsSorted() && (
+                          <span className="text-lg">
+                            {header.column.getIsSorted() === 'asc' ? '↑' : '↓'}
+                          </span>
+                        )}
+                      </div>
+                    </th>
                   ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {table.getRowModel().rows.length === 0 ? (
+                <tr>
+                  <td colSpan={desktopColumns.length} className="text-center py-16 text-gray-500 text-lg">
+                    No participants match current filters.
+                  </td>
+                </tr>
+              ) : (
+                table.getRowModel().rows.map((row, index) => (
+                  <tr
+                    key={row.id}
+                    className={`hover:bg-gemini-light-gray/50 transition ${
+                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                    }`}
+                  >
+                    {row.getVisibleCells().map(cell => (
+                      <td key={cell.id} className="px-4 py-5 text-sm text-gray-800">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext()) || '—'}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

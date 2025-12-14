@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL MOBILE-OPTIMIZED: Simplified table, no leaderboard/logo on mobile, safe guards)
+// src/pages/ResultsPage.jsx (FINAL: Mobile spacing fix + all previous optimizations)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -14,7 +14,6 @@ export default function ResultsPage() {
     loadingResults,
     error,
     uniqueDivisions = [],
-    eventLogos = {},
     ads,
     setSelectedEvent,
   } = useContext(RaceContext);
@@ -35,7 +34,7 @@ export default function ResultsPage() {
     });
   };
 
-  // ——— NO EVENT SELECTED → Recent Races Landing ———
+  // NO EVENT SELECTED — Recent races landing
   if (!selectedEvent) {
     const recentEvents = [...events]
       .filter(e => e.date && new Date(e.date) <= new Date())
@@ -111,8 +110,7 @@ export default function ResultsPage() {
     );
   }
 
-  // ——— FULL RESULTS VIEW ———
-  // Safety guard — prevents crash if selectedEvent is temporarily null
+  // FULL RESULTS VIEW
   if (!selectedEvent || !selectedEvent.date) {
     return (
       <div className="text-center py-24">
@@ -124,7 +122,6 @@ export default function ResultsPage() {
   const formattedDate = formatDate(selectedEvent.date);
   const isUpcoming = new Date(selectedEvent.date) > new Date();
 
-  // Deduplicate results
   const uniqueResults = results.reduce((acc, current) => {
     const key = [
       (current.bib || '').toString().trim(),
@@ -140,7 +137,6 @@ export default function ResultsPage() {
     return acc;
   }, { seen: new Set(), results: [] }).results;
 
-  // Group by race
   const grouped = {};
   uniqueResults.forEach(r => {
     const id = r.race_id || 'overall';
@@ -159,7 +155,7 @@ export default function ResultsPage() {
 
   const handleNameClick = (participant) => {
     navigate('/participant', {
-      state: { participant, selectedEvent, results: uniqueResults, eventLogos, ads },
+      state: { participant, selectedEvent, results: uniqueResults, ads },
     });
   };
 
@@ -172,7 +168,7 @@ export default function ResultsPage() {
           </p>
         )}
 
-        {/* Event Header — No logo, no layout shift */}
+        {/* Event Header — No logo */}
         <div className="text-center mb-12">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
             {selectedEvent.name}
@@ -180,7 +176,9 @@ export default function ResultsPage() {
           <p className="text-xl sm:text-2xl text-gray-600 mt-4">{formattedDate}</p>
         </div>
 
-        {/* Loading / Upcoming / Empty States */}
+        {/* Extra space on mobile to avoid dropdown overlap */}
+        <div className="mt-24 md:mt-0" />
+
         {loadingResults ? (
           <div className="text-center py-24">
             <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
@@ -245,7 +243,7 @@ export default function ResultsPage() {
                     {race.race_name}
                   </h3>
 
-                  {/* Filters — Always visible */}
+                  {/* Filters */}
                   <div className="w-full bg-white rounded-2xl shadow-lg p-6 mb-10">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <input
@@ -295,14 +293,9 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  {/* Results Table — Mobile-optimized columns via prop */}
+                  {/* Results Table — Mobile card layout */}
                   <div className="w-full">
-                    <div className="overflow-x-auto rounded-2xl shadow-lg bg-white">
-                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
-                    </div>
-                    <p className="text-center text-sm text-gray-500 mt-3">
-                      ← Scroll horizontally on mobile →
-                    </p>
+                    <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
                   </div>
 
                   {/* Pagination */}
