@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FIXED: Safe pagination to avoid 404 on partial pages)
+// src/context/RaceContext.jsx (UPDATED: Persist selectedEvent across refreshes + safe pagination)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -21,7 +21,7 @@ export function RaceProvider({ children }) {
   const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
   const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
 
-  // Load all events on mount
+  // Load events on mount + restore previously selected event
   useEffect(() => {
     const loadEvents = async () => {
       console.log('[RaceContext] Starting to fetch events...');
@@ -31,6 +31,19 @@ export function RaceProvider({ children }) {
         const fetchedEvents = await fetchEvents();
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
         setEvents(fetchedEvents);
+
+        // === NEW: Restore selected event from localStorage ===
+        const savedEventId = localStorage.getItem('selectedEventId');
+        if (savedEventId && fetchedEvents.length > 0) {
+          const restoredEvent = fetchedEvents.find(e => e.id === savedEventId);
+          if (restoredEvent) {
+            console.log('[RaceContext] Restoring previously selected event:', restoredEvent);
+            setSelectedEvent(restoredEvent);
+          } else {
+            console.log('[RaceContext] Saved event ID not found in current list – clearing');
+            localStorage.removeItem('selectedEventId');
+          }
+        }
       } catch (err) {
         console.error('[RaceContext] Failed to load events:', err);
         setError(err.message || 'Failed to load events.');
@@ -41,6 +54,17 @@ export function RaceProvider({ children }) {
     };
     loadEvents();
   }, []);
+
+  // === NEW: Persist selectedEvent to localStorage whenever it changes ===
+  useEffect(() => {
+    if (selectedEvent) {
+      localStorage.setItem('selectedEventId', selectedEvent.id);
+      console.log('[RaceContext] Saved selectedEventId to localStorage:', selectedEvent.id);
+    } else {
+      localStorage.removeItem('selectedEventId');
+      console.log('[RaceContext] Cleared selectedEventId from localStorage');
+    }
+  }, [selectedEvent]);
 
   // Load races when event changes
   useEffect(() => {
@@ -105,7 +129,6 @@ export function RaceProvider({ children }) {
 
           if (error) {
             console.error('[Supabase] Pagination error on page', page, ':', error);
-            // If any page errors (e.g., 404), treat as no/full cache and fallback
             allCachedResults = [];
             break;
           }
@@ -115,7 +138,6 @@ export function RaceProvider({ children }) {
           console.log(`[Supabase] Fetched page ${page}: ${fetched.length} rows (total so far: ${allCachedResults.length})`);
 
           if (fetched.length < pageSize) {
-            // Last page (partial or empty) – stop looping
             break;
           }
 
