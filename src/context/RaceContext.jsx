@@ -1,7 +1,8 @@
-// src/context/RaceContext.jsx (FIXED: Proper persistence - only clear on explicit deselection)
+// src/context/RaceContext.jsx (FINAL: Smart live updates on race day)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
+import crypto from 'crypto'; // For hashing (browser built-in)
 
 export const RaceContext = createContext();
 
@@ -20,8 +21,33 @@ export function RaceProvider({ children }) {
   const [globalFilter, setGlobalFilter] = useState('');
   const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
   const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
+  const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Load events + restore selected event from storage
+  // Simple deep hash for comparison
+  const hashResults = (resultsArray) => {
+    const str = JSON.stringify(
+      resultsArray.map(r => ({
+        bib: r.bib,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        chip_time: r.chip_time,
+        place: r.place,
+        gender_place: r.gender_place,
+        age_group_place: r.age_group_place,
+        // Add more fields if needed
+      })).sort((a, b) => a.place - b.place) // Normalize order
+    );
+    // Browser crypto subtle (async) — fallback to simple hash
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return hash.toString();
+  };
+
+  // Load events
   useEffect(() => {
     const loadEvents = async () => {
       console.log('[RaceContext] Starting to fetch events...');
@@ -32,16 +58,14 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
         setEvents(fetchedEvents);
 
-        // Restore only after events are loaded
+        // Restore selected event
         const savedEventId = localStorage.getItem('selectedEventId');
-        if (savedEventId && fetchedEvents.length > 0) {
-          const restoredEvent = fetchedEvents.find(e => e.id === savedEventId);
-          if (restoredEvent) {
-            console.log('[RaceContext] Restoring selected event from localStorage:', restoredEvent);
-            setSelectedEvent(restoredEvent);
-            return; // Success – no need to clear anything
+        if (savedEventId) {
+          const restored = fetchedEvents.find(e => e.id === savedEventId);
+          if (restored) {
+            console.log('[RaceContext] Restoring selected event:', restored);
+            setSelectedEvent(restored);
           } else {
-            console.log('[RaceContext] Saved event ID not found in current events – clearing stale storage');
             localStorage.removeItem('selectedEventId');
           }
         }
@@ -50,111 +74,103 @@ export function RaceProvider({ children }) {
         setError(err.message || 'Failed to load events.');
       } finally {
         setLoading(false);
-        console.log('[RaceContext] Events loading complete. loading:', false);
       }
     };
     loadEvents();
   }, []);
 
-  // Save to localStorage ONLY when selectedEvent changes to a valid event
-  // Do NOT clear on initial null — that's normal on first load
+  // Persist selectedEvent
   useEffect(() => {
     if (selectedEvent) {
       localStorage.setItem('selectedEventId', selectedEvent.id);
-      console.log('[RaceContext] Saved selectedEventId to localStorage:', selectedEvent.id);
+    } else {
+      localStorage.removeItem('selectedEventId');
     }
-    // Intentionally NO else clause to clear on null
-    // We only want to clear when user explicitly goes back to the list (via setSelectedEvent(null))
   }, [selectedEvent]);
 
-  // Optional: Add a way to explicitly clear (e.g., from ResultsPage when showing the list)
-  // You can expose a reset function if needed, but for now it's fine
-
-  // Load races when event changes
+  // Load races
   useEffect(() => {
     if (!selectedEvent) {
-      console.log('[RaceContext] No selected event - clearing races');
       setRaces([]);
       setSelectedRace(null);
       return;
     }
-    console.log('[RaceContext] Selected event changed:', selectedEvent);
+
     const loadRaces = async () => {
-      console.log(`[RaceContext] Fetching races for event ID: ${selectedEvent.id}`);
       try {
         const fetchedRaces = await fetchRacesForEvent(selectedEvent.id);
-        console.log(`[RaceContext] Races fetched for event ${selectedEvent.id}:`, fetchedRaces);
         setRaces(fetchedRaces);
         if (fetchedRaces.length > 0) {
-          console.log('[RaceContext] Auto-selecting first race:', fetchedRaces[0]);
           setSelectedRace(fetchedRaces[0]);
         }
       } catch (err) {
-        console.error(`[RaceContext] Failed to load races for event ${selectedEvent.id}:`, err);
+        console.error('Failed to load races:', err);
         setRaces([]);
       }
     };
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results when event changes (safe pagination - unchanged)
+  // Load results + live polling on race day
   useEffect(() => {
     if (!selectedEvent) {
-      console.log('[RaceContext] No selected event - clearing results');
       setResults([]);
+      setIsLiveRace(false);
       return;
     }
-    console.log(`[RaceContext] Starting to fetch results for event ID: ${selectedEvent.id}`);
-    const loadResults = async () => {
+
+    let currentHash = '';
+    let interval;
+
+    const loadResults = async (forceFresh = false) => {
       try {
         setLoadingResults(true);
         setError(null);
-        console.log(`[RaceContext] Checking Supabase cache for event ${selectedEvent.id}`);
+
         let allResults = [];
 
-        let allCachedResults = [];
+        // 1. Try Supabase cache first
+        let allCached = [];
         let page = 0;
         const pageSize = 1000;
-        let fetched = [];
-
         while (true) {
-          const from = page * pageSize;
-          const to = from + pageSize - 1;
-
           const { data, error } = await supabase
             .from('chronotrack_results')
             .select('*')
             .eq('event_id', selectedEvent.id.toString())
             .order('place', { ascending: true })
-            .range(from, to);
+            .range(page * pageSize, (page + 1) * pageSize - 1);
 
-          if (error) {
-            console.error('[Supabase] Pagination error on page', page, ':', error);
-            allCachedResults = [];
-            break;
-          }
-
-          fetched = data || [];
-          allCachedResults = [...allCachedResults, ...fetched];
-          console.log(`[Supabase] Fetched page ${page}: ${fetched.length} rows (total: ${allCachedResults.length})`);
-
-          if (fetched.length < pageSize) {
-            break;
-          }
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+          allCached = [...allCached, ...data];
+          if (data.length < pageSize) break;
           page++;
         }
 
-        if (allCachedResults.length > 0) {
-          console.log(`[Supabase] Loaded ${allCachedResults.length} results from cache`);
-          allResults = allCachedResults;
-        } else {
-          console.log('[RaceContext] No cached results – fetching from ChronoTrack API');
-          allResults = await fetchResultsForEvent(selectedEvent.id);
-          console.log(`[RaceContext] Fresh results fetched. Count: ${allResults.length}`);
+        if (allCached.length > 0) {
+          allResults = allCached;
+          console.log(`[Supabase] Loaded ${allCached.length} results from cache`);
+        }
 
-          if (allResults.length > 0) {
-            console.log('[Supabase] Caching fresh results...');
-            const toInsert = allResults.map(r => ({
+        // Determine if today is race day
+        const todayStr = new Date().toISOString().split('T')[0];
+        const isRaceDay = selectedEvent.date === todayStr;
+        setIsLiveRace(isRaceDay);
+
+        // On race day or forced, fetch fresh from ChronoTrack
+        if (isRaceDay || forceFresh) {
+          console.log('[RaceContext] Race day detected — fetching fresh results');
+          const fresh = await fetchResultsForEvent(selectedEvent.id);
+          console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
+
+          const freshHash = hashResults(fresh);
+          if (freshHash !== currentHash && fresh.length > 0) {
+            console.log('[RaceContext] New/changed results detected — updating');
+            currentHash = freshHash;
+
+            // Upsert only new/changed into Supabase
+            const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
               bib: r.bib || null,
@@ -174,14 +190,17 @@ export function RaceProvider({ children }) {
             }));
 
             const chunkSize = 500;
-            for (let i = 0; i < toInsert.length; i += chunkSize) {
-              const chunk = toInsert.slice(i, i + chunkSize);
+            for (let i = 0; i < toUpsert.length; i += chunkSize) {
+              const chunk = toUpsert.slice(i, i + chunkSize);
               const { error } = await supabase
                 .from('chronotrack_results')
-                .upsert(chunk, { ignoreDuplicates: true });
+                .upsert(chunk, { onConflict: 'event_id,bib,place' }); // Adjust conflict keys if needed
               if (error) console.error('[Supabase] Upsert error:', error);
             }
-            console.log(`[Supabase] Cached ${toInsert.length} results`);
+
+            allResults = fresh;
+          } else {
+            console.log('[RaceContext] No changes — keeping cache');
           }
         }
 
@@ -189,18 +208,30 @@ export function RaceProvider({ children }) {
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         setUniqueDivisions(divisions);
       } catch (err) {
-        console.error(`[RaceContext] Failed to load results:`, err);
+        console.error('[RaceContext] Results load error:', err);
         setError('Failed to load results.');
-        setResults([]);
       } finally {
         setLoadingResults(false);
       }
     };
-    loadResults();
+
+    loadResults(); // Initial load
+
+    // Poll every 2 minutes on race day
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (selectedEvent.date === todayStr) {
+      interval = setInterval(() => loadResults(true), 120000); // 2 minutes
+      console.log('[RaceContext] Live polling started (every 2 min)');
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [selectedEvent]);
 
+  // Debug
   useEffect(() => {
-    console.log('[RaceContext] Results state updated. Length:', results.length);
+    console.log('[RaceContext] Results updated. Count:', results.length);
   }, [results]);
 
   return (
@@ -223,6 +254,7 @@ export function RaceProvider({ children }) {
       setGlobalFilter,
       eventLogos,
       ads,
+      isLiveRace, // Expose for UI badge
     }}>
       {children}
     </RaceContext.Provider>
