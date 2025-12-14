@@ -177,7 +177,7 @@ export default function ResultsPage() {
         </div>
 
         {/* Extra space on mobile to avoid dropdown overlap */}
-        <div className="mt-24 md:mt-0" />
+        <div className="h-64 md:h-0" />
 
         {loadingResults ? (
           <div className="text-center py-24">
