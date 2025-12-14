@@ -1,8 +1,15 @@
-// vite.config.js ← MUST BE EXACTLY THIS
+// vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+
 export default defineConfig({
   plugins: [react()],
+
+  // This makes all asset paths relative (./assets/...) instead of absolute (/)
+  This is REQUIRED for Vercel/Netlify SPAs when using client-side routing
+  Without it → refresh on /results → MIME type error + blank page
+  base: './',
+
   server: {
     proxy: {
       '/runsignup-api': {
