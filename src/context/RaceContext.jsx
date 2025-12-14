@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL: Always fetch fresh if cache empty + live polling on race day)
+// src/context/RaceContext.jsx (FINAL — Live updates, safe cache, integer parsing, country/splits support)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -14,15 +14,12 @@ export function RaceProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [error, setError] = useState(null);
-  const [filterGender, setFilterGender] = useState('');
-  const [filterDivision, setFilterDivision] = useState('');
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
-  const [globalFilter, setGlobalFilter] = useState('');
   const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
   const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Simple deep hash for comparison
+  // Simple hash for detecting changes
   const hashResults = (resultsArray) => {
     const str = JSON.stringify(
       resultsArray.map(r => ({
@@ -33,7 +30,7 @@ export function RaceProvider({ children }) {
         place: r.place,
         gender_place: r.gender_place,
         age_group_place: r.age_group_place,
-      })).sort((a, b) => a.place - b.place)
+      })).sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
     );
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -44,7 +41,7 @@ export function RaceProvider({ children }) {
     return hash.toString();
   };
 
-  // Load events
+  // Load events on mount
   useEffect(() => {
     const loadEvents = async () => {
       console.log('[RaceContext] Starting to fetch events...');
@@ -55,7 +52,7 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
         setEvents(fetchedEvents);
 
-        // Restore selected event
+        // Restore last selected event
         const savedEventId = localStorage.getItem('selectedEventId');
         if (savedEventId) {
           const restored = fetchedEvents.find(e => e.id === savedEventId);
@@ -85,7 +82,7 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load races
+  // Load races when event changes
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
@@ -108,7 +105,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + live polling
+  // Load results + live polling on race day
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -126,7 +123,7 @@ export function RaceProvider({ children }) {
 
         let allResults = [];
 
-        // 1. Try Supabase cache first
+        // 1. Try Supabase cache
         let allCached = [];
         let page = 0;
         const pageSize = 1000;
@@ -138,7 +135,10 @@ export function RaceProvider({ children }) {
             .order('place', { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
 
-          if (error) throw error;
+          if (error) {
+            console.error('[Supabase] Cache read error:', error);
+            break;
+          }
           if (!data || data.length === 0) break;
           allCached = [...allCached, ...data];
           if (data.length < pageSize) break;
@@ -150,23 +150,23 @@ export function RaceProvider({ children }) {
           console.log(`[Supabase] Loaded ${allCached.length} results from cache`);
         }
 
-        // Determine if today is race day
+        // Is today race day?
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
         setIsLiveRace(isRaceDay);
 
-        // ALWAYS fetch fresh if cache is empty, or on race day / forceFresh
+        // Fetch fresh if cache empty OR race day OR forced
         if (allCached.length === 0 || isRaceDay || forceFresh) {
-          console.log('[RaceContext] Cache empty or race day — fetching fresh from ChronoTrack');
+          console.log('[RaceContext] Fetching fresh results from ChronoTrack');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
 
           const freshHash = hashResults(fresh);
           if (freshHash !== currentHash && fresh.length > 0) {
-            console.log('[RaceContext] New/changed results — updating cache and state');
+            console.log('[RaceContext] Results changed — updating cache and state');
             currentHash = freshHash;
 
-            // Map and upsert fresh data
+            // Upsert fresh data
             const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -177,7 +177,7 @@ export function RaceProvider({ children }) {
               age: r.age ? parseInt(r.age, 10) : null,
               city: r.city || null,
               state: r.state || null,
-              country: r.country || null, // if added
+              country: r.country || null,
               chip_time: r.chip_time || null,
               clock_time: r.clock_time || null,
               place: r.place ? parseInt(r.place, 10) : null,
@@ -185,7 +185,7 @@ export function RaceProvider({ children }) {
               age_group_name: r.age_group_name || null,
               age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
               pace: r.pace || null,
-              splits: r.splits || [], // if added
+              splits: r.splits || [],
             }));
 
             const chunkSize = 500;
@@ -198,8 +198,6 @@ export function RaceProvider({ children }) {
             }
 
             allResults = fresh;
-          } else if (allCached.length === 0 && fresh.length === 0) {
-            console.log('[RaceContext] No results from ChronoTrack either');
           }
         }
 
@@ -214,7 +212,7 @@ export function RaceProvider({ children }) {
       }
     };
 
-    loadResults(); // Initial load
+    loadResults();
 
     // Poll every 2 minutes on race day
     const todayStr = new Date().toISOString().split('T')[0];
@@ -223,12 +221,9 @@ export function RaceProvider({ children }) {
       console.log('[RaceContext] Live polling started (every 2 min)');
     }
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [selectedEvent]);
 
-  // Debug
   useEffect(() => {
     console.log('[RaceContext] Results updated. Count:', results.length);
   }, [results]);
@@ -244,13 +239,7 @@ export function RaceProvider({ children }) {
       loading,
       loadingResults,
       error,
-      filterGender,
-      setFilterGender,
-      filterDivision,
-      setFilterDivision,
       uniqueDivisions,
-      globalFilter,
-      setGlobalFilter,
       eventLogos,
       ads,
       isLiveRace,
