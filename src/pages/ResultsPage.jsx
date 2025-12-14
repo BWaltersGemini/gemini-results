@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL: Mobile spacing fix + all previous optimizations)
+// src/pages/ResultsPage.jsx (FINAL: Mobile-optimized with cards, desktop full table intact)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -14,6 +14,7 @@ export default function ResultsPage() {
     loadingResults,
     error,
     uniqueDivisions = [],
+    eventLogos = {},
     ads,
     setSelectedEvent,
   } = useContext(RaceContext);
@@ -110,7 +111,7 @@ export default function ResultsPage() {
     );
   }
 
-  // FULL RESULTS VIEW
+  // FULL RESULTS VIEW — Safety guard
   if (!selectedEvent || !selectedEvent.date) {
     return (
       <div className="text-center py-24">
@@ -155,7 +156,7 @@ export default function ResultsPage() {
 
   const handleNameClick = (participant) => {
     navigate('/participant', {
-      state: { participant, selectedEvent, results: uniqueResults, ads },
+      state: { participant, selectedEvent, results: uniqueResults, eventLogos, ads },
     });
   };
 
@@ -168,7 +169,7 @@ export default function ResultsPage() {
           </p>
         )}
 
-        {/* Event Header — No logo */}
+        {/* Event Header — No logo on mobile or desktop (per your request) */}
         <div className="text-center mb-12">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
             {selectedEvent.name}
@@ -176,9 +177,10 @@ export default function ResultsPage() {
           <p className="text-xl sm:text-2xl text-gray-600 mt-4">{formattedDate}</p>
         </div>
 
-        {/* Extra space on mobile to avoid dropdown overlap */}
+        {/* Extra space on mobile to clear open search dropdown */}
         <div className="h-64 md:h-0" />
 
+        {/* Loading / Upcoming / Empty */}
         {loadingResults ? (
           <div className="text-center py-24">
             <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
@@ -293,7 +295,7 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  {/* Results Table — Mobile card layout */}
+                  {/* Results Table — Mobile cards, Desktop full table */}
                   <div className="w-full">
                     <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
                   </div>
