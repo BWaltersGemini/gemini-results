@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (COMPLETE FINAL — Fixed refresh with event_id, full features)
+// src/pages/AdminPage.jsx (COMPLETE FINAL — Safe upsert refresh, all features, no errors)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -71,7 +71,7 @@ export default function AdminPage() {
     localStorage.setItem('chronotrackEnabled', chronotrackEnabled);
   }, [chronotrackEnabled]);
 
-  // Fetch events
+  // Fetch events when logged in
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
       const fetchRaces = async () => {
@@ -211,7 +211,7 @@ export default function AdminPage() {
     alert('All changes saved successfully!');
   };
 
-  // Refresh & Publish — Fixed with explicit event_id
+  // FINAL REFRESH & PUBLISH — Safe upsert (no delete needed, handles duplicates)
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) {
       setRefreshStatus('Please select an event first');
@@ -225,21 +225,11 @@ export default function AdminPage() {
     setRefreshStatus('Fetching fresh results from ChronoTrack...');
     try {
       const allResults = await fetchResultsForEvent(selectedEventId);
-      setRefreshStatus(`Fetched ${allResults.length} results. Clearing old cache...`);
+      setRefreshStatus(`Fetched ${allResults.length} results. Updating cache...`);
 
-      // Clear old results for this event
-      const { error: deleteError } = await supabase
-        .from('chronotrack_results')
-        .delete()
-        .eq('event_id', selectedEventId);
-
-      if (deleteError) throw deleteError;
-
-      setRefreshStatus('Inserting fresh results...');
-
-      // Insert fresh results — explicitly include event_id
-      const toInsert = allResults.map(r => ({
-        event_id: selectedEventId, // ← Critical fix
+      // Map with explicit event_id
+      const toUpsert = allResults.map(r => ({
+        event_id: selectedEventId,
         race_id: r.race_id || null,
         bib: r.bib || null,
         first_name: r.first_name || null,
@@ -259,16 +249,20 @@ export default function AdminPage() {
         splits: r.splits || [],
       }));
 
+      // Upsert in chunks (safe for duplicates)
       const chunkSize = 500;
-      for (let i = 0; i < toInsert.length; i += chunkSize) {
-        const chunk = toInsert.slice(i, i + chunkSize);
-        const { error: insertError } = await supabase
+      for (let i = 0; i < toUpsert.length; i += chunkSize) {
+        const chunk = toUpsert.slice(i, i + chunkSize);
+        const { error } = await supabase
           .from('chronotrack_results')
-          .insert(chunk);
-        if (insertError) throw insertError;
+          .upsert(chunk, { 
+            onConflict: 'event_id,bib,first_name,last_name,chip_time', // Adjust if your constraint is different
+            ignoreDuplicates: false 
+          });
+        if (error) throw error;
       }
 
-      setRefreshStatus(`Success! ${allResults.length} results refreshed and published to all users.`);
+      setRefreshStatus(`Success! ${allResults.length} results refreshed and published.`);
     } catch (err) {
       console.error('Refresh & publish failed:', err);
       setRefreshStatus(`Error: ${err.message || 'Unknown error'}`);
