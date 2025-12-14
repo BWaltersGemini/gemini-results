@@ -1,4 +1,4 @@
-// src/components/ResultsTable.jsx (FINAL: Centered on desktop, mobile cards, no horizontal scroll)
+// src/components/ResultsTable.jsx (FINAL — Mobile cards, Desktop centered full table with country)
 import {
   useReactTable,
   getCoreRowModel,
@@ -6,7 +6,9 @@ import {
   flexRender,
 } from '@tanstack/react-table';
 
-export default function ResultsTable({ data, onNameClick, isMobile = false }) {
+export default function ResultsTable({ data = [], onNameClick, isMobile = false }) {
+  const safeData = Array.isArray(data) ? data : [];
+
   const desktopColumns = [
     {
       accessorFn: row => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
@@ -21,20 +23,21 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
         </span>
       ),
     },
-    { accessorKey: 'bib', header: 'Bib' },
-    { accessorKey: 'chip_time', header: 'Chip Time' },
-    { accessorKey: 'clock_time', header: 'Gun Time' },
-    { accessorKey: 'place', header: 'Overall' },
-    { accessorKey: 'gender_place', header: 'Gen Place' },
-    { accessorKey: 'age_group_name', header: 'Division' },
-    { accessorKey: 'age_group_place', header: 'Div Place' },
-    { accessorKey: 'pace', header: 'Pace' },
-    { accessorKey: 'age', header: 'Age' },
-    { accessorKey: 'gender', header: 'Gender' },
+    { accessorKey: 'bib', header: 'Bib', cell: info => info.getValue() || '—' },
+    { accessorKey: 'chip_time', header: 'Chip Time', cell: info => info.getValue() || '—' },
+    { accessorKey: 'clock_time', header: 'Gun Time', cell: info => info.getValue() || '—' },
+    { accessorKey: 'place', header: 'Overall', cell: info => info.getValue() || '—' },
+    { accessorKey: 'gender_place', header: 'Gen Place', cell: info => info.getValue() || '—' },
+    { accessorKey: 'age_group_name', header: 'Division', cell: info => info.getValue() || '—' },
+    { accessorKey: 'age_group_place', header: 'Div Place', cell: info => info.getValue() || '—' },
+    { accessorKey: 'pace', header: 'Pace', cell: info => info.getValue() || '—' },
+    { accessorKey: 'age', header: 'Age', cell: info => info.getValue() || '—' },
+    { accessorKey: 'gender', header: 'Gender', cell: info => info.getValue() || '—' },
+    { accessorKey: 'country', header: 'Country', cell: info => info.getValue() || '—' }, // NEW
   ];
 
   const table = useReactTable({
-    data,
+    data: safeData,
     columns: desktopColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -42,7 +45,7 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
 
   // Mobile: Vertical cards
   if (isMobile) {
-    if (data.length === 0) {
+    if (safeData.length === 0) {
       return (
         <div className="text-center py-12 text-gray-500 text-lg">
           No participants match current filters.
@@ -52,7 +55,7 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
 
     return (
       <div className="space-y-4">
-        {data.map((row, index) => (
+        {safeData.map((row, index) => (
           <div
             key={row.id || index}
             className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition"

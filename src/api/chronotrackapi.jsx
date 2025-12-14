@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Includes country + splits, robust parsing)
+// src/api/chronotrackapi.jsx (FINAL — Full fields, integer parsing, country & splits)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -101,7 +101,7 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
   return allResults.map(r => {
-    // Extract splits — common keys: splits, interval_results, or nested under results
+    // Extract splits — try multiple possible keys
     const rawSplits = r.splits || r.interval_results || r.results_splits || [];
     const splits = Array.isArray(rawSplits)
       ? rawSplits.map(split => ({
@@ -130,8 +130,8 @@ export const fetchResultsForEvent = async (eventId) => {
       race_name: r.results_race_name || '',
       city: r.results_city || '',
       state: r.results_state || '',
-      country: r.results_country || r.country || '', // Added country
-      splits, // Added intermediate splits
+      country: r.results_country || r.country || '',
+      splits,
     };
   });
 };
