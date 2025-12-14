@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL: Mobile-optimized with cards, desktop full table intact)
+// src/pages/ResultsPage.jsx (FINAL — Desktop full table intact, Mobile card layout, no overlap)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -169,7 +169,7 @@ export default function ResultsPage() {
           </p>
         )}
 
-        {/* Event Header — No logo on mobile or desktop (per your request) */}
+        {/* Event Header */}
         <div className="text-center mb-12">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
             {selectedEvent.name}
@@ -177,10 +177,9 @@ export default function ResultsPage() {
           <p className="text-xl sm:text-2xl text-gray-600 mt-4">{formattedDate}</p>
         </div>
 
-        {/* Extra space on mobile to clear open search dropdown */}
+        {/* Extra space on mobile only to clear open search dropdown */}
         <div className="h-64 md:h-0" />
 
-        {/* Loading / Upcoming / Empty */}
         {loadingResults ? (
           <div className="text-center py-24">
             <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
@@ -297,7 +296,15 @@ export default function ResultsPage() {
 
                   {/* Results Table — Mobile cards, Desktop full table */}
                   <div className="w-full">
-                    <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
+                    {/* Use Tailwind's responsive classes to hide/show based on screen size */}
+                    {/* Mobile: Cards */}
+                    <div className="md:hidden">
+                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
+                    </div>
+                    {/* Desktop: Full table */}
+                    <div className="hidden md:block">
+                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={false} />
+                    </div>
                   </div>
 
                   {/* Pagination */}
