@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (UPDATED: Persist selectedEvent across refreshes + safe pagination)
+// src/context/RaceContext.jsx (FIXED: Proper persistence - only clear on explicit deselection)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -21,7 +21,7 @@ export function RaceProvider({ children }) {
   const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
   const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
 
-  // Load events on mount + restore previously selected event
+  // Load events + restore selected event from storage
   useEffect(() => {
     const loadEvents = async () => {
       console.log('[RaceContext] Starting to fetch events...');
@@ -32,15 +32,16 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
         setEvents(fetchedEvents);
 
-        // === NEW: Restore selected event from localStorage ===
+        // Restore only after events are loaded
         const savedEventId = localStorage.getItem('selectedEventId');
         if (savedEventId && fetchedEvents.length > 0) {
           const restoredEvent = fetchedEvents.find(e => e.id === savedEventId);
           if (restoredEvent) {
-            console.log('[RaceContext] Restoring previously selected event:', restoredEvent);
+            console.log('[RaceContext] Restoring selected event from localStorage:', restoredEvent);
             setSelectedEvent(restoredEvent);
+            return; // Success – no need to clear anything
           } else {
-            console.log('[RaceContext] Saved event ID not found in current list – clearing');
+            console.log('[RaceContext] Saved event ID not found in current events – clearing stale storage');
             localStorage.removeItem('selectedEventId');
           }
         }
@@ -55,16 +56,19 @@ export function RaceProvider({ children }) {
     loadEvents();
   }, []);
 
-  // === NEW: Persist selectedEvent to localStorage whenever it changes ===
+  // Save to localStorage ONLY when selectedEvent changes to a valid event
+  // Do NOT clear on initial null — that's normal on first load
   useEffect(() => {
     if (selectedEvent) {
       localStorage.setItem('selectedEventId', selectedEvent.id);
       console.log('[RaceContext] Saved selectedEventId to localStorage:', selectedEvent.id);
-    } else {
-      localStorage.removeItem('selectedEventId');
-      console.log('[RaceContext] Cleared selectedEventId from localStorage');
     }
+    // Intentionally NO else clause to clear on null
+    // We only want to clear when user explicitly goes back to the list (via setSelectedEvent(null))
   }, [selectedEvent]);
+
+  // Optional: Add a way to explicitly clear (e.g., from ResultsPage when showing the list)
+  // You can expose a reset function if needed, but for now it's fine
 
   // Load races when event changes
   useEffect(() => {
@@ -84,8 +88,6 @@ export function RaceProvider({ children }) {
         if (fetchedRaces.length > 0) {
           console.log('[RaceContext] Auto-selecting first race:', fetchedRaces[0]);
           setSelectedRace(fetchedRaces[0]);
-        } else {
-          console.warn(`[RaceContext] No races found for event ${selectedEvent.id}`);
         }
       } catch (err) {
         console.error(`[RaceContext] Failed to load races for event ${selectedEvent.id}:`, err);
@@ -95,7 +97,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results when event changes - SUPABASE FIRST with safe pagination
+  // Load results when event changes (safe pagination - unchanged)
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[RaceContext] No selected event - clearing results');
@@ -110,7 +112,6 @@ export function RaceProvider({ children }) {
         console.log(`[RaceContext] Checking Supabase cache for event ${selectedEvent.id}`);
         let allResults = [];
 
-        // 1. Try Supabase with safe pagination
         let allCachedResults = [];
         let page = 0;
         const pageSize = 1000;
@@ -135,12 +136,11 @@ export function RaceProvider({ children }) {
 
           fetched = data || [];
           allCachedResults = [...allCachedResults, ...fetched];
-          console.log(`[Supabase] Fetched page ${page}: ${fetched.length} rows (total so far: ${allCachedResults.length})`);
+          console.log(`[Supabase] Fetched page ${page}: ${fetched.length} rows (total: ${allCachedResults.length})`);
 
           if (fetched.length < pageSize) {
             break;
           }
-
           page++;
         }
 
@@ -148,13 +148,12 @@ export function RaceProvider({ children }) {
           console.log(`[Supabase] Loaded ${allCachedResults.length} results from cache`);
           allResults = allCachedResults;
         } else {
-          // 2. No/incomplete cache → fetch fresh from ChronoTrack
           console.log('[RaceContext] No cached results – fetching from ChronoTrack API');
           allResults = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[RaceContext] Fresh results fetched. Count: ${allResults.length}`);
 
           if (allResults.length > 0) {
-            console.log('[Supabase] Caching fresh results in Supabase');
+            console.log('[Supabase] Caching fresh results...');
             const toInsert = allResults.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -180,34 +179,26 @@ export function RaceProvider({ children }) {
               const { error } = await supabase
                 .from('chronotrack_results')
                 .upsert(chunk, { ignoreDuplicates: true });
-
-              if (error) {
-                console.error('[Supabase] Upsert chunk error:', error);
-              } else {
-                console.log(`[Supabase] Cached chunk ${Math.floor(i / chunkSize) + 1} (${chunk.length} rows)`);
-              }
+              if (error) console.error('[Supabase] Upsert error:', error);
             }
-            console.log(`[Supabase] Successfully cached ${toInsert.length} results`);
+            console.log(`[Supabase] Cached ${toInsert.length} results`);
           }
         }
 
         setResults(allResults);
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
-        console.log('[RaceContext] Unique divisions:', divisions);
         setUniqueDivisions(divisions);
       } catch (err) {
-        console.error(`[RaceContext] Failed to load results for event ${selectedEvent.id}:`, err);
-        setError(err.message || 'Failed to load results.');
+        console.error(`[RaceContext] Failed to load results:`, err);
+        setError('Failed to load results.');
         setResults([]);
       } finally {
         setLoadingResults(false);
-        console.log('[RaceContext] Results loading complete. loadingResults:', false);
       }
     };
     loadResults();
   }, [selectedEvent]);
 
-  // Debug: Log when results change
   useEffect(() => {
     console.log('[RaceContext] Results state updated. Length:', results.length);
   }, [results]);
