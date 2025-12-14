@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (FIXED: Mobile dropdown shows full race name + date properly)
+// src/components/Navbar.jsx (FIXED: Selected event row visible on all backgrounds)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -69,13 +69,13 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 w-full bg-white shadow-md z-50">
-      {/* Top Bar: Logo + Hamburger */}
+      {/* Top Bar */}
       <div className="px-4 py-3 flex items-center justify-between">
         <Link to="/" onClick={closeAll}>
           <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
         </Link>
 
-        {/* Desktop Navigation Links */}
+        {/* Desktop Navigation */}
         <div className="hidden md:flex items-center space-x-8">
           <Link
             to="/results"
@@ -102,7 +102,7 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Hamburger Button (Mobile only) */}
+        {/* Mobile Hamburger */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="md:hidden text-3xl text-gray-700 focus:outline-none"
@@ -112,7 +112,7 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Search Bar - Always visible */}
+      {/* Search Bar */}
       <div className="bg-white py-3 border-t border-gray-200">
         <div className="px-4 relative">
           <input
@@ -136,7 +136,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Event Dropdown List - FIXED for mobile */}
+      {/* Event Dropdown List - Now with visible selected state */}
       {isListOpen && (
         <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
           {loading ? (
@@ -153,11 +153,13 @@ export default function Navbar() {
               <div
                 key={event.id}
                 onClick={() => handleEventSelect(event)}
-                className={`p-4 hover:bg-gemini-light-gray cursor-pointer border-b border-gray-100 last:border-0 transition ${
-                  selectedEvent?.id === event.id ? 'bg-gemini-light-gray font-semibold' : ''
-                }`}
+                className={`p-4 cursor-pointer border-b border-gray-100 last:border-0 transition
+                  hover:bg-gemini-light-gray
+                  ${selectedEvent?.id === event.id 
+                    ? 'bg-gemini-blue/10 font-bold text-gemini-blue border-l-4 border-gemini-blue' 
+                    : ''
+                  }`}
               >
-                {/* Mobile: Stacked layout | Desktop: Side-by-side */}
                 <div className="flex flex-col md:flex-row md:justify-between md:items-center">
                   <span className="font-medium text-base md:text-lg truncate">
                     {event.name}
@@ -172,7 +174,7 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* Mobile Menu Overlay (unchanged) */}
+      {/* Mobile Menu (unchanged) */}
       {isMobileMenuOpen && (
         <>
           <div
