@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (MOBILE-OPTIMIZED: Simplified table, no leaderboard/logo on mobile)
+// src/pages/ResultsPage.jsx (FINAL MOBILE-OPTIMIZED: Simplified table, no leaderboard/logo on mobile, safe guards)
 import { useContext, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -14,6 +14,7 @@ export default function ResultsPage() {
     loadingResults,
     error,
     uniqueDivisions = [],
+    eventLogos = {},
     ads,
     setSelectedEvent,
   } = useContext(RaceContext);
@@ -24,6 +25,7 @@ export default function ResultsPage() {
   const raceRefs = useRef({});
 
   const formatDate = (dateStr) => {
+    if (!dateStr) return 'Date TBD';
     const [year, month, day] = dateStr.split('-');
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', {
@@ -33,16 +35,96 @@ export default function ResultsPage() {
     });
   };
 
-  // ——— NO EVENT SELECTED → Recent Races Landing (unchanged) ———
+  // ——— NO EVENT SELECTED → Recent Races Landing ———
   if (!selectedEvent) {
-    // ... (keep your existing recent races landing code unchanged)
-    // Omitted for brevity — use the previous version
+    const recentEvents = [...events]
+      .filter(e => e.date && new Date(e.date) <= new Date())
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 6);
+
+    const goToRaceResults = (event) => setSelectedEvent(event);
+
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gemini-light-gray to-white pt-32 pb-20 px-4">
+        <div className="w-full max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-gemini-dark-gray leading-tight">
+              Race Results
+            </h1>
+            <p className="mt-6 text-lg sm:text-xl md:text-2xl text-gray-700 max-w-3xl mx-auto">
+              Select a race below to view live results, leaderboards, and participant details
+            </p>
+          </div>
+
+          {recentEvents.length > 0 ? (
+            <>
+              <h2 className="text-3xl sm:text-4xl font-bold text-center text-gemini-dark-gray mb-12">
+                Recent Races
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                {recentEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    onClick={() => goToRaceResults(event)}
+                    className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  >
+                    <div className="h-48 bg-gray-50 p-6 flex items-center justify-center">
+                      {eventLogos[event.id] ? (
+                        <img
+                          src={eventLogos[event.id]}
+                          alt={`${event.name} Logo`}
+                          className="max-h-36 max-w-full object-contain"
+                          loading="eager"
+                        />
+                      ) : (
+                        <div className="text-6xl opacity-30 group-hover:opacity-50">🏁</div>
+                      )}
+                    </div>
+                    <div className="p-8 text-center">
+                      <h3 className="text-xl sm:text-2xl font-bold text-gemini-dark-gray mb-3 group-hover:text-gemini-blue transition">
+                        {event.name}
+                      </h3>
+                      <p className="text-base sm:text-lg text-gray-600 mb-6">
+                        {formatDate(event.date)}
+                      </p>
+                      <span className="inline-block bg-gemini-blue text-white px-6 py-3 rounded-full font-semibold text-sm sm:text-base hover:bg-gemini-blue/90 transition">
+                        View Results →
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-20">
+              <p className="text-2xl text-gray-600 mb-4">No recent races available</p>
+              <p className="text-lg text-gray-500">Check back soon for live results!</p>
+            </div>
+          )}
+
+          <div className="text-center mt-20">
+            <p className="text-lg text-gray-600 mb-6">Or use the search bar above to find any race</p>
+            <div className="text-6xl">🔍</div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ——— FULL RESULTS VIEW ———
+  // Safety guard — prevents crash if selectedEvent is temporarily null
+  if (!selectedEvent || !selectedEvent.date) {
+    return (
+      <div className="text-center py-24">
+        <p className="text-2xl text-gray-600">Loading race details...</p>
+      </div>
+    );
+  }
+
   const formattedDate = formatDate(selectedEvent.date);
   const isUpcoming = new Date(selectedEvent.date) > new Date();
 
+  // Deduplicate results
   const uniqueResults = results.reduce((acc, current) => {
     const key = [
       (current.bib || '').toString().trim(),
@@ -58,6 +140,7 @@ export default function ResultsPage() {
     return acc;
   }, { seen: new Set(), results: [] }).results;
 
+  // Group by race
   const grouped = {};
   uniqueResults.forEach(r => {
     const id = r.race_id || 'overall';
@@ -76,12 +159,9 @@ export default function ResultsPage() {
 
   const handleNameClick = (participant) => {
     navigate('/participant', {
-      state: { participant, selectedEvent, results: uniqueResults, ads },
+      state: { participant, selectedEvent, results: uniqueResults, eventLogos, ads },
     });
   };
-
-  // Mobile-specific columns (only on < md)
-  const isMobile = window.innerWidth < 768; // Simple client-side check (works since component mounts after hydration)
 
   return (
     <div className="min-h-screen bg-gemini-light-gray pt-32 pb-16">
@@ -92,7 +172,7 @@ export default function ResultsPage() {
           </p>
         )}
 
-        {/* Event Header — No logo, no shift */}
+        {/* Event Header — No logo, no layout shift */}
         <div className="text-center mb-12">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
             {selectedEvent.name}
@@ -100,7 +180,7 @@ export default function ResultsPage() {
           <p className="text-xl sm:text-2xl text-gray-600 mt-4">{formattedDate}</p>
         </div>
 
-        {/* Loading / Upcoming / Empty */}
+        {/* Loading / Upcoming / Empty States */}
         {loadingResults ? (
           <div className="text-center py-24">
             <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
@@ -165,7 +245,7 @@ export default function ResultsPage() {
                     {race.race_name}
                   </h3>
 
-                  {/* Filters — Always shown */}
+                  {/* Filters — Always visible */}
                   <div className="w-full bg-white rounded-2xl shadow-lg p-6 mb-10">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <input
@@ -215,14 +295,10 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  {/* Results Table — Mobile-optimized columns */}
+                  {/* Results Table — Mobile-optimized columns via prop */}
                   <div className="w-full">
                     <div className="overflow-x-auto rounded-2xl shadow-lg bg-white">
-                      <ResultsTable
-                        data={display}
-                        onNameClick={handleNameClick}
-                        isMobile={true} // We'll use this in ResultsTable to switch columns
-                      />
+                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
                     </div>
                     <p className="text-center text-sm text-gray-500 mt-3">
                       ← Scroll horizontally on mobile →
