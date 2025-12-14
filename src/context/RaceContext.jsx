@@ -1,8 +1,10 @@
-// src/context/RaceContext.jsx (FINAL: Smart caching - Supabase first, then ChronoTrack fallback + upsert storage)
+// src/context/RaceContext.jsx (FIXED: Safe pagination to avoid 404 on partial pages)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
+
 export const RaceContext = createContext();
+
 export function RaceProvider({ children }) {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -18,6 +20,7 @@ export function RaceProvider({ children }) {
   const [globalFilter, setGlobalFilter] = useState('');
   const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
   const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
+
   // Load all events on mount
   useEffect(() => {
     const loadEvents = async () => {
@@ -38,6 +41,7 @@ export function RaceProvider({ children }) {
     };
     loadEvents();
   }, []);
+
   // Load races when event changes
   useEffect(() => {
     if (!selectedEvent) {
@@ -66,7 +70,8 @@ export function RaceProvider({ children }) {
     };
     loadRaces();
   }, [selectedEvent]);
-  // Load results when event changes - SUPABASE FIRST, THEN CHRONOTRACK FALLBACK
+
+  // Load results when event changes - SUPABASE FIRST with safe pagination
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[RaceContext] No selected event - clearing results');
@@ -80,34 +85,52 @@ export function RaceProvider({ children }) {
         setError(null);
         console.log(`[RaceContext] Checking Supabase cache for event ${selectedEvent.id}`);
         let allResults = [];
-        // 1. Try Supabase first (fast & offline-friendly) with pagination
+
+        // 1. Try Supabase with safe pagination
         let allCachedResults = [];
         let page = 0;
         const pageSize = 1000;
-        let fetched;
-        do {
+        let fetched = [];
+
+        while (true) {
+          const from = page * pageSize;
+          const to = from + pageSize - 1;
+
           const { data, error } = await supabase
             .from('chronotrack_results')
             .select('*')
             .eq('event_id', selectedEvent.id.toString())
             .order('place', { ascending: true })
-            .range(page * pageSize, (page + 1) * pageSize - 1);
+            .range(from, to);
+
           if (error) {
-            console.error('[Supabase] Pagination error:', error);
-            throw error;
+            console.error('[Supabase] Pagination error on page', page, ':', error);
+            // If any page errors (e.g., 404), treat as no/full cache and fallback
+            allCachedResults = [];
+            break;
           }
+
           fetched = data || [];
           allCachedResults = [...allCachedResults, ...fetched];
+          console.log(`[Supabase] Fetched page ${page}: ${fetched.length} rows (total so far: ${allCachedResults.length})`);
+
+          if (fetched.length < pageSize) {
+            // Last page (partial or empty) – stop looping
+            break;
+          }
+
           page++;
-        } while (fetched.length === pageSize);
+        }
+
         if (allCachedResults.length > 0) {
           console.log(`[Supabase] Loaded ${allCachedResults.length} results from cache`);
           allResults = allCachedResults;
         } else {
-          // 2. No cache → fetch fresh from ChronoTrack
+          // 2. No/incomplete cache → fetch fresh from ChronoTrack
           console.log('[RaceContext] No cached results – fetching from ChronoTrack API');
           allResults = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[RaceContext] Fresh results fetched. Count: ${allResults.length}`);
+
           if (allResults.length > 0) {
             console.log('[Supabase] Caching fresh results in Supabase');
             const toInsert = allResults.map(r => ({
@@ -128,12 +151,14 @@ export function RaceProvider({ children }) {
               age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
               pace: r.pace || null,
             }));
+
             const chunkSize = 500;
             for (let i = 0; i < toInsert.length; i += chunkSize) {
               const chunk = toInsert.slice(i, i + chunkSize);
               const { error } = await supabase
                 .from('chronotrack_results')
                 .upsert(chunk, { ignoreDuplicates: true });
+
               if (error) {
                 console.error('[Supabase] Upsert chunk error:', error);
               } else {
@@ -143,6 +168,7 @@ export function RaceProvider({ children }) {
             console.log(`[Supabase] Successfully cached ${toInsert.length} results`);
           }
         }
+
         setResults(allResults);
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         console.log('[RaceContext] Unique divisions:', divisions);
@@ -158,10 +184,12 @@ export function RaceProvider({ children }) {
     };
     loadResults();
   }, [selectedEvent]);
+
   // Debug: Log when results change
   useEffect(() => {
     console.log('[RaceContext] Results state updated. Length:', results.length);
   }, [results]);
+
   return (
     <RaceContext.Provider value={{
       events,
