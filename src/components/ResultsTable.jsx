@@ -1,4 +1,4 @@
-// src/components/ResultsTable.jsx (FINAL MOBILE-OPTIMIZED: Simplified columns on mobile, full on desktop, sticky header/name, high contrast)
+// src/components/ResultsTable.jsx (MOBILE CARD LAYOUT: Vertical cards on mobile, full table on desktop)
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,55 +7,7 @@ import {
 } from '@tanstack/react-table';
 
 export default function ResultsTable({ data, onNameClick, isMobile = false }) {
-  const mobileColumns = [
-    {
-      accessorKey: 'place',
-      header: 'Place',
-      cell: info => (
-        <span className="font-bold text-lg text-gemini-dark-gray">
-          {info.getValue() || '—'}
-        </span>
-      ),
-    },
-    {
-      accessorFn: row => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
-      id: 'name',
-      header: 'Name',
-      cell: info => (
-        <span
-          className="font-bold text-lg text-gemini-blue cursor-pointer hover:underline"
-          onClick={() => onNameClick(info.row.original)}
-        >
-          {info.getValue() || '—'}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'chip_time',
-      header: 'Time',
-      cell: info => (
-        <span className="font-bold text-lg text-gemini-dark-gray">
-          {info.getValue() || '—'}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'bib',
-      header: 'Bib',
-      cell: info => <span className="text-sm text-gray-500">{info.getValue() || '—'}</span>,
-    },
-    {
-      accessorKey: 'age',
-      header: 'Age',
-      cell: info => <span className="text-sm text-gray-500">{info.getValue() || '—'}</span>,
-    },
-    {
-      accessorKey: 'gender',
-      header: 'Sex',
-      cell: info => <span className="text-sm text-gray-500">{info.getValue() || '—'}</span>,
-    },
-  ];
-
+  // Desktop columns (full table)
   const desktopColumns = [
     {
       accessorFn: row => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
@@ -70,31 +22,72 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
         </span>
       ),
     },
-    { accessorKey: 'bib', header: 'Bib', cell: info => info.getValue() || '—' },
-    { accessorKey: 'chip_time', header: 'Chip Time', cell: info => info.getValue() || '—' },
-    { accessorKey: 'clock_time', header: 'Gun Time', cell: info => info.getValue() || '—' },
-    { accessorKey: 'place', header: 'Overall', cell: info => info.getValue() || '—' },
-    { accessorKey: 'gender_place', header: 'Gen Place', cell: info => info.getValue() || '—' },
-    { accessorKey: 'age_group_name', header: 'Division', cell: info => info.getValue() || '—' },
-    { accessorKey: 'age_group_place', header: 'Div Place', cell: info => info.getValue() || '—' },
-    { accessorKey: 'pace', header: 'Pace', cell: info => info.getValue() || '—' },
-    { accessorKey: 'age', header: 'Age', cell: info => info.getValue() || '—' },
-    { accessorKey: 'gender', header: 'Gender', cell: info => info.getValue() || '—' },
+    { accessorKey: 'bib', header: 'Bib' },
+    { accessorKey: 'chip_time', header: 'Chip Time' },
+    { accessorKey: 'clock_time', header: 'Gun Time' },
+    { accessorKey: 'place', header: 'Overall' },
+    { accessorKey: 'gender_place', header: 'Gen Place' },
+    { accessorKey: 'age_group_name', header: 'Division' },
+    { accessorKey: 'age_group_place', header: 'Div Place' },
+    { accessorKey: 'pace', header: 'Pace' },
+    { accessorKey: 'age', header: 'Age' },
+    { accessorKey: 'gender', header: 'Gender' },
   ];
-
-  const columns = isMobile ? mobileColumns : desktopColumns;
 
   const table = useReactTable({
     data,
-    columns,
+    columns: desktopColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
 
+  // Mobile: Card layout (no table)
+  if (isMobile) {
+    if (data.length === 0) {
+      return (
+        <div className="text-center py-12 text-gray-500 text-lg">
+          No participants match current filters.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {data.map((row, index) => (
+          <div
+            key={row.id || index}
+            className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition"
+          >
+            <div
+              className="font-bold text-xl text-gemini-blue cursor-pointer hover:underline mb-2"
+              onClick={() => onNameClick(row)}
+            >
+              {row.first_name || ''} {row.last_name || ''}
+            </div>
+            <div className="flex justify-between items-baseline mb-3">
+              <span className="text-2xl font-bold text-gemini-dark-gray">
+                {row.place || '—'}
+              </span>
+              <span className="text-xl font-semibold text-gemini-dark-gray">
+                {row.chip_time || '—'}
+              </span>
+            </div>
+            <div className="text-sm text-gray-600 flex gap-4 flex-wrap">
+              <span>Bib: <span className="font-medium">{row.bib || '—'}</span></span>
+              <span>Age: <span className="font-medium">{row.age || '—'}</span></span>
+              <span>Sex: <span className="font-medium">{row.gender || '—'}</span></span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Desktop: Traditional table
   return (
     <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[800px]">
+        <table className="w-full min-w-[900px]">
           <thead className="bg-gemini-blue text-white sticky top-0 z-10">
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
@@ -120,7 +113,7 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
           <tbody className="divide-y divide-gray-200">
             {table.getRowModel().rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="text-center py-16 text-gray-500 text-lg">
+                <td colSpan={desktopColumns.length} className="text-center py-16 text-gray-500 text-lg">
                   No participants match current filters.
                 </td>
               </tr>
@@ -128,13 +121,13 @@ export default function ResultsTable({ data, onNameClick, isMobile = false }) {
               table.getRowModel().rows.map((row, index) => (
                 <tr
                   key={row.id}
-                  className={`transition hover:bg-gemini-light-gray/50 ${
+                  className={`hover:bg-gemini-light-gray/50 transition ${
                     index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                   }`}
                 >
                   {row.getVisibleCells().map(cell => (
                     <td key={cell.id} className="px-4 py-5 text-sm text-gray-800">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(cell.column.columnDef.cell, cell.getContext()) || '—'}
                     </td>
                   ))}
                 </tr>
