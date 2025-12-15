@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (UPDATED: Added country + splits display)
+// src/pages/ParticipantPage.jsx (FINAL — Totals, splits, country, clean layout)
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import html2canvas from 'html2canvas';
@@ -17,12 +17,13 @@ export default function ParticipantPage() {
     return <p className="text-center text-xl text-gemini-red pt-40">No participant data available.</p>;
   }
 
+  // Calculate totals
   const overallTotal = results.length;
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
 
   const variants = [
-    // ... (your existing 5 variants unchanged - omitted for brevity)
+    // ... your existing 5 variants unchanged ...
   ];
 
   useEffect(() => {
@@ -121,7 +122,6 @@ export default function ParticipantPage() {
               <dt className="font-semibold text-gemini-dark-gray">Division</dt>
               <dd className="font-bold text-gemini-blue">{participant.age_group_name || '—'}</dd>
 
-              {/* NEW: Country */}
               {participant.country && (
                 <>
                   <dt className="font-semibold text-gemini-dark-gray">Country</dt>
@@ -132,12 +132,33 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Placement */}
-        <p className="text-center mb-12 text-2xl font-semibold text-gemini-blue bg-gemini-light-gray py-4 rounded-xl shadow-inner">
-          {participant.place || '—'} / {overallTotal} Overall • {participant.gender_place || '—'} / {genderTotal} {participant.gender === 'M' ? 'Men' : 'Women'} • {participant.age_group_place || '—'} / {divisionTotal} {participant.age_group_name}
-        </p>
+        {/* NEW: Standing Totals */}
+        <div className="bg-gemini-light-gray rounded-2xl p-6 shadow-md mb-12">
+          <h4 className="text-2xl font-bold text-center text-gemini-dark-gray mb-6">Your Standing</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+            <div className="bg-white rounded-xl p-4 shadow">
+              <p className="text-sm text-gray-600 uppercase tracking-wide">Overall</p>
+              <p className="text-3xl font-bold text-gemini-blue mt-2">
+                {participant.place || '—'} / {overallTotal}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow">
+              <p className="text-sm text-gray-600 uppercase tracking-wide">Gender</p>
+              <p className="text-3xl font-bold text-gemini-blue mt-2">
+                {participant.gender_place || '—'} / {genderTotal}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow">
+              <p className="text-sm text-gray-600 uppercase tracking-wide">Division</p>
+              <p className="text-3xl font-bold text-gemini-blue mt-2">
+                {participant.age_group_place || '—'} / {divisionTotal}
+              </p>
+              <p className="text-sm text-gray-600 mt-2">{participant.age_group_name || '—'}</p>
+            </div>
+          </div>
+        </div>
 
-        {/* NEW: Intermediate Splits */}
+        {/* Splits */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="mb-12">
             <button

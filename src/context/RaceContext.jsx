@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Live updates, safe cache, integer parsing, country/splits support)
+// src/context/RaceContext.jsx (FINAL — Live updates, cache-first, integer parsing)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -9,7 +9,6 @@ export function RaceProvider({ children }) {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [races, setRaces] = useState([]);
-  const [selectedRace, setSelectedRace] = useState(null);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
@@ -41,7 +40,7 @@ export function RaceProvider({ children }) {
     return hash.toString();
   };
 
-  // Load events on mount
+  // Load events
   useEffect(() => {
     const loadEvents = async () => {
       console.log('[RaceContext] Starting to fetch events...');
@@ -52,7 +51,7 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
         setEvents(fetchedEvents);
 
-        // Restore last selected event
+        // Restore selected event
         const savedEventId = localStorage.getItem('selectedEventId');
         if (savedEventId) {
           const restored = fetchedEvents.find(e => e.id === savedEventId);
@@ -82,11 +81,10 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load races when event changes
+  // Load races
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
-      setSelectedRace(null);
       return;
     }
 
@@ -94,9 +92,6 @@ export function RaceProvider({ children }) {
       try {
         const fetchedRaces = await fetchRacesForEvent(selectedEvent.id);
         setRaces(fetchedRaces);
-        if (fetchedRaces.length > 0) {
-          setSelectedRace(fetchedRaces[0]);
-        }
       } catch (err) {
         console.error('Failed to load races:', err);
         setRaces([]);
@@ -105,7 +100,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + live polling on race day
+  // Load results + live polling
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -150,23 +145,23 @@ export function RaceProvider({ children }) {
           console.log(`[Supabase] Loaded ${allCached.length} results from cache`);
         }
 
-        // Is today race day?
+        // Race day detection
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
         setIsLiveRace(isRaceDay);
 
         // Fetch fresh if cache empty OR race day OR forced
         if (allCached.length === 0 || isRaceDay || forceFresh) {
-          console.log('[RaceContext] Fetching fresh results from ChronoTrack');
+          console.log('[RaceContext] Fetching fresh from ChronoTrack');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
 
           const freshHash = hashResults(fresh);
           if (freshHash !== currentHash && fresh.length > 0) {
-            console.log('[RaceContext] Results changed — updating cache and state');
+            console.log('[RaceContext] Results changed — updating');
             currentHash = freshHash;
 
-            // Upsert fresh data
+            // Upsert fresh
             const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -214,11 +209,11 @@ export function RaceProvider({ children }) {
 
     loadResults();
 
-    // Poll every 2 minutes on race day
+    // Poll on race day
     const todayStr = new Date().toISOString().split('T')[0];
     if (selectedEvent.date === todayStr) {
       interval = setInterval(() => loadResults(true), 120000);
-      console.log('[RaceContext] Live polling started (every 2 min)');
+      console.log('[RaceContext] Live polling started');
     }
 
     return () => clearInterval(interval);
@@ -234,7 +229,6 @@ export function RaceProvider({ children }) {
       selectedEvent,
       setSelectedEvent,
       races,
-      selectedRace,
       results,
       loading,
       loadingResults,
