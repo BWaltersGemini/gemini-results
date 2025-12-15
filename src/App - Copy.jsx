@@ -1,4 +1,4 @@
-// src/App.jsx (UPDATED — Nested routes for master/year/race/bib)
+// src/App.jsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { RaceProvider } from './context/RaceContext';
@@ -11,7 +11,6 @@ import Contact from './pages/Contact';
 import AdminPage from './pages/AdminPage';
 import ParticipantPage from './pages/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -21,7 +20,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -33,9 +31,6 @@ export default function App() {
             <Route path="/services" element={<Services />} />
             <Route path="/products" element={<Products />} />
             <Route path="/results" element={<ResultsPage />} />
-            <Route path="/results/:masterKey/:year" element={<ResultsPage />} />
-            <Route path="/results/:masterKey/:year/:raceSlug" element={<ResultsPage />} />
-            <Route path="/results/:masterKey/:year/:raceSlug/bib=:bib" element={<ParticipantPage />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/participant" element={<ParticipantPage />} />

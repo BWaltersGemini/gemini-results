@@ -1,11 +1,13 @@
-// src/pages/ResultsPage.jsx (FINAL — Everything polished: logo, mobile/desktop perfect, safe guards)
-import { useContext, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+// src/pages/ResultsPage.jsx (UPDATED — Handles URL params for master/year/race, sets event/race)
+import { useContext, useState, useRef, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
+  const { masterKey, year, raceSlug, bib } = useParams();
+
   const {
     selectedEvent,
     events = [],
@@ -18,6 +20,9 @@ export default function ResultsPage() {
     ads,
     setSelectedEvent,
   } = useContext(RaceContext);
+
+  // Load masterGroups from localStorage
+  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
 
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
@@ -34,6 +39,44 @@ export default function ResultsPage() {
       year: 'numeric',
     });
   };
+
+  // Handle URL params to select event/race
+  useEffect(() => {
+    if (!masterKey || !year || events.length === 0) return;
+
+    const groupEventIds = masterGroups[masterKey] || [];
+    const yearEvents = events.filter(e => 
+      groupEventIds.includes(e.id) && e.date.startsWith(year)
+    ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (yearEvents.length === 0) return;
+
+    let targetEvent = yearEvents[0]; // Default to most recent
+
+    if (raceSlug) {
+      // Find event with matching race slug
+      const matchingEvent = yearEvents.find(e => {
+        const race = races.find(r => r.race_id === e.race_id);
+        const name = race?.race_name || e.name;
+        const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/^-+|-+$/g, '');
+        return slug === raceSlug;
+      });
+      if (matchingEvent) targetEvent = matchingEvent;
+    }
+
+    if (targetEvent.id !== selectedEvent?.id) {
+      setSelectedEvent(targetEvent);
+    }
+
+    // If bib, navigate to participant page
+    if (bib && results.length > 0) {
+      const participant = results.find(r => r.bib === bib);
+      if (participant) {
+        navigate(`/results/${masterKey}/${year}/${raceSlug}/bib=${bib}`, { replace: true });
+        return <ParticipantPage />; // Or handle in routing
+      }
+    }
+  }, [masterKey, year, raceSlug, bib, events, races, results, masterGroups, selectedEvent, setSelectedEvent, navigate]);
 
   // ——— NO EVENT SELECTED → Recent races landing ———
   if (!selectedEvent) {
