@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (COMPLETE FINAL — Safe delete + insert refresh, all features intact)
+// src/pages/AdminPage.jsx (COMPLETE FINAL — Safe refresh with deduplication + delete/insert, all features)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -211,7 +211,7 @@ export default function AdminPage() {
     alert('All changes saved successfully!');
   };
 
-  // Refresh & Publish — Safe delete + insert (avoids upsert duplicate issues)
+  // Refresh & Publish — Safe deduplication + delete + insert
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) {
       setRefreshStatus('Please select an event first');
@@ -225,9 +225,27 @@ export default function AdminPage() {
     setRefreshStatus('Fetching fresh results from ChronoTrack...');
     try {
       const allResults = await fetchResultsForEvent(selectedEventId);
-      setRefreshStatus(`Fetched ${allResults.length} results. Clearing old cache...`);
+      setRefreshStatus(`Fetched ${allResults.length} results. Deduplicating...`);
 
-      // Delete old results for this event
+      // Deduplicate fresh results
+      const uniqueResults = allResults.reduce((acc, current) => {
+        const key = [
+          (current.bib || '').toString().trim(),
+          (current.first_name || '').trim().toLowerCase(),
+          (current.last_name || '').trim().toLowerCase(),
+          (current.chip_time || current.clock_time || '').trim(),
+          (current.place || '').toString().trim(),
+        ].join('|');
+        if (!acc.seen.has(key)) {
+          acc.seen.add(key);
+          acc.results.push(current);
+        }
+        return acc;
+      }, { seen: new Set(), results: [] }).results;
+
+      setRefreshStatus(`Deduplicated to ${uniqueResults.length} unique results. Clearing old cache...`);
+
+      // Delete old results
       const { error: deleteError } = await supabase
         .from('chronotrack_results')
         .delete()
@@ -237,10 +255,10 @@ export default function AdminPage() {
 
       setRefreshStatus('Inserting fresh results...');
 
-      // Insert fresh results in chunks
+      // Insert deduplicated fresh results in chunks
       const chunkSize = 200;
-      for (let i = 0; i < allResults.length; i += chunkSize) {
-        const chunk = allResults.slice(i, i + chunkSize).map(r => ({
+      for (let i = 0; i < uniqueResults.length; i += chunkSize) {
+        const chunk = uniqueResults.slice(i, i + chunkSize).map(r => ({
           event_id: selectedEventId,
           race_id: r.race_id || null,
           bib: r.bib || null,
@@ -268,7 +286,7 @@ export default function AdminPage() {
         if (insertError) throw insertError;
       }
 
-      setRefreshStatus(`Success! ${allResults.length} results refreshed and published.`);
+      setRefreshStatus(`Success! ${uniqueResults.length} unique results refreshed and published.`);
     } catch (err) {
       console.error('Refresh & publish failed:', err);
       setRefreshStatus(`Error: ${err.message || 'Unknown error'}`);
