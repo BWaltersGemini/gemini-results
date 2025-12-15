@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (COMPLETE FINAL — Safe upsert refresh, all features, no errors)
+// src/pages/AdminPage.jsx (COMPLETE FINAL — Safe delete + insert refresh, all features intact)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -211,7 +211,7 @@ export default function AdminPage() {
     alert('All changes saved successfully!');
   };
 
-  // FINAL REFRESH & PUBLISH — Safe upsert (no delete needed, handles duplicates)
+  // Refresh & Publish — Safe delete + insert (avoids upsert duplicate issues)
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) {
       setRefreshStatus('Please select an event first');
@@ -225,41 +225,47 @@ export default function AdminPage() {
     setRefreshStatus('Fetching fresh results from ChronoTrack...');
     try {
       const allResults = await fetchResultsForEvent(selectedEventId);
-      setRefreshStatus(`Fetched ${allResults.length} results. Updating cache...`);
+      setRefreshStatus(`Fetched ${allResults.length} results. Clearing old cache...`);
 
-      // Map with explicit event_id
-      const toUpsert = allResults.map(r => ({
-        event_id: selectedEventId,
-        race_id: r.race_id || null,
-        bib: r.bib || null,
-        first_name: r.first_name || null,
-        last_name: r.last_name || null,
-        gender: r.gender || null,
-        age: r.age ? parseInt(r.age, 10) : null,
-        city: r.city || null,
-        state: r.state || null,
-        country: r.country || null,
-        chip_time: r.chip_time || null,
-        clock_time: r.clock_time || null,
-        place: r.place ? parseInt(r.place, 10) : null,
-        gender_place: r.gender_place ? parseInt(r.gender_place, 10) : null,
-        age_group_name: r.age_group_name || null,
-        age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
-        pace: r.pace || null,
-        splits: r.splits || [],
-      }));
+      // Delete old results for this event
+      const { error: deleteError } = await supabase
+        .from('chronotrack_results')
+        .delete()
+        .eq('event_id', selectedEventId);
 
-      // Upsert in chunks (safe for duplicates)
-      const chunkSize = 500;
-      for (let i = 0; i < toUpsert.length; i += chunkSize) {
-        const chunk = toUpsert.slice(i, i + chunkSize);
-        const { error } = await supabase
+      if (deleteError) throw deleteError;
+
+      setRefreshStatus('Inserting fresh results...');
+
+      // Insert fresh results in chunks
+      const chunkSize = 200;
+      for (let i = 0; i < allResults.length; i += chunkSize) {
+        const chunk = allResults.slice(i, i + chunkSize).map(r => ({
+          event_id: selectedEventId,
+          race_id: r.race_id || null,
+          bib: r.bib || null,
+          first_name: r.first_name || null,
+          last_name: r.last_name || null,
+          gender: r.gender || null,
+          age: r.age ? parseInt(r.age, 10) : null,
+          city: r.city || null,
+          state: r.state || null,
+          country: r.country || null,
+          chip_time: r.chip_time || null,
+          clock_time: r.clock_time || null,
+          place: r.place ? parseInt(r.place, 10) : null,
+          gender_place: r.gender_place ? parseInt(r.gender_place, 10) : null,
+          age_group_name: r.age_group_name || null,
+          age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
+          pace: r.pace || null,
+          splits: r.splits || [],
+        }));
+
+        const { error: insertError } = await supabase
           .from('chronotrack_results')
-          .upsert(chunk, { 
-            onConflict: 'event_id,bib,first_name,last_name,chip_time', // Adjust if your constraint is different
-            ignoreDuplicates: false 
-          });
-        if (error) throw error;
+          .insert(chunk);
+
+        if (insertError) throw insertError;
       }
 
       setRefreshStatus(`Success! ${allResults.length} results refreshed and published.`);
