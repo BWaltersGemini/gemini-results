@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Full bracket support for gender/age group places + country/splits)
+// src/api/chronotrackapi.jsx (FINAL — Bracket support + bug fix for fetched variable)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -76,7 +76,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // Step 1: Fetch all brackets
+  // Step 1: Fetch brackets
   let brackets = [];
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
@@ -89,7 +89,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets (optional)', err);
   }
 
-  // Step 2: Fetch bracket results (for gender/age group places)
+  // Step 2: Fetch bracket results for gender/age group places
   const bracketPlaces = {}; // bib → { gender_place, age_group_place }
   for (const bracket of brackets) {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') continue;
@@ -105,12 +105,14 @@ export const fetchResultsForEvent = async (eventId) => {
         const bib = r.results_bib;
         if (!bracketPlaces[bib]) bracketPlaces[bib] = {};
 
-        // Detect type by bracket_tag or name
+        // Gender brackets
         if (bracket.bracket_tag === 'F' || bracket.bracket_name.toLowerCase().includes('female')) {
           bracketPlaces[bib].gender_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
         } else if (bracket.bracket_tag === 'M' || bracket.bracket_name.toLowerCase().includes('male')) {
           bracketPlaces[bib].gender_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
-        } else if (bracket.bracket_type === 'AGE' || bracket.bracket_min_age || bracket.bracket_max_age) {
+        }
+        // Age group brackets
+        else if (bracket.bracket_type === 'AGE' || bracket.bracket_min_age || bracket.bracket_max_age) {
           bracketPlaces[bib].age_group_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
         }
       });
@@ -123,6 +125,10 @@ export const fetchResultsForEvent = async (eventId) => {
   let allResults = [];
   let page = 1;
   const perPage = 50;
+  let fetched = [];
+
+  console.log(`[ChronoTrack] Fetching overall results for event ${eventId}`);
+
   do {
     const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
       headers: { Authorization: authHeader },
@@ -133,7 +139,7 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
 
-    const fetched = response.data.event_results || [];
+    fetched = response.data.event_results || [];
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
