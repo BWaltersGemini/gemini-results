@@ -247,11 +247,13 @@ export default function ResultsPage() {
 
             {displayedRaces.map((race) => {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
+              const searchLower = (filters.search || '').toLowerCase();
               const filtered = results.filter(r => r.race_id === race.race_id).filter(r => {
-                const matchesSearch = (r.first_name + ' ' + r.last_name).toLowerCase().includes(filters.search.toLowerCase()) ||
-                  (r.bib && r.bib.toString().includes(filters.search));
+                const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
+                const bibStr = r.bib ? r.bib.toString() : '';
+                const matchesSearch = nameLower.includes(searchLower) || bibStr.includes(searchLower);
                 const matchesGender = !filters.gender || r.gender === filters.gender;
-                const matchesDivision = !filters.division || r.age_group_name === filters.division;
+                const matchesDivision = !filters.division || (r.age_group_name || '') === filters.division;
                 return matchesSearch && matchesGender && matchesDivision;
               });
 
