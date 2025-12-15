@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Calculates gender_place client-side)
+// src/context/RaceContext.jsx (FINAL — Calculates gender_place before cache)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -33,6 +33,7 @@ export function RaceProvider({ children }) {
         if (savedEventId) {
           const restored = fetchedEvents.find(e => e.id === savedEventId);
           if (restored) {
+            console.log('[RaceContext] Restoring selected event:', restored);
             setSelectedEvent(restored);
           } else {
             localStorage.removeItem('selectedEventId');
@@ -48,6 +49,7 @@ export function RaceProvider({ children }) {
     loadEvents();
   }, []);
 
+  // Persist selectedEvent
   useEffect(() => {
     if (selectedEvent) {
       localStorage.setItem('selectedEventId', selectedEvent.id);
@@ -56,6 +58,7 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
+  // Load races
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
@@ -74,7 +77,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + calculate gender_place
+  // Load results + calculate gender_place before cache
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -126,10 +129,40 @@ export function RaceProvider({ children }) {
           console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
 
           if (fresh.length > 0) {
-            // Upsert fresh
-            const toUpsert = fresh.map(r => ({
+            // Calculate gender_place before upsert
+            const freshWithGenderPlace = fresh.map(r => {
+              const sameGender = fresh.filter(other => other.gender === r.gender);
+              const fasterSameGender = sameGender.filter(other => 
+                other.chip_time < r.chip_time ||
+                (other.chip_time === r.chip_time && (other.place || Infinity) < (r.place || Infinity))
+              ).length;
+
+              return {
+                ...r,
+                gender_place: fasterSameGender + 1,
+              };
+            });
+
+            // Upsert with calculated gender_place
+            const toUpsert = freshWithGenderPlace.map(r => ({
               event_id: selectedEvent.id.toString(),
-              // ... all fields ...
+              race_id: r.race_id || null,
+              bib: r.bib || null,
+              first_name: r.first_name || null,
+              last_name: r.last_name || null,
+              gender: r.gender || null,
+              age: r.age ? parseInt(r.age, 10) : null,
+              city: r.city || null,
+              state: r.state || null,
+              country: r.country || null,
+              chip_time: r.chip_time || null,
+              clock_time: r.clock_time || null,
+              place: r.place ? parseInt(r.place, 10) : null,
+              gender_place: r.gender_place ? parseInt(r.gender_place, 10) : null,
+              age_group_name: r.age_group_name || null,
+              age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
+              pace: r.pace || null,
+              splits: r.splits || [],
             }));
 
             const chunkSize = 500;
@@ -141,26 +174,11 @@ export function RaceProvider({ children }) {
               if (error) console.error('[Supabase] Upsert error:', error);
             }
 
-            allResults = fresh;
+            allResults = freshWithGenderPlace;
           }
         }
 
-        // Calculate gender_place client-side
-        const resultsWithGenderPlace = allResults.map(r => {
-          const sameGender = allResults.filter(other => other.gender === r.gender);
-          const fasterSameGender = sameGender.filter(other => 
-            other.chip_time < r.chip_time || 
-            (other.chip_time === r.chip_time && (other.place || Infinity) < (r.place || Infinity))
-          ).length;
-
-          return {
-            ...r,
-            gender_place: fasterSameGender + 1,
-          };
-        });
-
-        setResults(resultsWithGenderPlace);
-
+        setResults(allResults);
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         setUniqueDivisions(divisions);
       } catch (err) {

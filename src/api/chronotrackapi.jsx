@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Uses entry_id for merging bracket places)
+// src/api/chronotrackapi.jsx (FINAL — Bracket for age group, gender place calculated client-side)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -76,7 +76,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // Step 1: Fetch main overall results
+  // Fetch main results
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -100,9 +100,9 @@ export const fetchResultsForEvent = async (eventId) => {
     page++;
   } while (fetched.length === perPage);
 
-  console.log(`[ChronoTrack] Finished fetching overall — ${allResults.length} total finishers`);
+  console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  // Step 2: Fetch brackets
+  // Fetch brackets for age group places
   let brackets = [];
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
@@ -115,11 +115,10 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Step 3: Fetch bracket results for age group places (using entry_id)
   const bracketPlaces = {}; // entry_id → { age_group_place }
   for (const bracket of brackets) {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') continue;
-    if (bracket.bracket_type !== 'AGE') continue; // Only age groups for now
+    if (bracket.bracket_type !== 'AGE') continue;
 
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
@@ -130,19 +129,17 @@ export const fetchResultsForEvent = async (eventId) => {
       const bracketResults = res.data.bracket_results || [];
       bracketResults.forEach(r => {
         const entryId = r.results_entry_id;
-        if (entryId && !bracketPlaces[entryId]) {
-          bracketPlaces[entryId] = {};
-        }
         if (entryId) {
+          if (!bracketPlaces[entryId]) bracketPlaces[entryId] = {};
           bracketPlaces[entryId].age_group_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed to fetch bracket ${bracket.bracket_id}`, err);
+      console.warn(`[ChronoTrack] Failed bracket ${bracket.bracket_id}`, err);
     }
   }
 
-  // Step 4: Map main results and enrich with age group place using entry_id
+  // Map results — gender_place will be calculated in RaceContext
   return allResults.map(r => {
     const entryId = r.results_entry_id;
     const places = entryId ? bracketPlaces[entryId] || {} : {};
@@ -164,7 +161,7 @@ export const fetchResultsForEvent = async (eventId) => {
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: null, // Recommended: calculate client-side
+      gender_place: null, // Calculated in RaceContext
       age_group_name: r.results_primary_bracket_name || '',
       age_group_place: places.age_group_place || null,
       pace: r.results_pace || '',
@@ -177,7 +174,7 @@ export const fetchResultsForEvent = async (eventId) => {
       state: r.results_state || '',
       country: r.results_country || r.country || '',
       splits,
-      entry_id: r.results_entry_id || null, // Keep for future use
+      entry_id: r.results_entry_id || null,
     };
   });
 };
