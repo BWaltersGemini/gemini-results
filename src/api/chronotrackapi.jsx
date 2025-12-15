@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Bracket for age group, gender place calculated client-side)
+// src/api/chronotrackapi.jsx (FINAL — Bracket for age group place)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -102,7 +102,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  // Fetch brackets for age group places
+  // Fetch brackets
   let brackets = [];
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
@@ -115,7 +115,8 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  const bracketPlaces = {}; // entry_id → { age_group_place }
+  // Fetch bracket results for age group place (using entry_id)
+  const bracketPlaces = {}; // entry_id → age_group_place
   for (const bracket of brackets) {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') continue;
     if (bracket.bracket_type !== 'AGE') continue;
@@ -130,8 +131,7 @@ export const fetchResultsForEvent = async (eventId) => {
       bracketResults.forEach(r => {
         const entryId = r.results_entry_id;
         if (entryId) {
-          if (!bracketPlaces[entryId]) bracketPlaces[entryId] = {};
-          bracketPlaces[entryId].age_group_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
+          bracketPlaces[entryId] = r.results_rank ? parseInt(r.results_rank, 10) : null;
         }
       });
     } catch (err) {
@@ -142,7 +142,7 @@ export const fetchResultsForEvent = async (eventId) => {
   // Map results — gender_place will be calculated in RaceContext
   return allResults.map(r => {
     const entryId = r.results_entry_id;
-    const places = entryId ? bracketPlaces[entryId] || {} : {};
+    const ageGroupPlace = entryId ? bracketPlaces[entryId] : null;
 
     const rawSplits = r.splits || r.interval_results || r.results_splits || [];
     const splits = Array.isArray(rawSplits)
@@ -163,7 +163,7 @@ export const fetchResultsForEvent = async (eventId) => {
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
       gender_place: null, // Calculated in RaceContext
       age_group_name: r.results_primary_bracket_name || '',
-      age_group_place: places.age_group_place || null,
+      age_group_place: ageGroupPlace,
       pace: r.results_pace || '',
       age: r.results_age ? parseInt(r.results_age, 10) : null,
       gender: r.results_sex || '',

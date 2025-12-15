@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Calculates gender_place before cache)
+// src/context/RaceContext.jsx (FINAL — Calculates gender_place before upsert)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -77,7 +77,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + calculate gender_place before cache
+  // Load results + calculate gender_place
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -85,7 +85,6 @@ export function RaceProvider({ children }) {
       return;
     }
 
-    let currentHash = '';
     let interval;
 
     const loadResults = async (forceFresh = false) => {
@@ -129,7 +128,7 @@ export function RaceProvider({ children }) {
           console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
 
           if (fresh.length > 0) {
-            // Calculate gender_place before upsert
+            // Calculate gender_place
             const freshWithGenderPlace = fresh.map(r => {
               const sameGender = fresh.filter(other => other.gender === r.gender);
               const fasterSameGender = sameGender.filter(other => 
@@ -179,6 +178,7 @@ export function RaceProvider({ children }) {
         }
 
         setResults(allResults);
+
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         setUniqueDivisions(divisions);
       } catch (err) {
@@ -191,7 +191,7 @@ export function RaceProvider({ children }) {
 
     loadResults();
 
-    if (selectedEvent.date === new Date().toISOString().split('T')[0]) {
+    if (selectedEvent.date === todayStr) {
       interval = setInterval(() => loadResults(true), 120000);
     }
 
