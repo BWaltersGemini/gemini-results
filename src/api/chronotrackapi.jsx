@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (COMPLETE FINAL — Per-race bracket fetching for accurate age group place)
+// src/api/chronotrackapi.jsx (FINAL — Uses entry_id for merging bracket places)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -102,95 +102,82 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished fetching overall — ${allResults.length} total finishers`);
 
-  // Step 2: Group results by race_id
-  const resultsByRace = {};
-  allResults.forEach(r => {
-    const raceId = r.results_race_id || 'overall';
-    if (!resultsByRace[raceId]) resultsByRace[raceId] = [];
-    resultsByRace[raceId].push(r);
-  });
+  // Step 2: Fetch brackets
+  let brackets = [];
+  try {
+    const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
+      headers: { Authorization: authHeader },
+      params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+    });
+    brackets = bracketRes.data.event_bracket || [];
+    console.log(`[ChronoTrack] Found ${brackets.length} brackets`);
+  } catch (err) {
+    console.warn('[ChronoTrack] Could not fetch brackets', err);
+  }
 
-  // Step 3: Fetch brackets and bracket results per race
-  const enrichedResults = [];
+  // Step 3: Fetch bracket results for age group places (using entry_id)
+  const bracketPlaces = {}; // entry_id → { age_group_place }
+  for (const bracket of brackets) {
+    if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') continue;
+    if (bracket.bracket_type !== 'AGE') continue; // Only age groups for now
 
-  for (const raceId in resultsByRace) {
-    const raceResults = resultsByRace[raceId];
-
-    let brackets = [];
     try {
-      const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
+      const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
         params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
       });
-      brackets = (bracketRes.data.event_bracket || []).filter(b => 
-        (b.race_id === raceId || b.race_id == null) && 
-        b.bracket_wants_leaderboard === '1'
-      );
-      console.log(`[ChronoTrack] Race ${raceId}: Found ${brackets.length} brackets`);
-    } catch (err) {
-      console.warn(`[ChronoTrack] Could not fetch brackets for race ${raceId}`, err);
-    }
 
-    const bracketPlaces = {}; // bib → { age_group_place }
-    for (const bracket of brackets) {
-      try {
-        const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
-          headers: { Authorization: authHeader },
-          params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
-        });
-
-        const bracketResults = res.data.bracket_results || [];
-        bracketResults.forEach(r => {
-          const bib = r.results_bib;
-          if (!bracketPlaces[bib]) bracketPlaces[bib] = {};
-
-          if (bracket.bracket_type === 'AGE') {
-            bracketPlaces[bib].age_group_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
-          }
-        });
-      } catch (err) {
-        console.warn(`[ChronoTrack] Failed to fetch bracket ${bracket.bracket_id} for race ${raceId}`, err);
-      }
-    }
-
-    // Map and enrich this race's results
-    raceResults.forEach(r => {
-      const bib = r.results_bib;
-      const places = bracketPlaces[bib] || {};
-
-      const rawSplits = r.splits || r.interval_results || r.results_splits || [];
-      const splits = Array.isArray(rawSplits)
-        ? rawSplits.map(split => ({
-            name: split.interval_name || split.split_name || 'Split',
-            distance: split.interval_distance || null,
-            time: split.interval_time || split.split_time || null,
-            pace: split.interval_pace || split.split_pace || null,
-            place: split.interval_place || split.split_place || null,
-          }))
-        : [];
-
-      enrichedResults.push({
-        first_name: r.results_first_name || '',
-        last_name: r.results_last_name || '',
-        chip_time: r.results_time || '',
-        clock_time: r.results_gun_time || '',
-        place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-        gender_place: null, // Calculated client-side in RaceContext
-        age_group_name: r.results_primary_bracket_name || '',
-        age_group_place: places.age_group_place || null,
-        pace: r.results_pace || '',
-        age: r.results_age ? parseInt(r.results_age, 10) : null,
-        gender: r.results_sex || '',
-        bib: r.results_bib || '',
-        race_id: r.results_race_id || null,
-        race_name: r.results_race_name || '',
-        city: r.results_city || '',
-        state: r.results_state || '',
-        country: r.results_country || r.country || '',
-        splits,
+      const bracketResults = res.data.bracket_results || [];
+      bracketResults.forEach(r => {
+        const entryId = r.results_entry_id;
+        if (entryId && !bracketPlaces[entryId]) {
+          bracketPlaces[entryId] = {};
+        }
+        if (entryId) {
+          bracketPlaces[entryId].age_group_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
+        }
       });
-    });
+    } catch (err) {
+      console.warn(`[ChronoTrack] Failed to fetch bracket ${bracket.bracket_id}`, err);
+    }
   }
 
-  return enrichedResults;
+  // Step 4: Map main results and enrich with age group place using entry_id
+  return allResults.map(r => {
+    const entryId = r.results_entry_id;
+    const places = entryId ? bracketPlaces[entryId] || {} : {};
+
+    const rawSplits = r.splits || r.interval_results || r.results_splits || [];
+    const splits = Array.isArray(rawSplits)
+      ? rawSplits.map(split => ({
+          name: split.interval_name || split.split_name || 'Split',
+          distance: split.interval_distance || null,
+          time: split.interval_time || split.split_time || null,
+          pace: split.interval_pace || split.split_pace || null,
+          place: split.interval_place || split.split_place || null,
+        }))
+      : [];
+
+    return {
+      first_name: r.results_first_name || '',
+      last_name: r.results_last_name || '',
+      chip_time: r.results_time || '',
+      clock_time: r.results_gun_time || '',
+      place: r.results_rank ? parseInt(r.results_rank, 10) : null,
+      gender_place: null, // Recommended: calculate client-side
+      age_group_name: r.results_primary_bracket_name || '',
+      age_group_place: places.age_group_place || null,
+      pace: r.results_pace || '',
+      age: r.results_age ? parseInt(r.results_age, 10) : null,
+      gender: r.results_sex || '',
+      bib: r.results_bib || '',
+      race_id: r.results_race_id || null,
+      race_name: r.results_race_name || '',
+      city: r.results_city || '',
+      state: r.results_state || '',
+      country: r.results_country || r.country || '',
+      splits,
+      entry_id: r.results_entry_id || null, // Keep for future use
+    };
+  });
 };
