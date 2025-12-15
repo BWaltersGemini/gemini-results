@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Integer parsing + country/splits + robust)
+// src/api/chronotrackapi.jsx (FINAL — Robust gender/age group place parsing + all fields)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -101,7 +101,7 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
   return allResults.map(r => {
-    // Splits
+    // Splits — multiple possible keys
     const rawSplits = r.splits || r.interval_results || r.results_splits || [];
     const splits = Array.isArray(rawSplits)
       ? rawSplits.map(split => ({
@@ -113,17 +113,35 @@ export const fetchResultsForEvent = async (eventId) => {
         }))
       : [];
 
+    // Helper to parse integer safely
+    const parseIntSafe = (value) => {
+      const parsed = parseInt(value, 10);
+      return isNaN(parsed) ? null : parsed;
+    };
+
     return {
       first_name: r.results_first_name || '',
       last_name: r.results_last_name || '',
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
-      place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: r.results_primary_bracket_rank ? parseInt(r.results_primary_bracket_rank, 10) : null,
-      age_group_name: r.results_primary_bracket_name || '',
-      age_group_place: r.results_primary_bracket_place ? parseInt(r.results_primary_bracket_place, 10) : null,
+      place: parseIntSafe(r.results_rank),
+      // Gender place — try multiple possible keys
+      gender_place: parseIntSafe(
+        r.results_primary_bracket_rank ||
+        r.results_gender_place ||
+        r.results_bracket_rank ||
+        r.gender_place
+      ),
+      age_group_name: r.results_primary_bracket_name || r.age_group_name || '',
+      // Age group place — try multiple keys
+      age_group_place: parseIntSafe(
+        r.results_primary_bracket_place ||
+        r.results_age_group_place ||
+        r.age_group_place ||
+        r.bracket_place
+      ),
       pace: r.results_pace || '',
-      age: r.results_age ? parseInt(r.results_age, 10) : null,
+      age: parseIntSafe(r.results_age),
       gender: r.results_sex || '',
       bib: r.results_bib || '',
       race_id: r.results_race_id || null,
