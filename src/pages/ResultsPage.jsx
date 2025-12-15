@@ -6,7 +6,7 @@ import { RaceContext } from '../context/RaceContext';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
-  const { masterKey, year, raceSlug, bib } = useParams();
+  const { masterKey, year, raceSlug } = useParams(); // Removed bib, as participant route handles it
 
   const {
     selectedEvent,
@@ -40,7 +40,9 @@ export default function ResultsPage() {
     });
   };
 
-  // Handle URL params to select event/race
+  const slugify = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/^-+|-+$/g, '');
+
+  // Handle URL params to select event
   useEffect(() => {
     if (!masterKey || !year || events.length === 0) return;
 
@@ -51,34 +53,14 @@ export default function ResultsPage() {
 
     if (yearEvents.length === 0) return;
 
-    let targetEvent = yearEvents[0]; // Default to most recent
-
-    if (raceSlug) {
-      // Find event with matching race slug
-      const matchingEvent = yearEvents.find(e => {
-        const race = races.find(r => r.race_id === e.race_id);
-        const name = race?.race_name || e.name;
-        const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/^-+|-+$/g, '');
-        return slug === raceSlug;
-      });
-      if (matchingEvent) targetEvent = matchingEvent;
-    }
+    const targetEvent = yearEvents[0]; // Most recent in the year
 
     if (targetEvent.id !== selectedEvent?.id) {
       setSelectedEvent(targetEvent);
     }
+  }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-    // If bib, navigate to participant page
-    if (bib && results.length > 0) {
-      const participant = results.find(r => r.bib === bib);
-      if (participant) {
-        navigate(`/results/${masterKey}/${year}/${raceSlug}/bib=${bib}`, { replace: true });
-        return <ParticipantPage />; // Or handle in routing
-      }
-    }
-  }, [masterKey, year, raceSlug, bib, events, races, results, masterGroups, selectedEvent, setSelectedEvent, navigate]);
-
-  // ——— NO EVENT SELECTED → Recent races landing ———
+  // —— NO EVENT SELECTED → Recent races landing ——
   if (!selectedEvent) {
     const recentEvents = [...events]
       .filter(e => e.date && new Date(e.date) <= new Date())
@@ -154,7 +136,7 @@ export default function ResultsPage() {
     );
   }
 
-  // ——— FULL RESULTS VIEW ———
+  // —— FULL RESULTS VIEW ——
   if (!selectedEvent || !selectedEvent.date) {
     return (
       <div className="text-center py-24">
@@ -164,122 +146,55 @@ export default function ResultsPage() {
   }
 
   const formattedDate = formatDate(selectedEvent.date);
-  const isUpcoming = new Date(selectedEvent.date) > new Date();
 
-  const uniqueResults = results.reduce((acc, current) => {
-    const key = [
-      (current.bib || '').toString().trim(),
-      (current.first_name || '').trim().toLowerCase(),
-      (current.last_name || '').trim().toLowerCase(),
-      (current.chip_time || current.clock_time || '').trim(),
-      (current.place || '').toString().trim(),
-    ].join('|');
-    if (!acc.seen.has(key)) {
-      acc.seen.add(key);
-      acc.results.push(current);
-    }
-    return acc;
-  }, { seen: new Set(), results: [] }).results;
+  // Filter races if raceSlug is provided
+  let displayedRaces = races;
+  if (raceSlug) {
+    displayedRaces = races.filter(race => slugify(race.race_name) === raceSlug);
+  }
 
-  const grouped = {};
-  uniqueResults.forEach(r => {
-    const id = r.race_id || 'overall';
-    if (!grouped[id]) grouped[id] = [];
-    grouped[id].push(r);
-  });
-
-  const racesToShow = races.length > 0 ? races : Object.keys(grouped).map(id => ({
-    race_id: id,
-    race_name: id === 'overall' ? 'Overall Results' : `Race ${id}`
-  }));
-
-  const scrollToRace = (raceId) => {
-    raceRefs.current[raceId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  if (displayedRaces.length === 0) {
+    return (
+      <div className="text-center py-24">
+        <p className="text-2xl text-gray-600">No matching race found.</p>
+      </div>
+    );
+  }
 
   const handleNameClick = (participant) => {
-    navigate('/participant', {
-      state: { participant, selectedEvent, results: uniqueResults, eventLogos, ads },
+    const currentRaceSlug = raceSlug || slugify(participant.race_name || ''); // Use participant's race if no slug
+    navigate(`/results/${masterKey}/${year}/${currentRaceSlug}/bib=${participant.bib}`, {
+      state: { participant, selectedEvent, results, eventLogos, ads },
     });
   };
 
   return (
-    <div className="min-h-screen bg-gemini-light-gray pt-32 pb-16">
-      <div className="w-full px-4 sm:px-6 lg:px-8">
-        {error && (
-          <p className="text-center text-red-600 text-xl font-bold mb-8 bg-red-50 py-4 rounded-lg max-w-4xl mx-auto">
-            {error}
-          </p>
-        )}
-
-        {/* Event Header — Logo + Name + Date */}
-        <div className="text-center mb-6 md:mb-12">
-          {/* Logo — Responsive, fixed container */}
-          <div className="mx-auto w-32 h-32 md:w-40 md:h-40 mb-6 flex items-center justify-center bg-gray-50 rounded-full overflow-hidden">
-            <img
-              src={eventLogos[selectedEvent.id] || '/GRR.png'}
-              alt="Race Logo"
-              className="max-h-24 md:max-h-36 max-w-full object-contain"
-              loading="eager"
-            />
-          </div>
-
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gemini-dark-gray leading-tight px-4">
-            {selectedEvent.name}
-          </h1>
-          <p className="text-xl sm:text-2xl text-gray-600 mt-2 md:mt-4">{formattedDate}</p>
-        </div>
-
-        {/* Extra space on mobile only to clear open search dropdown */}
-        <div className="h-48 md:h-0" />
-
-        {/* Loading / Upcoming / Empty States */}
+    <div className="min-h-screen bg-gradient-to-b from-gemini-light-gray to-white pt-32 pb-20 px-4">
+      <div className="w-full max-w-7xl mx-auto">
+        {error && <p className="text-center text-2xl text-gemini-red mb-8">{error}</p>}
         {loadingResults ? (
-          <div className="text-center py-24">
-            <div className="text-7xl animate-spin inline-block mb-6">🏃</div>
-            <p className="text-2xl text-gray-700">Loading results...</p>
-          </div>
-        ) : uniqueResults.length === 0 && isUpcoming ? (
-          <div className="text-center py-24">
-            <p className="text-3xl font-bold text-gemini-dark-gray mb-6">
-              Results will be available once the race begins!
-            </p>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              This race is upcoming. Results will appear after finishers cross the line.
-            </p>
-            <div className="text-7xl mt-8">⏱️</div>
-          </div>
-        ) : uniqueResults.length === 0 ? (
-          <div className="text-center py-24">
-            <p className="text-2xl text-gray-600">No results available yet.</p>
+          <div className="text-center py-20">
+            <p className="text-3xl text-gemini-dark-gray mb-4">Loading Results...</p>
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-gemini-blue mx-auto"></div>
           </div>
         ) : (
           <>
-            {/* Jump Links */}
-            {racesToShow.length > 1 && (
-              <div className="w-full text-center mb-8 md:mb-12">
-                <p className="text-lg font-semibold text-gray-700 mb-4">Jump to Race:</p>
-                <div className="flex flex-wrap justify-center gap-3 px-4">
-                  {racesToShow.map(r => (
-                    <button
-                      key={r.race_id}
-                      onClick={() => scrollToRace(r.race_id)}
-                      className="px-5 py-3 bg-gemini-blue text-white rounded-full font-medium hover:bg-gemini-blue/90 transition"
-                    >
-                      {r.race_name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="text-center mb-16">
+              <img
+                src={eventLogos[selectedEvent.id] || '/GRR.png'}
+                alt="Event Logo"
+                className="mx-auto max-h-40 mb-6 rounded-lg shadow-md"
+              />
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">
+                {selectedEvent.name}
+              </h1>
+              <p className="text-xl sm:text-2xl text-gray-700">{formattedDate}</p>
+            </div>
 
-            {/* Race Sections */}
-            {racesToShow.map(race => {
-              const raceResults = grouped[race.race_id] || [];
+            {displayedRaces.map((race) => {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
-              const filtered = raceResults.filter(r => {
-                const matchesSearch = !filters.search || 
-                  `${r.first_name} ${r.last_name}`.toLowerCase().includes(filters.search.toLowerCase()) ||
+              const filtered = results.filter(r => r.race_id === race.race_id).filter(r => {
+                const matchesSearch = (r.first_name + ' ' + r.last_name).toLowerCase().includes(filters.search.toLowerCase()) ||
                   (r.bib && r.bib.toString().includes(filters.search));
                 const matchesGender = !filters.gender || r.gender === filters.gender;
                 const matchesDivision = !filters.division || r.age_group_name === filters.division;

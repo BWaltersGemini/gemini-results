@@ -1,15 +1,59 @@
 // src/pages/ParticipantPage.jsx (FINAL — Totals, splits, country, clean layout)
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect, useContext } from 'react';
 import html2canvas from 'html2canvas';
+import { RaceContext } from '../context/RaceContext';
 
 export default function ParticipantPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { participant, selectedEvent, results, eventLogos, ads } = location.state || {};
+  const params = useParams();
+  const masterKey = params.masterKey;
+  const year = params.year;
+  const raceSlug = params.raceSlug;
+  const bib = params.bib; // From /bib=:bib
+
+  let { participant, selectedEvent, results, eventLogos, ads } = location.state || {};
+
+  const { 
+    events = [], 
+    setSelectedEvent, 
+    results: contextResults = [], 
+    eventLogos: contextEventLogos = {}, 
+    ads: contextAds = [] 
+  } = useContext(RaceContext);
+
+  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
+
   const [previews, setPreviews] = useState([]);
   const [selectedPreviewIndex, setSelectedPreviewIndex] = useState(0);
   const [showSplits, setShowSplits] = useState(false);
+
+  // Select event if no state provided (direct URL access)
+  useEffect(() => {
+    if (!selectedEvent && masterKey && year) {
+      const groupEventIds = masterGroups[masterKey] || [];
+      const yearEvents = events.filter(e => 
+        groupEventIds.includes(e.id) && e.date.startsWith(year)
+      ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      if (yearEvents.length > 0) {
+        setSelectedEvent(yearEvents[0]);
+      }
+    }
+  }, [masterKey, year, events, masterGroups, setSelectedEvent]);
+
+  // Find participant from context if not in state
+  useEffect(() => {
+    if (!participant && bib && contextResults.length > 0) {
+      participant = contextResults.find(r => r.bib === bib);
+    }
+  }, [bib, contextResults]);
+
+  // Fallback to context for other data
+  if (!results) results = contextResults;
+  if (!eventLogos) eventLogos = contextEventLogos;
+  if (!ads) ads = contextAds;
 
   const goBackToResults = () => navigate(-1);
 
