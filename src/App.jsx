@@ -35,7 +35,7 @@ export default function App() {
             <Route path="/results" element={<ResultsPage />} />
             <Route path="/results/:masterKey/:year" element={<ResultsPage />} />
             <Route path="/results/:masterKey/:year/:raceSlug" element={<ResultsPage />} />
-            <Route path="/results/:masterKey/:year/:raceSlug/bib=:bib" element={<ParticipantPage />} />
+            <Route path="/results/:masterKey/:year/:raceSlug/bib/:bib" element={<ParticipantPage />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/participant" element={<ParticipantPage />} />

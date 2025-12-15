@@ -40,21 +40,32 @@ export default function ResultsPage() {
     });
   };
 
-  const slugify = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/^-+|-+$/g, '');
+  const slugify = (text) => {
+    if (!text || typeof text !== 'string') return 'overall';
+    return text
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  };
 
   // Handle URL params to select event
   useEffect(() => {
     if (!masterKey || !year || events.length === 0) return;
 
-    const groupEventIds = masterGroups[masterKey] || [];
-    const yearEvents = events.filter(e => 
-      groupEventIds.includes(e.id) && e.date.startsWith(year)
-    ).sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Decode and un-slugify for comparison
+    const decodedMaster = decodeURIComponent(masterKey).replace(/-/g, ' ');
+
+    const groupEventIds = Object.entries(masterGroups)
+      .find(([key]) => slugify(key) === masterKey || key.toLowerCase() === decodedMaster)?.[1] || [];
+
+    const yearEvents = events
+      .filter(e => groupEventIds.includes(e.id) && e.date.startsWith(year))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     if (yearEvents.length === 0) return;
 
-    const targetEvent = yearEvents[0]; // Most recent in the year
-
+    const targetEvent = yearEvents[0];
     if (targetEvent.id !== selectedEvent?.id) {
       setSelectedEvent(targetEvent);
     }
@@ -67,7 +78,16 @@ export default function ResultsPage() {
       .sort((a, b) => new Date(b.date) - new Date(a.date))
       .slice(0, 6);
 
-    const goToRaceResults = (event) => setSelectedEvent(event);
+    const goToRaceResults = (event) => {
+      const eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(event.id))?.[0];
+      const eventYear = event.date.split('-')[0];
+      if (eventMaster && eventYear) {
+        const masterSlug = slugify(eventMaster);
+        navigate(`/results/${masterSlug}/${eventYear}`);
+      } else {
+        setSelectedEvent(event); // Fallback, no URL change if no master
+      }
+    };
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-gemini-light-gray to-white pt-32 pb-20 px-4">
@@ -162,9 +182,43 @@ export default function ResultsPage() {
   }
 
   const handleNameClick = (participant) => {
-    const currentRaceSlug = raceSlug || slugify(participant.race_name || ''); // Use participant's race if no slug
-    navigate(`/results/${masterKey}/${year}/${currentRaceSlug}/bib=${participant.bib}`, {
-      state: { participant, selectedEvent, results, eventLogos, ads },
+    let targetEvent = selectedEvent;
+    let eventMaster = masterKey;
+    let eventYear = year;
+
+    if (!targetEvent || !eventMaster || !eventYear) {
+      // Find event from results or events list
+      const participantEventId = participant.event_id || selectedEvent?.id;
+      targetEvent = events.find(e => e.id === participantEventId);
+
+      if (!targetEvent) {
+        alert('Could not determine the race for this participant.');
+        return;
+      }
+
+      eventMaster = Object.entries(masterGroups)
+        .find(([_, ids]) => ids.includes(targetEvent.id))?.[0];
+
+      eventYear = targetEvent.date.split('-')[0];
+
+      if (!eventMaster || !eventYear) {
+        alert('This race is not assigned to a master event yet.');
+        return;
+      }
+
+      setSelectedEvent(targetEvent);
+    }
+
+    // Find the correct race name using race_id from participant
+    const participantRace = races.find(r => r.race_id === participant.race_id);
+    const raceName = participantRace?.race_name || participant.race_name || 'overall';
+
+    const masterSlug = slugify(eventMaster);
+    const raceSlugPart = slugify(raceName);
+
+    navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
+      state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
+      replace: true,
     });
   };
 

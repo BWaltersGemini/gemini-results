@@ -12,10 +12,20 @@ export default function Navbar() {
     setSelectedEvent,
     loading = true,
   } = useContext(RaceContext);
-
   const [searchTerm, setSearchTerm] = useState('');
   const [isListOpen, setIsListOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
+
+  const slugify = (text) => {
+    if (!text || typeof text !== 'string') return 'overall';
+    return text
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  };
 
   useEffect(() => {
     if (selectedEvent) {
@@ -36,11 +46,18 @@ export default function Navbar() {
     : sortedEvents;
 
   const handleEventSelect = (event) => {
-    setSelectedEvent(event);
+    const eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(event.id))?.[0];
+    const eventYear = event.date.split('-')[0];
+    if (eventMaster && eventYear) {
+      const masterSlug = slugify(eventMaster);
+      navigate(`/results/${masterSlug}/${eventYear}`);
+    } else {
+      setSelectedEvent(event);
+      navigate('/results');
+    }
     setSearchTerm(event.name || '');
     setIsListOpen(false);
     setIsMobileMenuOpen(false);
-    navigate('/results');
   };
 
   const handleInputFocus = () => setIsListOpen(true);
@@ -74,7 +91,6 @@ export default function Navbar() {
         <Link to="/" onClick={closeAll}>
           <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
         </Link>
-
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center space-x-8">
           <Link
@@ -101,7 +117,6 @@ export default function Navbar() {
             </a>
           </div>
         </div>
-
         {/* Mobile Hamburger */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -111,7 +126,6 @@ export default function Navbar() {
           {isMobileMenuOpen ? '✕' : '☰'}
         </button>
       </div>
-
       {/* Search Bar - Always visible */}
       <div className="bg-white py-3 border-t border-gray-200">
         <div className="px-4 relative">
@@ -135,7 +149,6 @@ export default function Navbar() {
           </button>
         </div>
       </div>
-
       {/* Event Dropdown List - Fully readable */}
       {isListOpen && (
         <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
@@ -173,7 +186,6 @@ export default function Navbar() {
           )}
         </div>
       )}
-
       {/* Mobile Slide-in Menu */}
       {isMobileMenuOpen && (
         <>
@@ -192,7 +204,6 @@ export default function Navbar() {
                   ✕
                 </button>
               </div>
-
               <div className="space-y-6">
                 <Link
                   to="/results"
@@ -211,7 +222,6 @@ export default function Navbar() {
                 >
                   Contact
                 </Link>
-
                 <div className="pt-6 border-t border-gray-300">
                   <Link
                     to="/admin"

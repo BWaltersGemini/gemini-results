@@ -11,7 +11,7 @@ export default function ParticipantPage() {
   const masterKey = params.masterKey;
   const year = params.year;
   const raceSlug = params.raceSlug;
-  const bib = params.bib; // From /bib=:bib
+  const bib = params.bib; // From /bib/:bib
 
   let { participant, selectedEvent, results, eventLogos, ads } = location.state || {};
 
@@ -55,7 +55,9 @@ export default function ParticipantPage() {
   if (!eventLogos) eventLogos = contextEventLogos;
   if (!ads) ads = contextAds;
 
-  const goBackToResults = () => navigate(-1);
+  const goBackToResults = () => {
+    navigate(`/results/${masterKey}/${year}`);
+  };
 
   if (!participant) {
     return <p className="text-center text-xl text-gemini-red pt-40">No participant data available.</p>;
