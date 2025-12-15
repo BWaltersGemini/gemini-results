@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Robust gender/age group place parsing + all fields)
+// src/api/chronotrackapi.jsx (FINAL — Full bracket support for gender/age group places + country/splits)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -75,13 +75,54 @@ export const fetchRacesForEvent = async (eventId) => {
 
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
+
+  // Step 1: Fetch all brackets
+  let brackets = [];
+  try {
+    const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
+      headers: { Authorization: authHeader },
+      params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+    });
+    brackets = bracketRes.data.event_bracket || [];
+    console.log(`[ChronoTrack] Found ${brackets.length} brackets`);
+  } catch (err) {
+    console.warn('[ChronoTrack] Could not fetch brackets (optional)', err);
+  }
+
+  // Step 2: Fetch bracket results (for gender/age group places)
+  const bracketPlaces = {}; // bib → { gender_place, age_group_place }
+  for (const bracket of brackets) {
+    if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') continue;
+
+    try {
+      const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
+        headers: { Authorization: authHeader },
+        params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+      });
+
+      const results = res.data.bracket_results || [];
+      results.forEach(r => {
+        const bib = r.results_bib;
+        if (!bracketPlaces[bib]) bracketPlaces[bib] = {};
+
+        // Detect type by bracket_tag or name
+        if (bracket.bracket_tag === 'F' || bracket.bracket_name.toLowerCase().includes('female')) {
+          bracketPlaces[bib].gender_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
+        } else if (bracket.bracket_tag === 'M' || bracket.bracket_name.toLowerCase().includes('male')) {
+          bracketPlaces[bib].gender_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
+        } else if (bracket.bracket_type === 'AGE' || bracket.bracket_min_age || bracket.bracket_max_age) {
+          bracketPlaces[bib].age_group_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
+        }
+      });
+    } catch (err) {
+      console.warn(`[ChronoTrack] Failed bracket ${bracket.bracket_id}`, err);
+    }
+  }
+
+  // Step 3: Fetch main overall results
   let allResults = [];
   let page = 1;
   const perPage = 50;
-  let fetched = [];
-
-  console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
-
   do {
     const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
       headers: { Authorization: authHeader },
@@ -92,7 +133,7 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
 
-    fetched = response.data.event_results || [];
+    const fetched = response.data.event_results || [];
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
@@ -100,8 +141,11 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
+  // Step 4: Map + enrich with bracket places
   return allResults.map(r => {
-    // Splits — multiple possible keys
+    const bib = r.results_bib;
+    const places = bracketPlaces[bib] || {};
+
     const rawSplits = r.splits || r.interval_results || r.results_splits || [];
     const splits = Array.isArray(rawSplits)
       ? rawSplits.map(split => ({
@@ -113,35 +157,17 @@ export const fetchResultsForEvent = async (eventId) => {
         }))
       : [];
 
-    // Helper to parse integer safely
-    const parseIntSafe = (value) => {
-      const parsed = parseInt(value, 10);
-      return isNaN(parsed) ? null : parsed;
-    };
-
     return {
       first_name: r.results_first_name || '',
       last_name: r.results_last_name || '',
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
-      place: parseIntSafe(r.results_rank),
-      // Gender place — try multiple possible keys
-      gender_place: parseIntSafe(
-        r.results_primary_bracket_rank ||
-        r.results_gender_place ||
-        r.results_bracket_rank ||
-        r.gender_place
-      ),
-      age_group_name: r.results_primary_bracket_name || r.age_group_name || '',
-      // Age group place — try multiple keys
-      age_group_place: parseIntSafe(
-        r.results_primary_bracket_place ||
-        r.results_age_group_place ||
-        r.age_group_place ||
-        r.bracket_place
-      ),
+      place: r.results_rank ? parseInt(r.results_rank, 10) : null,
+      gender_place: places.gender_place || null,
+      age_group_name: r.results_primary_bracket_name || '',
+      age_group_place: places.age_group_place || null,
       pace: r.results_pace || '',
-      age: parseIntSafe(r.results_age),
+      age: r.results_age ? parseInt(r.results_age, 10) : null,
       gender: r.results_sex || '',
       bib: r.results_bib || '',
       race_id: r.results_race_id || null,
