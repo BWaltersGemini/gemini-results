@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (COMPLETE FINAL — Safe refresh with deduplication + delete/insert, all features)
+// src/pages/AdminPage.jsx (COMPLETE FINAL — Logs raw results, safe refresh, all features)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -71,7 +71,7 @@ export default function AdminPage() {
     localStorage.setItem('chronotrackEnabled', chronotrackEnabled);
   }, [chronotrackEnabled]);
 
-  // Fetch events when logged in
+  // Fetch events
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
       const fetchRaces = async () => {
@@ -211,7 +211,7 @@ export default function AdminPage() {
     alert('All changes saved successfully!');
   };
 
-  // Refresh & Publish — Safe deduplication + delete + insert
+  // Refresh & Publish — Logs first 10 raw results + safe upsert
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) {
       setRefreshStatus('Please select an event first');
@@ -225,9 +225,27 @@ export default function AdminPage() {
     setRefreshStatus('Fetching fresh results from ChronoTrack...');
     try {
       const allResults = await fetchResultsForEvent(selectedEventId);
-      setRefreshStatus(`Fetched ${allResults.length} results. Deduplicating...`);
 
-      // Deduplicate fresh results
+      // LOG RAW RESULTS TO CONSOLE
+      console.log('[Admin Refresh] First 10 raw results from ChronoTrack:');
+      console.table(
+        allResults.slice(0, 10).map(r => ({
+          bib: r.bib,
+          name: `${r.first_name} ${r.last_name}`,
+          chip_time: r.chip_time,
+          place: r.place,
+          gender_place: r.gender_place,
+          age_group_name: r.age_group_name,
+          age_group_place: r.age_group_place,
+          pace: r.pace,
+          age: r.age,
+          gender: r.gender,
+        }))
+      );
+
+      setRefreshStatus(`Fetched ${allResults.length} results. Deduplicating and updating cache...`);
+
+      // Deduplicate
       const uniqueResults = allResults.reduce((acc, current) => {
         const key = [
           (current.bib || '').toString().trim(),
@@ -243,9 +261,7 @@ export default function AdminPage() {
         return acc;
       }, { seen: new Set(), results: [] }).results;
 
-      setRefreshStatus(`Deduplicated to ${uniqueResults.length} unique results. Clearing old cache...`);
-
-      // Delete old results
+      // Delete old
       const { error: deleteError } = await supabase
         .from('chronotrack_results')
         .delete()
@@ -253,9 +269,7 @@ export default function AdminPage() {
 
       if (deleteError) throw deleteError;
 
-      setRefreshStatus('Inserting fresh results...');
-
-      // Insert deduplicated fresh results in chunks
+      // Insert fresh in chunks
       const chunkSize = 200;
       for (let i = 0; i < uniqueResults.length; i += chunkSize) {
         const chunk = uniqueResults.slice(i, i + chunkSize).map(r => ({
