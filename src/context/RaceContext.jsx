@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Calculates gender_place before upsert)
+// src/context/RaceContext.jsx (FINAL — Fixed todayStr scope + gender place calculation)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -77,7 +77,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + calculate gender_place
+  // Load results + calculate gender_place + live polling
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -118,6 +118,7 @@ export function RaceProvider({ children }) {
           console.log(`[Supabase] Loaded ${allCached.length} results from cache`);
         }
 
+        // Calculate todayStr here (fixed scope)
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
         setIsLiveRace(isRaceDay);
@@ -191,11 +192,16 @@ export function RaceProvider({ children }) {
 
     loadResults();
 
+    // Live polling on race day
+    const todayStr = new Date().toISOString().split('T')[0];
     if (selectedEvent.date === todayStr) {
       interval = setInterval(() => loadResults(true), 120000);
+      console.log('[RaceContext] Live polling started');
     }
 
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [selectedEvent]);
 
   return (
