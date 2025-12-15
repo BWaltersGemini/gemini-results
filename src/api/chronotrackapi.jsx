@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Bracket support + bug fix for fetched variable)
+// src/api/chronotrackapi.jsx (FINAL — Correct gender vs age group place assignment)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -86,10 +86,10 @@ export const fetchResultsForEvent = async (eventId) => {
     brackets = bracketRes.data.event_bracket || [];
     console.log(`[ChronoTrack] Found ${brackets.length} brackets`);
   } catch (err) {
-    console.warn('[ChronoTrack] Could not fetch brackets (optional)', err);
+    console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Step 2: Fetch bracket results for gender/age group places
+  // Step 2: Fetch bracket results
   const bracketPlaces = {}; // bib → { gender_place, age_group_place }
   for (const bracket of brackets) {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') continue;
@@ -105,14 +105,13 @@ export const fetchResultsForEvent = async (eventId) => {
         const bib = r.results_bib;
         if (!bracketPlaces[bib]) bracketPlaces[bib] = {};
 
-        // Gender brackets
-        if (bracket.bracket_tag === 'F' || bracket.bracket_name.toLowerCase().includes('female')) {
-          bracketPlaces[bib].gender_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
-        } else if (bracket.bracket_tag === 'M' || bracket.bracket_name.toLowerCase().includes('male')) {
+        // Gender brackets (type SEX)
+        if (bracket.bracket_type === 'SEX') {
           bracketPlaces[bib].gender_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
         }
-        // Age group brackets
-        else if (bracket.bracket_type === 'AGE' || bracket.bracket_min_age || bracket.bracket_max_age) {
+
+        // Age group brackets (type AGE)
+        if (bracket.bracket_type === 'AGE') {
           bracketPlaces[bib].age_group_place = r.results_rank ? parseInt(r.results_rank, 10) : null;
         }
       });
