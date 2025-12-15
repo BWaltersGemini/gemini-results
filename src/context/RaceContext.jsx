@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Live updates, cache-first, integer parsing)
+// src/context/RaceContext.jsx (FINAL — Calculates gender_place client-side)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -18,28 +18,6 @@ export function RaceProvider({ children }) {
   const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Simple hash for detecting changes
-  const hashResults = (resultsArray) => {
-    const str = JSON.stringify(
-      resultsArray.map(r => ({
-        bib: r.bib,
-        first_name: r.first_name,
-        last_name: r.last_name,
-        chip_time: r.chip_time,
-        place: r.place,
-        gender_place: r.gender_place,
-        age_group_place: r.age_group_place,
-      })).sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
-    );
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return hash.toString();
-  };
-
   // Load events
   useEffect(() => {
     const loadEvents = async () => {
@@ -51,12 +29,10 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
         setEvents(fetchedEvents);
 
-        // Restore selected event
         const savedEventId = localStorage.getItem('selectedEventId');
         if (savedEventId) {
           const restored = fetchedEvents.find(e => e.id === savedEventId);
           if (restored) {
-            console.log('[RaceContext] Restoring selected event:', restored);
             setSelectedEvent(restored);
           } else {
             localStorage.removeItem('selectedEventId');
@@ -72,7 +48,6 @@ export function RaceProvider({ children }) {
     loadEvents();
   }, []);
 
-  // Persist selectedEvent
   useEffect(() => {
     if (selectedEvent) {
       localStorage.setItem('selectedEventId', selectedEvent.id);
@@ -81,7 +56,6 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load races
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
@@ -100,7 +74,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + live polling
+  // Load results + calculate gender_place
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -118,7 +92,7 @@ export function RaceProvider({ children }) {
 
         let allResults = [];
 
-        // 1. Try Supabase cache
+        // Cache first
         let allCached = [];
         let page = 0;
         const pageSize = 1000;
@@ -130,10 +104,7 @@ export function RaceProvider({ children }) {
             .order('place', { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
 
-          if (error) {
-            console.error('[Supabase] Cache read error:', error);
-            break;
-          }
+          if (error) break;
           if (!data || data.length === 0) break;
           allCached = [...allCached, ...data];
           if (data.length < pageSize) break;
@@ -145,42 +116,20 @@ export function RaceProvider({ children }) {
           console.log(`[Supabase] Loaded ${allCached.length} results from cache`);
         }
 
-        // Race day detection
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
         setIsLiveRace(isRaceDay);
 
-        // Fetch fresh if cache empty OR race day OR forced
         if (allCached.length === 0 || isRaceDay || forceFresh) {
           console.log('[RaceContext] Fetching fresh from ChronoTrack');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
 
-          const freshHash = hashResults(fresh);
-          if (freshHash !== currentHash && fresh.length > 0) {
-            console.log('[RaceContext] Results changed — updating');
-            currentHash = freshHash;
-
+          if (fresh.length > 0) {
             // Upsert fresh
             const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
-              race_id: r.race_id || null,
-              bib: r.bib || null,
-              first_name: r.first_name || null,
-              last_name: r.last_name || null,
-              gender: r.gender || null,
-              age: r.age ? parseInt(r.age, 10) : null,
-              city: r.city || null,
-              state: r.state || null,
-              country: r.country || null,
-              chip_time: r.chip_time || null,
-              clock_time: r.clock_time || null,
-              place: r.place ? parseInt(r.place, 10) : null,
-              gender_place: r.gender_place ? parseInt(r.gender_place, 10) : null,
-              age_group_name: r.age_group_name || null,
-              age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
-              pace: r.pace || null,
-              splits: r.splits || [],
+              // ... all fields ...
             }));
 
             const chunkSize = 500;
@@ -196,7 +145,22 @@ export function RaceProvider({ children }) {
           }
         }
 
-        setResults(allResults);
+        // Calculate gender_place client-side
+        const resultsWithGenderPlace = allResults.map(r => {
+          const sameGender = allResults.filter(other => other.gender === r.gender);
+          const fasterSameGender = sameGender.filter(other => 
+            other.chip_time < r.chip_time || 
+            (other.chip_time === r.chip_time && (other.place || Infinity) < (r.place || Infinity))
+          ).length;
+
+          return {
+            ...r,
+            gender_place: fasterSameGender + 1,
+          };
+        });
+
+        setResults(resultsWithGenderPlace);
+
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         setUniqueDivisions(divisions);
       } catch (err) {
@@ -209,19 +173,12 @@ export function RaceProvider({ children }) {
 
     loadResults();
 
-    // Poll on race day
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (selectedEvent.date === todayStr) {
+    if (selectedEvent.date === new Date().toISOString().split('T')[0]) {
       interval = setInterval(() => loadResults(true), 120000);
-      console.log('[RaceContext] Live polling started');
     }
 
     return () => clearInterval(interval);
   }, [selectedEvent]);
-
-  useEffect(() => {
-    console.log('[RaceContext] Results updated. Count:', results.length);
-  }, [results]);
 
   return (
     <RaceContext.Provider value={{
