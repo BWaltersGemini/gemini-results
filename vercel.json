@@ -5,21 +5,26 @@
       "destination": "https://api.chronotrack.com/$1"
     },
     {
-      "source": "/:path*/assets/(.*)",
-      "destination": "/assets/$1"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!assets|chrono-api).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/:path*/assets/(.*)",
+      "source": "/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/((?!assets|chrono-api).*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
         }
       ]
     }
