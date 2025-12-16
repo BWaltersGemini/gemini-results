@@ -35,6 +35,10 @@ export default function ParticipantPage() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   };
+  // Move variants up here
+  const variants = [
+    // ... your existing 5 variants unchanged ...
+  ];
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (!participant || !selectedEvent || results.length === 0) {
@@ -172,9 +176,6 @@ export default function ParticipantPage() {
   const overallTotal = raceResults.length;
   const genderTotal = raceResults.filter(r => r.gender === participant.gender).length;
   const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length;
-  const variants = [
-    // ... your existing 5 variants unchanged ...
-  ];
   const shareCertificate = async () => {
     const selectedUrl = previews[selectedPreviewIndex];
     if (!selectedUrl) return;
