@@ -3,11 +3,9 @@ import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-
 export default function ResultsPage() {
   const navigate = useNavigate();
   const { masterKey, year, raceSlug } = useParams(); // Removed bib, as participant route handles it
-
   const {
     selectedEvent,
     events = [],
@@ -20,15 +18,12 @@ export default function ResultsPage() {
     ads,
     setSelectedEvent,
   } = useContext(RaceContext);
-
   // Load masterGroups from localStorage
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const raceRefs = useRef({});
-
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Date TBD';
     const [year, month, day] = dateStr.split('-');
@@ -39,7 +34,6 @@ export default function ResultsPage() {
       year: 'numeric',
     });
   };
-
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text
@@ -48,39 +42,40 @@ export default function ResultsPage() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   };
-
   // Handle URL params to select event
   useEffect(() => {
     if (!masterKey || !year || events.length === 0) return;
-
     // Decode and un-slugify for comparison
     const decodedMaster = decodeURIComponent(masterKey).replace(/-/g, ' ');
-
     const groupEventIds = Object.entries(masterGroups)
       .find(([key]) => slugify(key) === masterKey || key.toLowerCase() === decodedMaster)?.[1] || [];
-
-    const yearEvents = events
+    let yearEvents = events
       .filter(e => groupEventIds.includes(e.id) && e.date.startsWith(year))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-
+    if (yearEvents.length === 0) {
+      // Fallback to finding event by slugify(name) === masterKey
+      yearEvents = events
+        .filter(e => slugify(e.name) === masterKey && e.date.startsWith(year))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
     if (yearEvents.length === 0) return;
-
     const targetEvent = yearEvents[0];
     if (targetEvent.id !== selectedEvent?.id) {
       setSelectedEvent(targetEvent);
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
-
   // —— NO EVENT SELECTED → Recent races landing ——
   if (!selectedEvent) {
     const recentEvents = [...events]
       .filter(e => e.date && new Date(e.date) <= new Date())
       .sort((a, b) => new Date(b.date) - new Date(a.date))
       .slice(0, 6);
-
     const goToRaceResults = (event) => {
-      const eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(event.id))?.[0];
+      let eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(event.id))?.[0];
       const eventYear = event.date.split('-')[0];
+      if (!eventMaster) {
+        eventMaster = event.name; // Fallback to event name as "master"
+      }
       if (eventMaster && eventYear) {
         const masterSlug = slugify(eventMaster);
         navigate(`/results/${masterSlug}/${eventYear}`);
@@ -88,7 +83,6 @@ export default function ResultsPage() {
         setSelectedEvent(event); // Fallback, no URL change if no master
       }
     };
-
     return (
       <div className="min-h-screen bg-gradient-to-b from-gemini-light-gray to-white pt-32 pb-20 px-4">
         <div className="w-full max-w-7xl mx-auto">
@@ -100,7 +94,6 @@ export default function ResultsPage() {
               Select a race below to view live results, leaderboards, and participant details
             </p>
           </div>
-
           {recentEvents.length > 0 ? (
             <>
               <h2 className="text-3xl sm:text-4xl font-bold text-center text-gemini-dark-gray mb-12">
@@ -146,7 +139,6 @@ export default function ResultsPage() {
               <p className="text-lg text-gray-500">Check back soon for live results!</p>
             </div>
           )}
-
           <div className="text-center mt-20">
             <p className="text-lg text-gray-600 mb-6">Or use the search bar above to find any race</p>
             <div className="text-6xl">🔍</div>
@@ -155,7 +147,6 @@ export default function ResultsPage() {
       </div>
     );
   }
-
   // —— FULL RESULTS VIEW ——
   if (!selectedEvent || !selectedEvent.date) {
     return (
@@ -164,15 +155,21 @@ export default function ResultsPage() {
       </div>
     );
   }
-
   const formattedDate = formatDate(selectedEvent.date);
-
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isUpcoming = selectedEvent.date > todayStr;
+  if (isUpcoming || results.length === 0) {
+    return (
+      <div className="text-center py-24">
+        <p className="text-2xl text-gray-600">Results coming soon for {selectedEvent.name} on {formattedDate}!</p>
+      </div>
+    );
+  }
   // Filter races if raceSlug is provided
   let displayedRaces = races;
   if (raceSlug) {
     displayedRaces = races.filter(race => slugify(race.race_name) === raceSlug);
   }
-
   if (displayedRaces.length === 0) {
     return (
       <div className="text-center py-24">
@@ -180,48 +177,37 @@ export default function ResultsPage() {
       </div>
     );
   }
-
   const handleNameClick = (participant) => {
     let targetEvent = selectedEvent;
     let eventMaster = masterKey;
     let eventYear = year;
-
     if (!targetEvent || !eventMaster || !eventYear) {
       // Find event from results or events list
       const participantEventId = participant.event_id || selectedEvent?.id;
       targetEvent = events.find(e => e.id === participantEventId);
-
       if (!targetEvent) {
         alert('Could not determine the race for this participant.');
         return;
       }
-
       eventMaster = Object.entries(masterGroups)
-        .find(([_, ids]) => ids.includes(targetEvent.id))?.[0];
-
+        .find(([_, ids]) => ids.includes(targetEvent.id))?.[0] || targetEvent.name;
       eventYear = targetEvent.date.split('-')[0];
-
       if (!eventMaster || !eventYear) {
         alert('This race is not assigned to a master event yet.');
         return;
       }
-
       setSelectedEvent(targetEvent);
     }
-
     // Find the correct race name using race_id from participant
     const participantRace = races.find(r => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
-
     const masterSlug = slugify(eventMaster);
     const raceSlugPart = slugify(raceName);
-
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
       replace: true,
     });
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gemini-light-gray to-white pt-32 pb-20 px-4">
       <div className="w-full max-w-7xl mx-auto">
@@ -244,7 +230,6 @@ export default function ResultsPage() {
               </h1>
               <p className="text-xl sm:text-2xl text-gray-700">{formattedDate}</p>
             </div>
-
             {displayedRaces.map((race) => {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const searchLower = (filters.search || '').toLowerCase();
@@ -256,19 +241,16 @@ export default function ResultsPage() {
                 const matchesDivision = !filters.division || (r.age_group_name || '') === filters.division;
                 return matchesSearch && matchesGender && matchesDivision;
               });
-
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
               const page = currentPages[race.race_id] || 1;
               const start = (page - 1) * pageSize;
               const display = sorted.slice(start, start + pageSize);
               const totalPages = Math.ceil(sorted.length / pageSize);
-
               return (
                 <section key={race.race_id} ref={el => (raceRefs.current[race.race_id] = el)} className="mb-20 scroll-mt-32">
                   <h3 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center text-gemini-dark-gray mb-8 md:mb-10">
                     {race.race_name}
                   </h3>
-
                   {/* Filters */}
                   <div className="w-full bg-white rounded-2xl shadow-lg p-6 mb-8 md:mb-10">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -318,7 +300,6 @@ export default function ResultsPage() {
                       </button>
                     )}
                   </div>
-
                   {/* Results Table — Responsive */}
                   <div className="w-full">
                     <div className="md:hidden">
@@ -328,7 +309,6 @@ export default function ResultsPage() {
                       <ResultsTable data={display} onNameClick={handleNameClick} isMobile={false} />
                     </div>
                   </div>
-
                   {/* Pagination */}
                   {sorted.length > pageSize && (
                     <div className="text-center mt-10 md:mt-12">
@@ -362,7 +342,6 @@ export default function ResultsPage() {
                 </section>
               );
             })}
-
             {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20 w-full">
