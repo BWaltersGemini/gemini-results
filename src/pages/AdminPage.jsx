@@ -223,7 +223,7 @@ export default function AdminPage() {
 
       const genderPlaceMap = {};
       ['M', 'F'].forEach(gender => {
-        const genderResults = rawResults.filter(r => r.gender === gender).sort((a, b) => a.chip_time - b.chip_time);
+        const genderResults = rawResults.filter(r => r.gender === gender).sort((a, b) => parseTime(a.chip_time) - parseTime(b.chip_time));
         genderResults.forEach((r, index) => {
           genderPlaceMap[r.entry_id] = index + 1;
         });
@@ -255,7 +255,7 @@ export default function AdminPage() {
         const chunk = toUpsert.slice(i, i + chunkSize);
         const { error } = await supabase
           .from('chronotrack_results')
-          .upsert(chunk, { ignoreDuplicates: true });
+          .upsert(chunk, { onConflict: 'event_id, bib, first_name, last_name, chip_time', ignoreDuplicates: false });
         if (error) console.error('[Supabase] Upsert error:', error);
       }
 
@@ -264,6 +264,15 @@ export default function AdminPage() {
       console.error('Refresh failed:', err);
       setRefreshStatus('Error: Failed to refresh results.');
     }
+  };
+
+  const parseTime = (t) => {
+    if (!t) return Infinity;
+    const parts = t.split(':').map(Number);
+    const hours = parts.length > 2 ? parts[0] : 0;
+    const minutes = parts.length > 2 ? parts[1] : parts[0];
+    const seconds = parts.length > 2 ? parts[2] : parts[1];
+    return hours * 3600 + minutes * 60 + seconds;
   };
 
   return (
