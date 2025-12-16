@@ -226,6 +226,10 @@ export default function AdminPage() {
         pace: r.pace || null,
         splits: r.splits || [],
       }));
+      // Deduplicate toInsert based on unique key
+      const uniqueResults = [...new Map(toInsert.map(item => 
+        [`${item.event_id}-${item.bib}-${item.first_name}-${item.last_name}-${item.chip_time}`, item]
+      )).values()];
       // Purge old data for this event
       const { error: deleteError } = await supabase
         .from('chronotrack_results')
@@ -235,10 +239,10 @@ export default function AdminPage() {
         console.error('[Supabase] Delete error:', deleteError);
         throw deleteError;
       }
-      // Insert fresh data
+      // Insert fresh unique data
       const chunkSize = 500;
-      for (let i = 0; i < toInsert.length; i += chunkSize) {
-        const chunk = toInsert.slice(i, i + chunkSize);
+      for (let i = 0; i < uniqueResults.length; i += chunkSize) {
+        const chunk = uniqueResults.slice(i, i + chunkSize);
         const { error } = await supabase
           .from('chronotrack_results')
           .insert(chunk);
