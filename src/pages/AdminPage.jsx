@@ -3,15 +3,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../lib/supabase';
-
 export default function AdminPage() {
   const navigate = useNavigate();
-
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('adminLoggedIn') === 'true');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
-
   const [editedEvents, setEditedEvents] = useState(() => {
     const stored = localStorage.getItem('editedEvents');
     return stored ? JSON.parse(stored) : {};
@@ -57,7 +54,6 @@ export default function AdminPage() {
   const [selectedEventId, setSelectedEventId] = useState('');
   const [refreshStatus, setRefreshStatus] = useState('');
   const [activeTab, setActiveTab] = useState('event'); // Tabs: 'event' for Event Management, 'website' for Website Management
-
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Date TBD';
     const parts = dateStr.split('-');
@@ -66,12 +62,10 @@ export default function AdminPage() {
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
-
   // Persist ChronoTrack toggle
   useEffect(() => {
     localStorage.setItem('chronotrackEnabled', chronotrackEnabled);
   }, [chronotrackEnabled]);
-
   // Fetch events
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
@@ -92,7 +86,6 @@ export default function AdminPage() {
       setLoading(false);
     }
   }, [isLoggedIn, chronotrackEnabled]);
-
   const handleLogin = (e) => {
     e.preventDefault();
     if (username === 'G3M1N1_1912' && password === 'Br@nd0n81') {
@@ -103,14 +96,12 @@ export default function AdminPage() {
       setError('Invalid credentials');
     }
   };
-
   const toggleExpandEvent = (eventId) => {
     setExpandedEvents(prev => ({ ...prev, [eventId]: !prev[eventId] }));
     if (!expandedEvents[eventId] && chronotrackEnabled) {
       fetchRacesForEventId(eventId);
     }
   };
-
   const fetchRacesForEventId = async (eventId) => {
     try {
       const races = await fetchRacesForEvent(eventId);
@@ -119,14 +110,12 @@ export default function AdminPage() {
       console.error('Failed to fetch races:', err);
     }
   };
-
   const handleEditName = (id, value) => {
     setEditedEvents(prev => ({
       ...prev,
       [id]: { ...prev[id], name: value },
     }));
   };
-
   const handleEditRaceName = (eventId, raceId, value) => {
     setEditedEvents(prev => ({
       ...prev,
@@ -136,14 +125,12 @@ export default function AdminPage() {
       },
     }));
   };
-
   const toggleEventVisibility = (eventId) => {
     setHiddenEvents(prev => prev.includes(eventId)
       ? prev.filter(id => id !== eventId)
       : [...prev, eventId]
     );
   };
-
   const toggleRaceVisibility = (eventId, raceId) => {
     setHiddenRaces(prev => {
       const races = prev[eventId] || [];
@@ -155,18 +142,15 @@ export default function AdminPage() {
       };
     });
   };
-
   const toggleMasterVisibility = (masterKey) => {
     setHiddenMasters(prev => prev.includes(masterKey)
       ? prev.filter(k => k !== masterKey)
       : [...prev, masterKey]
     );
   };
-
   const toggleShowAds = (masterKey) => {
     setShowAdsPerMaster(prev => ({ ...prev, [masterKey]: !prev[masterKey] }));
   };
-
   const assignToMaster = (eventId, masterKey) => {
     if (!masterKey) return;
     const newGroups = { ...masterGroups };
@@ -179,7 +163,6 @@ export default function AdminPage() {
     setMasterGroups(newGroups);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
   };
-
   const handleFileUpload = (e, type, id) => {
     const files = Array.from(e.target.files);
     files.forEach(file => {
@@ -194,7 +177,6 @@ export default function AdminPage() {
       reader.readAsDataURL(file);
     });
   };
-
   const handleSaveChanges = () => {
     localStorage.setItem('editedEvents', JSON.stringify(editedEvents));
     localStorage.setItem('hiddenEvents', JSON.stringify(hiddenEvents));
@@ -207,20 +189,16 @@ export default function AdminPage() {
     localStorage.setItem('apiFrequency', apiFrequency);
     alert('All changes saved successfully!');
   };
-
   const handleFrequencyChange = (e) => {
     const value = parseInt(e.target.value, 10);
     if (value > 0) setApiFrequency(value);
   };
-
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) return;
     setRefreshStatus('Refreshing...');
-
     try {
       const rawResults = await fetchResultsForEvent(selectedEventId);
       console.log('Raw Results:', rawResults);
-
       const genderPlaceMap = {};
       ['M', 'F'].forEach(gender => {
         const genderResults = rawResults.filter(r => r.gender === gender).sort((a, b) => parseTime(a.chip_time) - parseTime(b.chip_time));
@@ -228,8 +206,7 @@ export default function AdminPage() {
           genderPlaceMap[r.entry_id] = index + 1;
         });
       });
-
-      const toUpsert = rawResults.map(r => ({
+      const toInsert = rawResults.map(r => ({
         event_id: selectedEventId.toString(),
         race_id: r.race_id || null,
         bib: r.bib || null,
@@ -249,23 +226,33 @@ export default function AdminPage() {
         pace: r.pace || null,
         splits: r.splits || [],
       }));
-
+      // Purge old data for this event
+      const { error: deleteError } = await supabase
+        .from('chronotrack_results')
+        .delete()
+        .eq('event_id', selectedEventId.toString());
+      if (deleteError) {
+        console.error('[Supabase] Delete error:', deleteError);
+        throw deleteError;
+      }
+      // Insert fresh data
       const chunkSize = 500;
-      for (let i = 0; i < toUpsert.length; i += chunkSize) {
-        const chunk = toUpsert.slice(i, i + chunkSize);
+      for (let i = 0; i < toInsert.length; i += chunkSize) {
+        const chunk = toInsert.slice(i, i + chunkSize);
         const { error } = await supabase
           .from('chronotrack_results')
-          .upsert(chunk, { onConflict: 'event_id,bib,first_name,last_name,chip_time', ignoreDuplicates: false });
-        if (error) console.error('[Supabase] Upsert error:', error);
+          .insert(chunk);
+        if (error) {
+          console.error('[Supabase] Insert error:', error);
+          throw error;
+        }
       }
-
       setRefreshStatus('Success: Results refreshed and published!');
     } catch (err) {
       console.error('Refresh failed:', err);
       setRefreshStatus('Error: Failed to refresh results.');
     }
   };
-
   const parseTime = (t) => {
     if (!t) return Infinity;
     const parts = t.split(':').map(Number);
@@ -274,7 +261,6 @@ export default function AdminPage() {
     const seconds = parts.length > 2 ? parts[2] : parts[1];
     return hours * 3600 + minutes * 60 + seconds;
   };
-
   return (
     <div className="min-h-screen bg-gemini-light-gray pt-32 py-12">
       <div className="max-w-7xl mx-auto px-6">
@@ -305,7 +291,6 @@ export default function AdminPage() {
         ) : (
           <>
             <h1 className="text-4xl font-bold mb-12 text-center text-gemini-dark-gray">Admin Dashboard</h1>
-
             {/* Tabs */}
             <div className="flex mb-8">
               <button
@@ -321,7 +306,6 @@ export default function AdminPage() {
                 Website Management
               </button>
             </div>
-
             {/* Event Management Tab */}
             {activeTab === 'event' && (
               <>
@@ -331,7 +315,6 @@ export default function AdminPage() {
                 >
                   Manage Master Events
                 </button>
-
                 {/* ChronoTrack Toggle */}
                 <div className="flex items-center mb-8">
                   <input
@@ -342,7 +325,6 @@ export default function AdminPage() {
                   />
                   <span>Enable ChronoTrack Integration</span>
                 </div>
-
                 {/* Refresh Results */}
                 <section className="mb-12">
                   <h2 className="text-3xl font-bold mb-6">Refresh Event Results</h2>
@@ -374,7 +356,6 @@ export default function AdminPage() {
                     </p>
                   )}
                 </section>
-
                 {/* Manage Events */}
                 <section className="mb-12">
                   <h2 className="text-3xl font-bold mb-6">Manage Events</h2>
