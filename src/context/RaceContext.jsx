@@ -1,7 +1,7 @@
 // src/context/RaceContext.jsx (FINAL — Fixed todayStr scope + gender place calculation)
 import { createContext, useState, useEffect } from 'react';
-import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
-import { supabase } from '../supabaseClient';
+import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';  // Updated to .cjs
+import { supabase } from '../supabaseClient.js';
 
 export const RaceContext = createContext();
 
@@ -132,7 +132,7 @@ export function RaceProvider({ children }) {
             // Calculate gender_place
             const freshWithGenderPlace = fresh.map(r => {
               const sameGender = fresh.filter(other => other.gender === r.gender);
-              const fasterSameGender = sameGender.filter(other => 
+              const fasterSameGender = sameGender.filter(other =>
                 other.chip_time < r.chip_time ||
                 (other.chip_time === r.chip_time && (other.place || Infinity) < (r.place || Infinity))
               ).length;

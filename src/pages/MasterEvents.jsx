@@ -1,7 +1,7 @@
 // src/pages/MasterEvents.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi';
+import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.cjs';  // Updated to .cjs
 
 export default function MasterEvents() {
   const navigate = useNavigate();
@@ -16,7 +16,6 @@ export default function MasterEvents() {
   const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
   const [chronoEvents, setChronoEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showBackToTop, setShowBackToTop] = useState(false);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Date TBD';
@@ -66,14 +65,6 @@ export default function MasterEvents() {
       fetchData();
     }
   }, [isLoggedIn]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setShowBackToTop(window.scrollY > 300);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -128,12 +119,8 @@ export default function MasterEvents() {
     alert('Changes saved!');
   };
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   return (
-    <div className="min-h-screen bg-gemini-light-gray pt-32 py-12"> {/* Increased pt-28 to pt-32 for more top padding */}
+    <div className="min-h-screen bg-gemini-light-gray pt-32 py-12">
       <div className="max-w-7xl mx-auto px-6">
         {!isLoggedIn ? (
           <form onSubmit={handleLogin} className="max-w-md mx-auto bg-white p-8 rounded-lg shadow">
@@ -168,12 +155,6 @@ export default function MasterEvents() {
               Back to Admin Page
             </button>
             <h1 className="text-4xl font-bold mb-12 text-center text-gemini-dark-gray">Manage Master Events</h1>
-
-            {/* Save Changes at the top */}
-            <button onClick={handleSaveChanges} className="mt-4 bg-gemini-blue text-white px-6 py-3 rounded-xl hover:bg-gemini-blue/90">
-              Save Changes
-            </button>
-
             {loading && <p className="text-center text-2xl">Loading events...</p>}
             <section className="mb-12">
               {Object.keys(masterGroups).sort().map((masterKey) => {
@@ -228,17 +209,10 @@ export default function MasterEvents() {
                   </div>
                 );
               })}
-            </section>
-
-            {/* Back to Top Arrow */}
-            {showBackToTop && (
-              <button
-                onClick={scrollToTop}
-                className="fixed bottom-8 right-8 bg-gemini-blue text-white px-4 py-3 rounded-full shadow-lg hover:bg-gemini-blue/90 transition"
-              >
-                ↑ Top
+              <button onClick={handleSaveChanges} className="mt-4 bg-gemini-blue text-white px-6 py-3 rounded-xl hover:bg-gemini-blue/90">
+                Save Changes
               </button>
-            )}
+            </section>
           </>
         )}
       </div>

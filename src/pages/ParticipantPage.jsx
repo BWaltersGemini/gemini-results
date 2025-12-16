@@ -2,7 +2,7 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabaseClient.js';
 export default function ParticipantPage() {
   const location = useLocation();
   const navigate = useNavigate();

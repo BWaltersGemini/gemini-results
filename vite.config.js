@@ -1,21 +1,14 @@
 // vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { viteCommonjs } from '@originjs/vite-plugin-commonjs';  // Add this import
+import { viteCommonjs } from '@originjs/vite-plugin-commonjs';  // Add this
 
 export default defineConfig({
   plugins: [
-    viteCommonjs(),  // Add this before react()
-    react({
-      babel: {
-        presets: ['@babel/preset-env', '@babel/preset-react']
-      }
-    })
+    viteCommonjs(),  // Add first
+    react()
   ],
   base: '/',
-  build: {
-    target: 'es2015'  // Helps with older browser compatibility
-  },
   server: {
     proxy: {
       '/runsignup-api': {
