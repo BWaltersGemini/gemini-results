@@ -132,7 +132,7 @@ export default function ParticipantPage() {
   const overallTotal = raceResults.length;
   const genderTotal = raceResults.filter(r => r.gender === participant.gender).length;
   const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length;
-  console.log('Rendering participant page with data:', { participant, selectedEvent, resultsLength: results.length });
+  console.log('Rendering participant page with data:', JSON.stringify({ participant, selectedEvent, resultsLength: results.length }, null, 2));  
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
