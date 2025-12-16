@@ -111,7 +111,7 @@ export default function ParticipantPage() {
   const goBackToResults = () => navigate(-1);
   if (contextLoading || loading) {
     return (
-      <div className="text-center py-20 pt-40">
+      <div className="text-center py-20 pt-1">
         <p className="text-3xl text-gemini-dark-gray mb-4">Loading Participant...</p>
         <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-gemini-blue mx-auto"></div>
       </div>
@@ -119,7 +119,7 @@ export default function ParticipantPage() {
   }
   if (fetchError || !participant) {
     return (
-      <div className="text-center py-20 pt-40">
+      <div className="text-center py-20 pt-1">
         <p className="text-2xl text-gemini-red mb-4">{fetchError || 'No participant data available.'}</p>
         <button onClick={goBackToResults} className="bg-gemini-blue text-white px-6 py-3 rounded-lg hover:bg-gemini-blue/90">
           Back to Results
@@ -134,7 +134,7 @@ export default function ParticipantPage() {
   const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length;
   console.log('Rendering participant page with data:', { participant, selectedEvent, resultsLength: results.length });
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-20 md:pt-40 py-16">
+    <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-20 md:pt-1 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
         {/* Race Header */}
         <div className="text-center mb-8">
