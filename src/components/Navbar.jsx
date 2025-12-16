@@ -2,7 +2,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
-
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -15,9 +14,7 @@ export default function Navbar() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isListOpen, setIsListOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text
@@ -26,64 +23,51 @@ export default function Navbar() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   };
-
   useEffect(() => {
     if (selectedEvent) {
       setSearchTerm(selectedEvent.name || '');
     }
   }, [selectedEvent]);
-
   const sortedEvents = [...events].sort((a, b) => {
     const dateA = new Date(a.date);
     const dateB = new Date(b.date);
     return dateB - dateA;
   });
-
   const filtered = searchTerm
     ? sortedEvents.filter((event) =>
         event.name?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : sortedEvents;
-
   const handleEventSelect = (event) => {
-    const eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(event.id))?.[0];
+    const eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(event.id))?.[0] || event.name;
     const eventYear = event.date.split('-')[0];
-    if (eventMaster && eventYear) {
-      const masterSlug = slugify(eventMaster);
-      navigate(`/results/${masterSlug}/${eventYear}`);
-    } else {
-      setSelectedEvent(event);
-      navigate('/results');
-    }
+    const masterSlug = slugify(eventMaster);
+    setSelectedEvent(event);
+    navigate(`/results/${masterSlug}/${eventYear}`);
     setSearchTerm(event.name || '');
     setIsListOpen(false);
     setIsMobileMenuOpen(false);
   };
-
   const handleInputFocus = () => setIsListOpen(true);
-
   const toggleDropdown = () => setIsListOpen((prev) => !prev);
-
   const handleToggleOpen = () => {
     if (!isListOpen) {
       setSearchTerm('');
     }
     toggleDropdown();
   };
-
   const handleResultsClick = (e) => {
-    if (location.pathname === '/results') {
+    if (location.pathname.startsWith('/results')) {
       e.preventDefault();
       setSelectedEvent(null);
       setSearchTerm('');
+      navigate('/results');
     }
   };
-
   const closeAll = () => {
     setIsListOpen(false);
     setIsMobileMenuOpen(false);
   };
-
   return (
     <nav className="fixed top-0 w-full bg-white shadow-md z-50">
       {/* Top Bar: Logo + Desktop Links + Mobile Hamburger */}
