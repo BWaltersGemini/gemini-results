@@ -112,35 +112,10 @@ export default function ParticipantPage() {
     };
     fetchDataIfMissing();
   }, [bib, masterKey, year, events, masterGroups, editedEvents, participant, selectedEvent, results, contextResults, contextLoading]);
-  const goBackToResults = () => navigate(-1);
-  if (contextLoading || loading) {
-    return (
-      <div className="text-center py-20 pt-40">
-        <p className="text-3xl text-gemini-dark-gray mb-4">Loading Participant...</p>
-        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-gemini-blue mx-auto"></div>
-      </div>
-    );
-  }
-  if (fetchError || !participant) {
-    return (
-      <div className="text-center py-20 pt-40">
-        <p className="text-2xl text-gemini-red mb-4">{fetchError || 'No participant data available.'}</p>
-        <button onClick={goBackToResults} className="bg-gemini-blue text-white px-6 py-3 rounded-lg hover:bg-gemini-blue/90">
-          Back to Results
-        </button>
-      </div>
-    );
-  }
-  // Calculate totals
-  const raceResults = results.filter(r => r.race_id === participant.race_id);
-  const overallTotal = raceResults.length;
-  const genderTotal = raceResults.filter(r => r.gender === participant.gender).length;
-  const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length;
-  const variants = [
-    // ... your existing 5 variants unchanged ...
-  ];
+  // Move this useEffect up here (before any early returns) to avoid conditional hook calls
   useEffect(() => {
     const generatePreviews = async () => {
+      if (!participant || !selectedEvent) return; // Guard to skip if data not ready
       const previewUrls = [];
       for (let i = 0; i < variants.length; i++) {
         const certificate = document.getElementById(`certificate-variant-${i}`);
@@ -171,8 +146,35 @@ export default function ParticipantPage() {
       console.log('Generated previews length:', previewUrls.length);
       setPreviews(previewUrls);
     };
-    setTimeout(generatePreviews, 500); // Delay to ensure DOM ready
+    setTimeout(generatePreviews, 1000); // Increased delay for mobile reliability
   }, [participant, selectedEvent]);
+  const goBackToResults = () => navigate(-1);
+  if (contextLoading || loading) {
+    return (
+      <div className="text-center py-20 pt-40">
+        <p className="text-3xl text-gemini-dark-gray mb-4">Loading Participant...</p>
+        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-gemini-blue mx-auto"></div>
+      </div>
+    );
+  }
+  if (fetchError || !participant) {
+    return (
+      <div className="text-center py-20 pt-40">
+        <p className="text-2xl text-gemini-red mb-4">{fetchError || 'No participant data available.'}</p>
+        <button onClick={goBackToResults} className="bg-gemini-blue text-white px-6 py-3 rounded-lg hover:bg-gemini-blue/90">
+          Back to Results
+        </button>
+      </div>
+    );
+  }
+  // Calculate totals
+  const raceResults = results.filter(r => r.race_id === participant.race_id);
+  const overallTotal = raceResults.length;
+  const genderTotal = raceResults.filter(r => r.gender === participant.gender).length;
+  const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length;
+  const variants = [
+    // ... your existing 5 variants unchanged ...
+  ];
   const shareCertificate = async () => {
     const selectedUrl = previews[selectedPreviewIndex];
     if (!selectedUrl) return;
@@ -353,7 +355,7 @@ export default function ParticipantPage() {
           <div
             key={index}
             id={`certificate-variant-${index}`}
-            style={{ ...variant.containerStyle, display: 'none' }}
+            style={{ ...variant.containerStyle, position: 'absolute', left: '-9999px', top: '-9999px' }}
           >
             {eventLogos[selectedEvent?.id] && (
               <img
