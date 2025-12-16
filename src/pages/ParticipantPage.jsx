@@ -38,6 +38,10 @@ export default function ParticipantPage() {
         setLoading(true);
         setFetchError(null);
         try {
+          if (events.length === 0) {
+            console.log('Events not loaded yet, waiting...');
+            return; // Will re-run when events load due to dependency
+          }
           // Find event
           let groupEventIds = masterGroups[masterKey] || [];
           if (groupEventIds.length === 0) {
