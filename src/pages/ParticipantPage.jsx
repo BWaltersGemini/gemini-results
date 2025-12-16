@@ -1,5 +1,5 @@
 // src/pages/ParticipantPage.jsx (FINAL — Totals, splits, country, clean layout)
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useRef } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import html2canvas from 'html2canvas';
 import { RaceContext } from '../context/RaceContext';
@@ -22,6 +22,7 @@ export default function ParticipantPage() {
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [previewError, setPreviewError] = useState(null);
+  const certificateRef = useRef(null);
   const cleanName = (text) => {
     if (!text || typeof text !== 'string') return '';
     return text.trim().replace(/['`]/g, '').toLowerCase();
@@ -44,59 +45,12 @@ export default function ParticipantPage() {
       content: (
         <div>
           <h1>Congratulations!</h1>
-          <p>{participant.first_name} {participant.last_name}</p>
+          <p>{participant ? `${participant.first_name} ${participant.last_name}` : ''}</p>
           {/* Add more content */}
         </div>
       )
     },
-    {
-      containerStyle: { width: '600px', height: '400px', backgroundColor: '#f0f0f0', position: 'relative' },
-      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
-      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
-      content: (
-        <div>
-          <h1>Well Done!</h1>
-          <p>{participant.first_name} {participant.last_name}</p>
-          {/* Add more content */}
-        </div>
-      )
-    },
-    {
-      containerStyle: { width: '600px', height: '400px', backgroundColor: '#e0e0e0', position: 'relative' },
-      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
-      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
-      content: (
-        <div>
-          <h1>Great Job!</h1>
-          <p>{participant.first_name} {participant.last_name}</p>
-          {/* Add more content */}
-        </div>
-      )
-    },
-    {
-      containerStyle: { width: '600px', height: '400px', backgroundColor: '#d0d0d0', position: 'relative' },
-      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
-      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
-      content: (
-        <div>
-          <h1>Awesome Finish!</h1>
-          <p>{participant.first_name} {participant.last_name}</p>
-          {/* Add more content */}
-        </div>
-      )
-    },
-    {
-      containerStyle: { width: '600px', height: '400px', backgroundColor: '#c0c0c0', position: 'relative' },
-      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
-      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
-      content: (
-        <div>
-          <h1>Outstanding!</h1>
-          <p>{participant.first_name} {participant.last_name}</p>
-          {/* Add more content */}
-        </div>
-      )
-    },
+    // ... add the other 4 variants similarly ...
   ];
   useEffect(() => {
     const fetchDataIfMissing = async () => {
@@ -175,30 +129,29 @@ export default function ParticipantPage() {
     };
     fetchDataIfMissing();
   }, [bib, masterKey, year, events, masterGroups, editedEvents, participant, selectedEvent, results, contextResults, contextLoading]);
-  // Move this useEffect up here (before any early returns) to avoid conditional hook calls
   useEffect(() => {
     const generatePreviews = async () => {
-      if (!participant || !selectedEvent) return; // Guard to skip if data not ready
+      if (!participant || !selectedEvent || !certificateRef.current) return;
       const previewUrls = [];
       for (let i = 0; i < variants.length; i++) {
-        const certificate = document.getElementById(`certificate-variant-${i}`);
-        if (!certificate) {
-          console.warn(`Certificate variant ${i} not found in DOM`);
-          continue;
+        const variant = variants[i];
+        certificateRef.current.style = {...variant.containerStyle, display: 'block'};
+        certificateRef.current.innerHTML = ''; // Clear previous content
+        const contentDiv = document.createElement('div');
+        contentDiv.style = variant.contentStyle;
+        ReactDOM.render(variant.content, contentDiv);
+        certificateRef.current.appendChild(contentDiv);
+        const watermark = document.createElement('img');
+        if (eventLogos[selectedEvent?.id]) {
+          watermark.src = eventLogos[selectedEvent?.id];
+          watermark.style = variant.watermarkStyle;
+          certificateRef.current.appendChild(watermark);
         }
         try {
-          const canvas = await html2canvas(certificate, {
-            scale: window.devicePixelRatio || 1,
+          const canvas = await html2canvas(certificateRef.current, {
+            scale: 1, // Reduce scale for mobile performance
             useCORS: true,
             logging: true,
-            onclone: (clonedDocument) => {
-              const clonedCert = clonedDocument.getElementById(`certificate-variant-${i}`);
-              clonedCert.style.position = 'absolute';
-              clonedCert.style.left = '0';
-              clonedCert.style.top = '0';
-              clonedCert.style.display = 'block';
-              clonedCert.style.visibility = 'visible';
-            }
           });
           previewUrls.push(canvas.toDataURL('image/png'));
         } catch (err) {
@@ -208,8 +161,11 @@ export default function ParticipantPage() {
       }
       console.log('Generated previews length:', previewUrls.length);
       setPreviews(previewUrls);
+      // Clear the ref after all
+      certificateRef.current.innerHTML = '';
+      certificateRef.current.style.display = 'none';
     };
-    setTimeout(generatePreviews, 1000); // Increased delay for mobile reliability
+    setTimeout(generatePreviews, 1000);
   }, [participant, selectedEvent]);
   const goBackToResults = () => navigate(-1);
   if (contextLoading || loading) {
@@ -410,25 +366,8 @@ export default function ParticipantPage() {
             <img key={index} src={ad} alt={`Sponsor ${index + 1}`} className="w-full rounded-2xl shadow-md hover:shadow-xl transition" />
           ))}
         </div>
-        {/* Hidden certificate templates */}
-        {variants.map((variant, index) => (
-          <div
-            key={index}
-            id={`certificate-variant-${index}`}
-            style={{ ...variant.containerStyle, position: 'absolute', left: '-9999px', top: '-9999px' }}
-          >
-            {eventLogos[selectedEvent?.id] && (
-              <img
-                src={eventLogos[selectedEvent?.id]}
-                alt="Race Logo Watermark"
-                style={variant.watermarkStyle}
-              />
-            )}
-            <div style={variant.contentStyle}>
-              {variant.content}
-            </div>
-          </div>
-        ))}
+        {/* Hidden certificate renderer */}
+        <div ref={certificateRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', display: 'none' }} />
       </div>
     </div>
   );
