@@ -5,7 +5,7 @@
       "destination": "https://api.chronotrack.com/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets|chrono-api).*)",
       "destination": "/index.html"
     }
   ],
