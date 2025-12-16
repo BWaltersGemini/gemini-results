@@ -3,64 +3,104 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import html2canvas from 'html2canvas';
 import { RaceContext } from '../context/RaceContext';
+import { supabase } from '../supabaseClient';
 
 export default function ParticipantPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
-  const masterKey = params.masterKey;
-  const year = params.year;
-  const raceSlug = params.raceSlug;
-  const bib = params.bib; // From /bib/:bib
-
-  let { participant, selectedEvent, results, eventLogos, ads } = location.state || {};
-
-  const { 
-    events = [], 
-    setSelectedEvent, 
-    results: contextResults = [], 
-    eventLogos: contextEventLogos = {}, 
-    ads: contextAds = [] 
-  } = useContext(RaceContext);
-
+  const { bib, masterKey, year, raceSlug } = params;
+  const { events, results: contextResults, eventLogos, ads } = useContext(RaceContext);
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-
+  const initialState = location.state || {};
+  const [participant, setParticipant] = useState(initialState.participant);
+  const [selectedEvent, setSelectedEvent] = useState(initialState.selectedEvent);
+  const [results, setResults] = useState(initialState.results || contextResults);
   const [previews, setPreviews] = useState([]);
   const [selectedPreviewIndex, setSelectedPreviewIndex] = useState(0);
   const [showSplits, setShowSplits] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
 
-  // Select event if no state provided (direct URL access)
-  useEffect(() => {
-    if (!selectedEvent && masterKey && year) {
-      const groupEventIds = masterGroups[masterKey] || [];
-      const yearEvents = events.filter(e => 
-        groupEventIds.includes(e.id) && e.date.startsWith(year)
-      ).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-      if (yearEvents.length > 0) {
-        setSelectedEvent(yearEvents[0]);
-      }
-    }
-  }, [masterKey, year, events, masterGroups, setSelectedEvent]);
-
-  // Find participant from context if not in state
-  useEffect(() => {
-    if (!participant && bib && contextResults.length > 0) {
-      participant = contextResults.find(r => r.bib === bib);
-    }
-  }, [bib, contextResults]);
-
-  // Fallback to context for other data
-  if (!results) results = contextResults;
-  if (!eventLogos) eventLogos = contextEventLogos;
-  if (!ads) ads = contextAds;
-
-  const goBackToResults = () => {
-    navigate(`/results/${masterKey}/${year}`);
+  const slugify = (text) => {
+    if (!text || typeof text !== 'string') return 'overall';
+    return text
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   };
 
-  if (!participant) {
-    return <p className="text-center text-xl text-gemini-red pt-40">No participant data available.</p>;
+  useEffect(() => {
+    const fetchDataIfMissing = async () => {
+      if (!participant || !selectedEvent || results.length === 0) {
+        setLoading(true);
+        setFetchError(null);
+        try {
+          // Find event
+          let groupEventIds = masterGroups[masterKey] || [];
+          if (groupEventIds.length === 0) {
+            // Fallback if no master group
+            groupEventIds = events.filter(e => slugify(e.name) === masterKey).map(e => e.id);
+          }
+          const yearEvents = events
+            .filter(e => groupEventIds.includes(e.id) && e.date.startsWith(year))
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+          if (yearEvents.length === 0) {
+            throw new Error('No matching event found.');
+          }
+          const targetEvent = yearEvents[0];
+          setSelectedEvent(targetEvent);
+
+          // Fetch participant
+          const { data: participantData, error: pError } = await supabase
+            .from('chronotrack_results')
+            .select('*')
+            .eq('event_id', targetEvent.id)
+            .eq('bib', bib)
+            .single();
+          if (pError || !participantData) {
+            throw new Error('Participant not found.');
+          }
+          setParticipant(participantData);
+
+          // Fetch results if needed
+          if (results.length === 0) {
+            let allResults = [];
+            let page = 0;
+            const pageSize = 1000;
+            while (true) {
+              const { data, error } = await supabase
+                .from('chronotrack_results')
+                .select('*')
+                .eq('event_id', targetEvent.id)
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+              if (error) throw error;
+              if (!data || data.length === 0) break;
+              allResults = [...allResults, ...data];
+              if (data.length < pageSize) break;
+              page++;
+            }
+            setResults(allResults);
+          }
+        } catch (err) {
+          setFetchError(err.message || 'Failed to load participant data.');
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchDataIfMissing();
+  }, [bib, masterKey, year, events, masterGroups, participant, selectedEvent, results, contextResults]);
+
+  const goBackToResults = () => navigate(-1);
+
+  if (loading) {
+    return <p className="text-center text-xl text-gemini-blue pt-40">Loading participant data...</p>;
+  }
+
+  if (fetchError || !participant) {
+    return <p className="text-center text-xl text-gemini-red pt-40">{fetchError || 'No participant data available.'}</p>;
   }
 
   // Calculate totals
@@ -80,7 +120,11 @@ export default function ParticipantPage() {
         const canvas = await html2canvas(certificate, {
           scale: 1,
           onclone: (clonedDocument) => {
-            clonedDocument.getElementById(`certificate-variant-${i}`).style.display = 'block';
+            const clonedCert = clonedDocument.getElementById(`certificate-variant-${i}`);
+            clonedCert.style.position = 'absolute';
+            clonedCert.style.left = '0';
+            clonedCert.style.top = '0';
+            clonedCert.style.display = 'block';
           }
         });
         previewUrls.push(canvas.toDataURL('image/png'));
@@ -287,7 +331,7 @@ export default function ParticipantPage() {
           <div
             key={index}
             id={`certificate-variant-${index}`}
-            style={{ ...variant.containerStyle, display: 'none' }}
+            style={{ ...variant.containerStyle, position: 'absolute', left: '-9999px', top: '-9999px' }}
           >
             {eventLogos[selectedEvent?.id] && (
               <img
