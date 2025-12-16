@@ -44,6 +44,7 @@ export default function ParticipantPage() {
             return;
           }
           if (events.length === 0) {
+            console.log('No events loaded in context');
             throw new Error('No events available.');
           }
           // Find event
@@ -54,6 +55,7 @@ export default function ParticipantPage() {
             // Fallback if no master group
             groupEventIds = events.filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey).map(e => e.id);
           }
+          console.log('Group event IDs:', groupEventIds);
           const yearEvents = events
             .filter(e => groupEventIds.includes(e.id) && e.date.startsWith(year))
             .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -169,6 +171,7 @@ export default function ParticipantPage() {
           console.error('Failed to generate preview for variant', i, ':', err);
         }
       }
+      console.log('Generated previews length:', previewUrls.length);
       setPreviews(previewUrls);
     };
     setTimeout(generatePreviews, 500); // Delay to ensure DOM ready
@@ -206,6 +209,8 @@ export default function ParticipantPage() {
     link.href = selectedUrl;
     link.click();
   };
+
+  console.log('Rendering participant page with data:', { participant, selectedEvent, resultsLength: results.length, previewsLength: previews.length });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
