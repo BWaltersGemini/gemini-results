@@ -10,8 +10,9 @@ export default function ParticipantPage() {
   const navigate = useNavigate();
   const params = useParams();
   const { bib, masterKey, year, raceSlug } = params;
-  const { events, results: contextResults, eventLogos, ads } = useContext(RaceContext);
+  const { events, results: contextResults, eventLogos, ads, loading: contextLoading } = useContext(RaceContext);
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
+  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
   const initialState = location.state || {};
   const [participant, setParticipant] = useState(initialState.participant);
   const [selectedEvent, setSelectedEvent] = useState(initialState.selectedEvent);
@@ -38,20 +39,26 @@ export default function ParticipantPage() {
         setLoading(true);
         setFetchError(null);
         try {
+          if (contextLoading) {
+            console.log('Context is still loading events, waiting...');
+            return;
+          }
           if (events.length === 0) {
-            console.log('Events not loaded yet, waiting...');
-            return; // Will re-run when events load due to dependency
+            throw new Error('No events available.');
           }
           // Find event
-          let groupEventIds = masterGroups[masterKey] || [];
+          const decodedMaster = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
+          let groupEntry = Object.entries(masterGroups).find(([key]) => slugify(editedEvents[key]?.name || key) === masterKey || (editedEvents[key]?.name || key).toLowerCase() === decodedMaster);
+          let groupEventIds = groupEntry ? groupEntry[1] : [];
           if (groupEventIds.length === 0) {
             // Fallback if no master group
-            groupEventIds = events.filter(e => slugify(e.name) === masterKey).map(e => e.id);
+            groupEventIds = events.filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey).map(e => e.id);
           }
           const yearEvents = events
             .filter(e => groupEventIds.includes(e.id) && e.date.startsWith(year))
             .sort((a, b) => new Date(b.date) - new Date(a.date));
           if (yearEvents.length === 0) {
+            console.log('No year events found for masterKey:', masterKey, 'year:', year, 'groupEventIds:', groupEventIds);
             throw new Error('No matching event found.');
           }
           const targetEvent = yearEvents[0];
@@ -66,6 +73,7 @@ export default function ParticipantPage() {
             .eq('bib', bib)
             .single();
           if (pError || !participantData) {
+            console.error('Participant fetch error:', pError);
             throw new Error('Participant not found.');
           }
           console.log('Participant data:', participantData);
@@ -100,11 +108,11 @@ export default function ParticipantPage() {
       }
     };
     fetchDataIfMissing();
-  }, [bib, masterKey, year, events, masterGroups, participant, selectedEvent, results, contextResults]);
+  }, [bib, masterKey, year, events, masterGroups, editedEvents, participant, selectedEvent, results, contextResults, contextLoading]);
 
   const goBackToResults = () => navigate(-1);
 
-  if (loading) {
+  if (contextLoading || loading) {
     return (
       <div className="text-center py-20 pt-40">
         <p className="text-3xl text-gemini-dark-gray mb-4">Loading Participant...</p>
