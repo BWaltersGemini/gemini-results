@@ -96,11 +96,23 @@ export default function ParticipantPage() {
   const goBackToResults = () => navigate(-1);
 
   if (loading) {
-    return <p className="text-center text-xl text-gemini-blue pt-40">Loading participant data...</p>;
+    return (
+      <div className="text-center py-20 pt-40">
+        <p className="text-3xl text-gemini-dark-gray mb-4">Loading Participant...</p>
+        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-gemini-blue mx-auto"></div>
+      </div>
+    );
   }
 
   if (fetchError || !participant) {
-    return <p className="text-center text-xl text-gemini-red pt-40">{fetchError || 'No participant data available.'}</p>;
+    return (
+      <div className="text-center py-20 pt-40">
+        <p className="text-2xl text-gemini-red mb-4">{fetchError || 'No participant data available.'}</p>
+        <button onClick={goBackToResults} className="bg-gemini-blue text-white px-6 py-3 rounded-lg hover:bg-gemini-blue/90">
+          Back to Results
+        </button>
+      </div>
+    );
   }
 
   // Calculate totals
@@ -117,22 +129,30 @@ export default function ParticipantPage() {
       const previewUrls = [];
       for (let i = 0; i < variants.length; i++) {
         const certificate = document.getElementById(`certificate-variant-${i}`);
-        const canvas = await html2canvas(certificate, {
-          scale: 1,
-          onclone: (clonedDocument) => {
-            const clonedCert = clonedDocument.getElementById(`certificate-variant-${i}`);
-            clonedCert.style.position = 'absolute';
-            clonedCert.style.left = '0';
-            clonedCert.style.top = '0';
-            clonedCert.style.display = 'block';
-          }
-        });
-        previewUrls.push(canvas.toDataURL('image/png'));
+        if (!certificate) continue;
+        try {
+          const canvas = await html2canvas(certificate, {
+            scale: window.devicePixelRatio || 1,
+            useCORS: true,
+            logging: false,
+            onclone: (clonedDocument) => {
+              const clonedCert = clonedDocument.getElementById(`certificate-variant-${i}`);
+              clonedCert.style.position = 'absolute';
+              clonedCert.style.left = '0';
+              clonedCert.style.top = '0';
+              clonedCert.style.display = 'block';
+              clonedCert.style.visibility = 'visible';
+            }
+          });
+          previewUrls.push(canvas.toDataURL('image/png'));
+        } catch (err) {
+          console.error('Failed to generate preview:', err);
+        }
       }
       setPreviews(previewUrls);
     };
-    setTimeout(generatePreviews, 0);
-  }, []);
+    setTimeout(generatePreviews, 500); // Delay to ensure DOM ready
+  }, [participant, selectedEvent]);
 
   const shareCertificate = async () => {
     const selectedUrl = previews[selectedPreviewIndex];
