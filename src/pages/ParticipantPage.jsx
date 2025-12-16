@@ -22,6 +22,7 @@ export default function ParticipantPage() {
   const [showSplits, setShowSplits] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -169,6 +170,7 @@ export default function ParticipantPage() {
           previewUrls.push(canvas.toDataURL('image/png'));
         } catch (err) {
           console.error('Failed to generate preview for variant', i, ':', err);
+          setPreviewError('Failed to generate some graphics. Please try again.');
         }
       }
       console.log('Generated previews length:', previewUrls.length);
@@ -210,7 +212,7 @@ export default function ParticipantPage() {
     link.click();
   };
 
-  console.log('Rendering participant page with data:', { participant, selectedEvent, resultsLength: results.length, previewsLength: previews.length });
+  console.log('Rendering participant page with data:', { participant, selectedEvent, resultsLength: results.length, previewsLength: previews.length, previewError });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
@@ -331,6 +333,7 @@ export default function ParticipantPage() {
         )}
 
         {/* Previews Section */}
+        {previewError && <p className="text-center text-gemini-red mb-4">{previewError}</p>}
         {previews.length > 0 ? (
           <div className="mt-4 mb-12 bg-gemini-light-gray rounded-2xl p-8 shadow-lg">
             <h4 className="text-2xl font-bold mb-4 text-center text-gemini-dark-gray">Choose Your Favorite Graphic</h4>
