@@ -35,9 +35,68 @@ export default function ParticipantPage() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   };
-  // Move variants up here
+  // Define variants at the top (example placeholders - replace with your actual variants)
   const variants = [
-    // ... your existing 5 variants unchanged ...
+    {
+      containerStyle: { width: '600px', height: '400px', backgroundColor: '#ffffff', position: 'relative' },
+      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
+      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
+      content: (
+        <div>
+          <h1>Congratulations!</h1>
+          <p>{participant.first_name} {participant.last_name}</p>
+          {/* Add more content */}
+        </div>
+      )
+    },
+    {
+      containerStyle: { width: '600px', height: '400px', backgroundColor: '#f0f0f0', position: 'relative' },
+      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
+      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
+      content: (
+        <div>
+          <h1>Well Done!</h1>
+          <p>{participant.first_name} {participant.last_name}</p>
+          {/* Add more content */}
+        </div>
+      )
+    },
+    {
+      containerStyle: { width: '600px', height: '400px', backgroundColor: '#e0e0e0', position: 'relative' },
+      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
+      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
+      content: (
+        <div>
+          <h1>Great Job!</h1>
+          <p>{participant.first_name} {participant.last_name}</p>
+          {/* Add more content */}
+        </div>
+      )
+    },
+    {
+      containerStyle: { width: '600px', height: '400px', backgroundColor: '#d0d0d0', position: 'relative' },
+      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
+      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
+      content: (
+        <div>
+          <h1>Awesome Finish!</h1>
+          <p>{participant.first_name} {participant.last_name}</p>
+          {/* Add more content */}
+        </div>
+      )
+    },
+    {
+      containerStyle: { width: '600px', height: '400px', backgroundColor: '#c0c0c0', position: 'relative' },
+      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
+      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
+      content: (
+        <div>
+          <h1>Outstanding!</h1>
+          <p>{participant.first_name} {participant.last_name}</p>
+          {/* Add more content */}
+        </div>
+      )
+    },
   ];
   useEffect(() => {
     const fetchDataIfMissing = async () => {
