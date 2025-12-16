@@ -353,7 +353,7 @@ export default function ParticipantPage() {
           <div
             key={index}
             id={`certificate-variant-${index}`}
-            style={{ ...variant.containerStyle, position: 'absolute', left: '-9999px', top: '-9999px' }}
+            style={{ ...variant.containerStyle, display: 'none' }}
           >
             {eventLogos[selectedEvent?.id] && (
               <img
