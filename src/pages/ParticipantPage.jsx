@@ -54,14 +54,14 @@ export default function ParticipantPage() {
           let groupEventIds = groupEntry ? groupEntry[1] : [];
           if (groupEventIds.length === 0) {
             // Fallback if no master group
-            groupEventIds = events.filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey).map(e => e.id);
+            groupEventIds = events.filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey || (editedEvents[e.id]?.name || e.name).toLowerCase() === decodedMaster).map(e => e.id);
           }
           console.log('Group event IDs:', groupEventIds);
           const yearEvents = events
             .filter(e => groupEventIds.includes(e.id) && e.date.startsWith(year))
             .sort((a, b) => new Date(b.date) - new Date(a.date));
           if (yearEvents.length === 0) {
-            console.log('No year events found for masterKey:', masterKey, 'year:', year, 'groupEventIds:', groupEventIds);
+            console.log('No year events found for masterKey:', masterKey, 'decodedMaster:', decodedMaster, 'year:', year, 'groupEventIds:', groupEventIds, 'all events:', events.map(e => ({id: e.id, name: e.name, date: e.date})));
             throw new Error('No matching event found.');
           }
           const targetEvent = yearEvents[0];
