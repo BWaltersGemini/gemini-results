@@ -255,7 +255,7 @@ export default function AdminPage() {
         const chunk = toUpsert.slice(i, i + chunkSize);
         const { error } = await supabase
           .from('chronotrack_results')
-          .upsert(chunk, { onConflict: 'event_id, bib, first_name, last_name, chip_time', ignoreDuplicates: false });
+          .upsert(chunk, { onConflict: 'event_id,bib,first_name,last_name,chip_time', ignoreDuplicates: false });
         if (error) console.error('[Supabase] Upsert error:', error);
       }
 
