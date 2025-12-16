@@ -1,12 +1,9 @@
 // vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-
 export default defineConfig({
   plugins: [react()],
-
-  base: './', // Makes asset paths relative — fixes refresh/MIME issues on Vercel
-
+  base: '/', // Forces absolute paths for built assets — fixes refresh/MIME issues on Vercel
   server: {
     proxy: {
       '/runsignup-api': {
