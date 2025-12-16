@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [react({ babel: { presets: ['@babel/preset-env', '@babel/preset-react'] } })],
   base: '/', // Forces absolute paths for built assets — fixes refresh/MIME issues on Vercel
   build: {
-    target: 'es2015' // Ensure ES5-compatible output for older iOS
+    target: 'es2015', // Ensure ES5-compatible output for older iOS
+    commonjsOptions: {
+      transformMixedEsModules: true
+    }
   },
   server: {
     proxy: {
