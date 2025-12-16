@@ -34,6 +34,7 @@ export default function ParticipantPage() {
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (!participant || !selectedEvent || results.length === 0) {
+        console.log('Fetching data because state is missing');
         setLoading(true);
         setFetchError(null);
         try {
@@ -50,6 +51,7 @@ export default function ParticipantPage() {
             throw new Error('No matching event found.');
           }
           const targetEvent = yearEvents[0];
+          console.log('Found event:', targetEvent);
           setSelectedEvent(targetEvent);
 
           // Fetch participant
@@ -62,6 +64,7 @@ export default function ParticipantPage() {
           if (pError || !participantData) {
             throw new Error('Participant not found.');
           }
+          console.log('Participant data:', participantData);
           setParticipant(participantData);
 
           // Fetch results if needed
@@ -81,9 +84,11 @@ export default function ParticipantPage() {
               if (data.length < pageSize) break;
               page++;
             }
+            console.log('Fetched results length:', allResults.length);
             setResults(allResults);
           }
         } catch (err) {
+          console.error('Fetch error:', err);
           setFetchError(err.message || 'Failed to load participant data.');
         } finally {
           setLoading(false);
@@ -129,12 +134,15 @@ export default function ParticipantPage() {
       const previewUrls = [];
       for (let i = 0; i < variants.length; i++) {
         const certificate = document.getElementById(`certificate-variant-${i}`);
-        if (!certificate) continue;
+        if (!certificate) {
+          console.warn(`Certificate variant ${i} not found in DOM`);
+          continue;
+        }
         try {
           const canvas = await html2canvas(certificate, {
             scale: window.devicePixelRatio || 1,
             useCORS: true,
-            logging: false,
+            logging: true,
             onclone: (clonedDocument) => {
               const clonedCert = clonedDocument.getElementById(`certificate-variant-${i}`);
               clonedCert.style.position = 'absolute';
@@ -146,7 +154,7 @@ export default function ParticipantPage() {
           });
           previewUrls.push(canvas.toDataURL('image/png'));
         } catch (err) {
-          console.error('Failed to generate preview:', err);
+          console.error('Failed to generate preview for variant', i, ':', err);
         }
       }
       setPreviews(previewUrls);
