@@ -1,9 +1,10 @@
 // vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import commonjs from 'vite-plugin-commonjs';
 
 export default defineConfig({
-  plugins: [react({ babel: { presets: ['@babel/preset-env', '@babel/preset-react'] } })],
+  plugins: [react({ babel: { presets: ['@babel/preset-env', '@babel/preset-react'] } }), commonjs()],
   base: '/', // Forces absolute paths for built assets — fixes refresh/MIME issues on Vercel
   build: {
     target: 'es2015', // Ensure ES5-compatible output for older iOS
