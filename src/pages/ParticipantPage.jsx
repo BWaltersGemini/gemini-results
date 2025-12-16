@@ -1,7 +1,6 @@
 // src/pages/ParticipantPage.jsx (FINAL — Totals, splits, country, clean layout)
-import { useLocation, useNavigate, useParams, useRef } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
-import html2canvas from 'html2canvas';
 import { RaceContext } from '../context/RaceContext';
 import { supabase } from '../supabaseClient';
 export default function ParticipantPage() {
@@ -16,13 +15,9 @@ export default function ParticipantPage() {
   const [participant, setParticipant] = useState(initialState.participant);
   const [selectedEvent, setSelectedEvent] = useState(initialState.selectedEvent);
   const [results, setResults] = useState(initialState.results || contextResults);
-  const [previews, setPreviews] = useState([]);
-  const [selectedPreviewIndex, setSelectedPreviewIndex] = useState(0);
   const [showSplits, setShowSplits] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
-  const [previewError, setPreviewError] = useState(null);
-  const certificateRef = useRef(null);
   const cleanName = (text) => {
     if (!text || typeof text !== 'string') return '';
     return text.trim().replace(/['`]/g, '').toLowerCase();
@@ -36,22 +31,6 @@ export default function ParticipantPage() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   };
-  // Define variants at the top (example placeholders - replace with your actual variants)
-  const variants = [
-    {
-      containerStyle: { width: '600px', height: '400px', backgroundColor: '#ffffff', position: 'relative' },
-      watermarkStyle: { position: 'absolute', opacity: 0.1, width: '100%', height: '100%' },
-      contentStyle: { position: 'relative', zIndex: 1, textAlign: 'center', padding: '20px' },
-      content: (
-        <div>
-          <h1>Congratulations!</h1>
-          <p>{participant ? `${participant.first_name} ${participant.last_name}` : ''}</p>
-          {/* Add more content */}
-        </div>
-      )
-    },
-    // ... add the other 4 variants similarly ...
-  ];
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (!participant || !selectedEvent || results.length === 0) {
@@ -129,44 +108,6 @@ export default function ParticipantPage() {
     };
     fetchDataIfMissing();
   }, [bib, masterKey, year, events, masterGroups, editedEvents, participant, selectedEvent, results, contextResults, contextLoading]);
-  useEffect(() => {
-    const generatePreviews = async () => {
-      if (!participant || !selectedEvent || !certificateRef.current) return;
-      const previewUrls = [];
-      for (let i = 0; i < variants.length; i++) {
-        const variant = variants[i];
-        certificateRef.current.style = {...variant.containerStyle, display: 'block'};
-        certificateRef.current.innerHTML = ''; // Clear previous content
-        const contentDiv = document.createElement('div');
-        contentDiv.style = variant.contentStyle;
-        ReactDOM.render(variant.content, contentDiv);
-        certificateRef.current.appendChild(contentDiv);
-        const watermark = document.createElement('img');
-        if (eventLogos[selectedEvent?.id]) {
-          watermark.src = eventLogos[selectedEvent?.id];
-          watermark.style = variant.watermarkStyle;
-          certificateRef.current.appendChild(watermark);
-        }
-        try {
-          const canvas = await html2canvas(certificateRef.current, {
-            scale: 1, // Reduce scale for mobile performance
-            useCORS: true,
-            logging: true,
-          });
-          previewUrls.push(canvas.toDataURL('image/png'));
-        } catch (err) {
-          console.error('Failed to generate preview for variant', i, ':', err);
-          setPreviewError('Failed to generate some graphics. Please try again.');
-        }
-      }
-      console.log('Generated previews length:', previewUrls.length);
-      setPreviews(previewUrls);
-      // Clear the ref after all
-      certificateRef.current.innerHTML = '';
-      certificateRef.current.style.display = 'none';
-    };
-    setTimeout(generatePreviews, 1000);
-  }, [participant, selectedEvent]);
   const goBackToResults = () => navigate(-1);
   if (contextLoading || loading) {
     return (
@@ -191,36 +132,7 @@ export default function ParticipantPage() {
   const overallTotal = raceResults.length;
   const genderTotal = raceResults.filter(r => r.gender === participant.gender).length;
   const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length;
-  const shareCertificate = async () => {
-    const selectedUrl = previews[selectedPreviewIndex];
-    if (!selectedUrl) return;
-    try {
-      const response = await fetch(selectedUrl);
-      const blob = await response.blob();
-      const file = new File([blob], 'finishers-graphic.png', { type: 'image/png' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: 'My Race Finish!',
-          text: `I finished ${selectedEvent.name}!`,
-          files: [file],
-        });
-      } else {
-        downloadCertificate();
-      }
-    } catch (err) {
-      console.error('Share failed:', err);
-      downloadCertificate();
-    }
-  };
-  const downloadCertificate = () => {
-    const selectedUrl = previews[selectedPreviewIndex];
-    if (!selectedUrl) return;
-    const link = document.createElement('a');
-    link.download = 'finishers-graphic.png';
-    link.href = selectedUrl;
-    link.click();
-  };
-  console.log('Rendering participant page with data:', { participant, selectedEvent, resultsLength: results.length, previewsLength: previews.length, previewError });
+  console.log('Rendering participant page with data:', { participant, selectedEvent, resultsLength: results.length });
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
@@ -327,34 +239,8 @@ export default function ParticipantPage() {
             )}
           </div>
         )}
-        {/* Previews Section */}
-        {previewError && <p className="text-center text-gemini-red mb-4">{previewError}</p>}
-        {previews.length > 0 ? (
-          <div className="mt-4 mb-12 bg-gemini-light-gray rounded-2xl p-8 shadow-lg">
-            <h4 className="text-2xl font-bold mb-4 text-center text-gemini-dark-gray">Choose Your Favorite Graphic</h4>
-            <div className="flex overflow-x-auto space-x-6 pb-4 snap-x snap-mandatory">
-              {previews.map((url, index) => (
-                <div
-                  key={index}
-                  className={`flex-shrink-0 cursor-pointer snap-center ${selectedPreviewIndex === index ? 'border-4 border-gemini-blue shadow-xl' : 'border border-gray-300 shadow-md'} rounded-xl overflow-hidden transform hover:scale-105 transition`}
-                  onClick={() => setSelectedPreviewIndex(index)}
-                >
-                  <img src={url} alt={`Graphic Variant ${index + 1}`} className="w-64 h-auto" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="mt-4 text-center text-gray-600 text-lg">Generating previews...</p>
-        )}
         {/* Buttons */}
         <div className="flex flex-wrap justify-center gap-6 mt-8 mb-16">
-          <button onClick={shareCertificate} className="bg-gemini-blue text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-gemini-blue/80 shadow-md transform hover:scale-105 transition">
-            Share Selected
-          </button>
-          <button onClick={downloadCertificate} className="bg-green-600 text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-green-700 shadow-md transform hover:scale-105 transition">
-            Download Selected
-          </button>
           <button onClick={goBackToResults} className="bg-gray-600 text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-gray-700 shadow-md transform hover:scale-105 transition">
             Back to Results
           </button>
@@ -366,8 +252,6 @@ export default function ParticipantPage() {
             <img key={index} src={ad} alt={`Sponsor ${index + 1}`} className="w-full rounded-2xl shadow-md hover:shadow-xl transition" />
           ))}
         </div>
-        {/* Hidden certificate renderer */}
-        <div ref={certificateRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', display: 'none' }} />
       </div>
     </div>
   );
