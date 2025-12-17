@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs (UPDATED — Logs race_id with bracket processing)
+// src/api/chronotrackapi.cjs (FINAL — Full age group places for ALL races, enhanced logging with race_id tracking)
 
 import axios from 'axios';
 
@@ -139,13 +139,14 @@ export const fetchResultsForEvent = async (eventId) => {
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
     brackets = bracketRes.data.event_bracket || [];
-    console.log(`[ChronoTrack] Found ${brackets.length} brackets`);
+    console.log(`[ChronoTrack] Found ${brackets.length} total brackets`);
   } catch (err) {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Fetch bracket results for ALL AGE brackets (removed leaderboard requirement)
+  // Fetch bracket results for ALL AGE brackets (no leaderboard flag restriction)
   const bracketPlaces = {}; // entry_id → age_group_place
+  const processedRaceIds = new Set();
 
   for (const bracket of brackets) {
     if (bracket.bracket_type !== 'AGE') continue;
@@ -155,8 +156,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
     console.log(
       `[ChronoTrack] Processing AGE bracket ${bracket.bracket_id} ` +
-      `(race_id: ${raceId}) - "${bracketName}" ` +
-      `(leaderboard flag: ${bracket.bracket_wants_leaderboard ?? 'unset'})`
+      `(race_id: ${raceId}) - "${bracketName}"`
     );
 
     try {
@@ -166,18 +166,35 @@ export const fetchResultsForEvent = async (eventId) => {
       });
 
       const bracketResults = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] Bracket ${bracket.bracket_id} (race_id: ${raceId}): ${bracketResults.length} ranked results`);
 
-      bracketResults.forEach(r => {
-        const entryId = r.results_entry_id;
-        if (entryId) {
-          bracketPlaces[entryId] = r.results_rank ? parseInt(r.results_rank, 10) : null;
-        }
-      });
+      if (bracketResults.length > 0) {
+        console.log(`[ChronoTrack] SUCCESS: Bracket ${bracket.bracket_id} (race_id: ${raceId}) returned ${bracketResults.length} ranked results`);
+
+        bracketResults.forEach(r => {
+          const entryId = r.results_entry_id;
+          if (entryId) {
+            bracketPlaces[entryId] = r.results_rank ? parseInt(r.results_rank, 10) : null;
+          }
+        });
+      } else {
+        console.log(`[ChronoTrack] EMPTY: Bracket ${bracket.bracket_id} (race_id: ${raceId}) returned 0 results (normal for empty divisions)`);
+      }
+
+      processedRaceIds.add(raceId);
+
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed to fetch results for bracket ${bracket.bracket_id} (race_id: ${raceId})`, err.response?.data || err.message);
+      const status = err.response?.status;
+      const data = err.response?.data || err.message;
+      console.error(
+        `[ChronoTrack] FAILED: Bracket ${bracket.bracket_id} (race_id: ${raceId}) ` +
+        `- HTTP ${status || 'unknown'} - ${data}`
+      );
     }
   }
+
+  // Summary of which races had bracket results processed
+  console.log('[ChronoTrack] Bracket processing complete.');
+  console.log('[ChronoTrack] Races with processed brackets:', Array.from(processedRaceIds).sort().join(', '));
 
   // Map results
   return allResults.map(r => {
@@ -201,7 +218,7 @@ export const fetchResultsForEvent = async (eventId) => {
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: null, // Calculated per-race in ResultsPage
+      gender_place: null, // Calculated later
       age_group_name: r.results_primary_bracket_name || '',
       age_group_place: ageGroupPlace,
       pace: r.results_pace || '',
