@@ -1,4 +1,4 @@
-// src/App.jsx (UPDATED — Nested routes for master/year/race/bib)
+// src/App.jsx (FINAL — Correct structure with RaceProvider + QueryClientProvider + all routes)
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { RaceProvider } from './context/RaceContext';
@@ -25,24 +25,30 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
-        <RaceProvider>
+      <RaceProvider>
+        <Router>
           <Navbar />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/services" element={<Services />} />
             <Route path="/products" element={<Products />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/master-events" element={<MasterEvents />} />
+
+            {/* Results routes */}
             <Route path="/results" element={<ResultsPage />} />
             <Route path="/results/:masterKey/:year" element={<ResultsPage />} />
             <Route path="/results/:masterKey/:year/:raceSlug" element={<ResultsPage />} />
+
+            {/* Participant (bib lookup) route */}
             <Route path="/results/:masterKey/:year/:raceSlug/bib/:bib" element={<ParticipantPage />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/admin" element={<AdminPage />} />
+
+            {/* Legacy/fallback routes */}
             <Route path="/participant" element={<ParticipantPage />} />
-            <Route path="/master-events" element={<MasterEvents />} />
           </Routes>
-        </RaceProvider>
-      </Router>
+        </Router>
+      </RaceProvider>
     </QueryClientProvider>
   );
 }

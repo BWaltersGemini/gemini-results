@@ -1,4 +1,4 @@
-// src/components/ResultsTable.jsx (FINAL — Mobile cards, Desktop full table centered, country column)
+// src/components/ResultsTable.jsx (FINAL — Uses formatTime, tenths only, mobile/desktop)
 import {
   useReactTable,
   getCoreRowModel,
@@ -6,8 +6,11 @@ import {
   flexRender,
 } from '@tanstack/react-table';
 
-export default function ResultsTable({ data = [], onNameClick, isMobile = false }) {
+export default function ResultsTable({ data = [], onNameClick, isMobile = false, formatTime }) {
   const safeData = Array.isArray(data) ? data : [];
+
+  // Fallback formatTime if not provided (should always be passed from parent)
+  const safeFormatTime = formatTime || ((time) => time || '—');
 
   const desktopColumns = [
     {
@@ -24,8 +27,16 @@ export default function ResultsTable({ data = [], onNameClick, isMobile = false 
       ),
     },
     { accessorKey: 'bib', header: 'Bib', cell: info => info.getValue() || '—' },
-    { accessorKey: 'chip_time', header: 'Chip Time', cell: info => info.getValue() || '—' },
-    { accessorKey: 'clock_time', header: 'Gun Time', cell: info => info.getValue() || '—' },
+    {
+      accessorKey: 'chip_time',
+      header: 'Chip Time',
+      cell: info => safeFormatTime(info.getValue()),
+    },
+    {
+      accessorKey: 'clock_time',
+      header: 'Gun Time',
+      cell: info => safeFormatTime(info.getValue()),
+    },
     { accessorKey: 'place', header: 'Overall', cell: info => info.getValue() || '—' },
     { accessorKey: 'gender_place', header: 'Gen Place', cell: info => info.getValue() || '—' },
     { accessorKey: 'age_group_name', header: 'Division', cell: info => info.getValue() || '—' },
@@ -71,7 +82,7 @@ export default function ResultsTable({ data = [], onNameClick, isMobile = false 
                 #{row.place || '—'}
               </span>
               <span className="text-xl font-semibold text-gemini-dark-gray">
-                {row.chip_time || '—'}
+                {safeFormatTime(row.chip_time)}
               </span>
             </div>
             <div className="text-sm text-gray-600 flex gap-4 flex-wrap">

@@ -1,7 +1,7 @@
-// src/pages/MasterEvents.jsx
+// src/pages/MasterEvents.jsx (FIXED — Correct ID comparison for linking)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.cjs';  // Updated to .cjs
+import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.cjs';
 
 export default function MasterEvents() {
   const navigate = useNavigate();
@@ -46,7 +46,6 @@ export default function MasterEvents() {
       const fetchData = async () => {
         try {
           const events = await fetchChronoEvents();
-          // Sort by date descending
           const sortedEvents = events.sort((a, b) => {
             const dateA = parseDate(a.date);
             const dateB = parseDate(b.date);
@@ -76,10 +75,11 @@ export default function MasterEvents() {
     }
   };
 
+  // FIXED: Convert IDs to strings for correct matching
   const getLinkedEvents = (masterKey) => {
-    const ids = masterGroups[masterKey] || [];
+    const ids = (masterGroups[masterKey] || []).map(String);
     return chronoEvents
-      .filter(event => ids.includes(event.id))
+      .filter(event => ids.includes(String(event.id)))
       .sort((a, b) => parseDate(b.date) - parseDate(a.date));
   };
 
@@ -160,58 +160,80 @@ export default function MasterEvents() {
               {Object.keys(masterGroups).sort().map((masterKey) => {
                 const linkedEvents = getLinkedEvents(masterKey);
                 return (
-                  <div key={masterKey} className="mb-4 p-6 bg-white rounded-xl shadow">
-                    <div className="flex flex-col space-y-1">
-                      <span className="text-sm text-gray-500">Key: {masterKey}</span>
-                      <span className="text-sm text-gray-500">Original/Default: {masterKey}</span>
+                  <div key={masterKey} className="mb-8 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
+                    <div className="flex flex-col space-y-4 mb-6">
+                      <div>
+                        <span className="text-sm text-gray-500">Key:</span>
+                        <span className="ml-2 font-mono text-sm bg-gray-100 px-2 py-1 rounded">{masterKey}</span>
+                      </div>
                       <input
                         type="text"
                         value={editedEvents[masterKey]?.name || masterKey}
                         onChange={e => handleEditName(masterKey, e.target.value)}
-                        className="text-2xl font-bold p-2 border border-gray-300 rounded"
+                        className="text-3xl font-bold p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+                        placeholder="Master Event Display Name"
                       />
                     </div>
-                    <div className="mt-2">
-                      <label>Upload Logo:</label>
-                      <input type="file" onChange={e => handleFileUpload(e, 'logo', masterKey)} accept="image/*" />
-                      {eventLogos[masterKey] && <img src={eventLogos[masterKey]} alt="Logo" className="mt-2 max-h-20" />}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div>
+                        <label className="block font-medium mb-2">Upload Logo</label>
+                        <input type="file" onChange={e => handleFileUpload(e, 'logo', masterKey)} accept="image/*" className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90" />
+                        {eventLogos[masterKey] && (
+                          <img src={eventLogos[masterKey]} alt="Master Logo" className="mt-4 max-h-32 rounded-lg shadow-md" />
+                        )}
+                      </div>
+
+                      <div className="flex flex-col justify-center space-y-4">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMasters.includes(masterKey)}
+                            onChange={() => toggleMasterVisibility(masterKey)}
+                            className="mr-3 h-5 w-5 text-gemini-blue"
+                          />
+                          <span className="text-lg">Visible in App</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={!!showAdsPerMaster[masterKey]}
+                            onChange={() => toggleShowAds(masterKey)}
+                            className="mr-3 h-5 w-5 text-gemini-blue"
+                          />
+                          <span className="text-lg">Show Ads</span>
+                        </label>
+                      </div>
                     </div>
-                    <div className="flex items-center mt-2">
-                      <input
-                        type="checkbox"
-                        checked={!hiddenMasters.includes(masterKey)}
-                        onChange={() => toggleMasterVisibility(masterKey)}
-                        className="mr-2"
-                      />
-                      <span>Visible in App</span>
-                      <input
-                        type="checkbox"
-                        checked={!!showAdsPerMaster[masterKey]}
-                        onChange={() => toggleShowAds(masterKey)}
-                        className="ml-4 mr-2"
-                      />
-                      <span>Show Ads</span>
-                    </div>
-                    <div className="mt-4">
-                      <h3 className="text-xl font-bold mb-2">Linked Event Years</h3>
+
+                    <div>
+                      <h3 className="text-2xl font-bold mb-4 text-gemini-dark-gray">Linked Event Years ({linkedEvents.length})</h3>
                       {linkedEvents.length > 0 ? (
-                        <ul className="list-disc ml-6">
+                        <ul className="space-y-3">
                           {linkedEvents.map(event => (
-                            <li key={event.id}>
-                              {formatDate(event.date)} - {editedEvents[event.id]?.name || event.name}
+                            <li key={event.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                              <span className="font-medium">{formatDate(event.date)}</span> — 
+                              <span className="ml-2">{editedEvents[event.id]?.name || event.name}</span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p>No events linked to this master.</p>
+                        <p className="text-gray-500 italic">No events currently linked to this master.</p>
                       )}
                     </div>
                   </div>
                 );
               })}
-              <button onClick={handleSaveChanges} className="mt-4 bg-gemini-blue text-white px-6 py-3 rounded-xl hover:bg-gemini-blue/90">
-                Save Changes
-              </button>
+
+              {Object.keys(masterGroups).length === 0 && (
+                <p className="text-center text-gray-600 text-xl">No master events created yet. Create them in the main Admin page.</p>
+              )}
+
+              <div className="text-center mt-12">
+                <button onClick={handleSaveChanges} className="bg-gemini-blue text-white px-12 py-4 rounded-full text-xl font-bold hover:bg-gemini-blue/90 shadow-lg">
+                  Save All Changes
+                </button>
+              </div>
             </section>
           </>
         )}

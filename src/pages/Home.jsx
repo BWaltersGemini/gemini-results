@@ -1,13 +1,26 @@
-// src/pages/Home.jsx (Updated – Fixed invalid date for upcoming events)
+// src/pages/Home.jsx (FINAL — Only 3 recent master event tiles + scroll to top on click)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Home() {
-  const { events = [], loading, setSelectedEvent } = useContext(RaceContext);
+  const {
+    events = [],
+    loading,
+    totalAthletesTimed = 0,
+    totalRacesTimed = 0
+  } = useContext(RaceContext);
   const navigate = useNavigate();
-
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+
+  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
+  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
+  const eventLogos = JSON.parse(localStorage.getItem('eventLogos')) || {};
+
+  const slugify = (text) => {
+    if (!text) return 'overall';
+    return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  };
 
   // Fetch upcoming events from You Keep Moving
   useEffect(() => {
@@ -28,60 +41,63 @@ export default function Home() {
     fetchUpcomingEvents();
   }, []);
 
-  // Sort ChronoTrack events: most recent first
-  const sortedEvents = [...events].sort((a, b) => new Date(b.date) - new Date(a.date));
-  const recentEvents = sortedEvents.filter(e => new Date(e.date) <= new Date()).slice(0, 6);
-
-  // Safe date formatting for ChronoTrack events (YYYY-MM-DD)
   const formatChronoDate = (dateStr) => {
     if (!dateStr) return 'Date TBD';
     const [year, month, day] = dateStr.split('-');
     const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Safe date formatting for Tribe Events API (ISO with timezone)
   const formatTribeDate = (isoStr) => {
     if (!isoStr) return 'Date TBD';
     try {
-      // Remove Z or offset and parse
       const cleaned = isoStr.replace('Z', '').replace(/([+-]\d{2}:\d{2})$/, '');
       const date = new Date(cleaned);
       if (isNaN(date.getTime())) return 'Date TBD';
-      return date.toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     } catch (e) {
       return 'Date TBD';
     }
   };
 
-  const goToRaceResults = (event) => {
-    setSelectedEvent(event);
-    navigate('/results');
+  // Build master event tiles using most recent year — only top 3
+  const masterEventTiles = Object.keys(masterGroups)
+    .map(storedKey => {
+      const displayName = editedEvents[storedKey]?.name || storedKey;
+      const eventIds = masterGroups[storedKey];
+      const masterEvents = events.filter(e => eventIds.includes(e.id));
+
+      if (masterEvents.length === 0) return null;
+
+      const latestEvent = masterEvents.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
+      const masterSlug = slugify(storedKey);
+      const year = latestEvent.date.split('-')[0];
+
+      return {
+        storedKey,
+        displayName,
+        logo,
+        date: latestEvent.date,
+        masterSlug,
+        year,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 3); // Only the 3 most recent masters
+
+  // Handle navigation with scroll to top
+  const handleMasterClick = (masterSlug, year) => {
+    navigate(`/results/${masterSlug}/${year}`);
+    window.scrollTo(0, 0); // Ensures top of page
   };
 
   return (
     <div className="min-h-screen bg-white">
-
-      {/* Hero – Full-screen video background */}
+      {/* Hero */}
       <section className="relative h-screen w-full flex items-center justify-center overflow-hidden">
-        <video
-          src="/eventvideo.mp4"
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        <video src="/eventvideo.mp4" autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-black/50" />
-
         <div className="relative z-10 text-center px-6 max-w-5xl mx-auto">
           <img src="/Gemini-Logo-White.png" alt="Gemini Timing" className="h-20 md:h-32 mx-auto mb-8" />
           <h1 className="text-4xl md:text-6xl font-light text-white tracking-wider mb-4">
@@ -91,23 +107,44 @@ export default function Home() {
             Serving Southern California since 2011
           </p>
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Link
-              to="/results"
-              className="px-10 py-4 bg-white text-gemini-dark-gray font-medium text-lg rounded-full hover:bg-gray-100 transition"
-            >
+            <Link to="/results" className="px-10 py-4 bg-white text-gemini-dark-gray font-medium text-lg rounded-full hover:bg-gray-100 transition">
               View Results
             </Link>
-            <Link
-              to="/services"
-              className="px-10 py-4 border-2 border-white text-white font-medium text-lg rounded-full hover:bg-white/10 transition"
-            >
+            <Link to="/services" className="px-10 py-4 border-2 border-white text-white font-medium text-lg rounded-full hover:bg-white/10 transition">
               Get a Quote
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Recent Results */}
+      {/* Experience Stats */}
+      <section className="py-16 md:py-24 bg-gemini-light-gray">
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-gemini-dark-gray mb-12">
+            Our Experience in Numbers
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
+            <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
+              <p className="text-5xl md:text-7xl lg:text-8xl font-black text-gemini-blue mb-4 leading-tight">
+                {totalAthletesTimed.toLocaleString()}+
+              </p>
+              <p className="text-xl md:text-2xl font-semibold text-gemini-dark-gray">
+                Athletes Timed
+              </p>
+            </div>
+            <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
+              <p className="text-5xl md:text-7xl lg:text-8xl font-black text-gemini-blue mb-4 leading-tight">
+                {totalRacesTimed}+
+              </p>
+              <p className="text-xl md:text-2xl font-semibold text-gemini-dark-gray">
+                Races Timed
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Recent Master Events — Only 3 */}
       <section className="py-20 md:py-32 px-6 max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-gemini-dark-gray mb-4">
@@ -121,39 +158,37 @@ export default function Home() {
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-gemini-blue"></div>
             <p className="mt-6 text-xl text-gray-600">Loading results...</p>
           </div>
-        ) : recentEvents.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {recentEvents.map((event) => (
+        ) : masterEventTiles.length === 0 ? (
+          <p className="text-center text-gray-600 text-lg">No master events configured yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-5xl mx-auto">
+            {masterEventTiles.map(master => (
               <button
-                key={event.id}
-                onClick={() => goToRaceResults(event)}
-                className="group bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:border-gemini-blue transition-all duration-300 text-left"
+                key={master.storedKey}
+                onClick={() => handleMasterClick(master.masterSlug, master.year)}
+                className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
               >
-                <div className="p-8">
-                  <div className="flex justify-between items-start mb-4">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-gemini-blue">
-                      Live Results
-                    </span>
-                    <span className="text-2xl text-gray-300 group-hover:text-gemini-blue transition">
-                      →
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-bold text-gemini-dark-gray mb-2 line-clamp-2">
-                    {event.name}
+                <div className="h-72 bg-gray-50 flex items-center justify-center p-8">
+                  {master.logo ? (
+                    <img src={master.logo} alt={master.displayName} className="max-h-56 max-w-full object-contain" />
+                  ) : (
+                    <span className="text-9xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
+                  )}
+                </div>
+                <div className="p-10 text-center">
+                  <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
+                    {master.displayName}
                   </h3>
-                  <p className="text-gray-600 mb-6">{formatChronoDate(event.date)}</p>
-                  <div className="flex items-center text-gemini-blue font-medium">
-                    View Results
-                    <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
+                  <p className="text-lg text-gray-600 mb-6">
+                    Latest: {formatChronoDate(master.date)}
+                  </p>
+                  <span className="text-gemini-blue font-bold group-hover:underline">
+                    View Results →
+                  </span>
                 </div>
               </button>
             ))}
           </div>
-        ) : (
-          <p className="text-center text-gray-600 text-lg">No recent races available.</p>
         )}
 
         <div className="text-center mt-16">
@@ -161,7 +196,7 @@ export default function Home() {
             to="/results"
             className="inline-block px-12 py-4 border-2 border-gemini-dark-gray text-gemini-dark-gray font-medium text-lg rounded-full hover:bg-gemini-dark-gray hover:text-white transition"
           >
-            All Results →
+            View All Results →
           </Link>
         </div>
       </section>
@@ -173,7 +208,6 @@ export default function Home() {
             Upcoming Events
           </h2>
           <div className="w-24 h-1 bg-gemini-blue mx-auto mb-12"></div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
             {upcomingEvents.length === 0 ? (
               <p className="col-span-3 text-gray-600">Loading upcoming events...</p>
@@ -210,7 +244,6 @@ export default function Home() {
               ))
             )}
           </div>
-
           <a
             href="https://youkeepmoving.com/events"
             target="_blank"

@@ -1,6 +1,6 @@
-// src/context/RaceContext.jsx (FINAL — Fixed todayStr scope + gender place calculation)
+// src/context/RaceContext.jsx (FINAL — Fixed results loading + better logging + debug helper)
 import { createContext, useState, useEffect } from 'react';
-import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';  // Updated to .cjs
+import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
 
 export const RaceContext = createContext();
@@ -18,35 +18,79 @@ export function RaceProvider({ children }) {
   const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
   const [isLiveRace, setIsLiveRace] = useState(false);
 
+  // Global stats — updated reliably
+  const [totalAthletesTimed, setTotalAthletesTimed] = useState(0);
+  const [totalRacesTimed, setTotalRacesTimed] = useState(0);
+
+  // Helper: Update total athletes count from Supabase
+  const updateAthleteCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('chronotrack_results')
+        .select('*', { count: 'exact', head: true });
+      if (error) throw error;
+      setTotalAthletesTimed(count || 0);
+    } catch (err) {
+      console.warn('[RaceContext] Could not update athlete count:', err);
+    }
+  };
+
+  // Debug helper — easy console search
+  const findEvents = (searchTerm) => {
+    if (!searchTerm) return events;
+    const lower = searchTerm.toLowerCase();
+    return events.filter(e =>
+      e.name?.toLowerCase().includes(lower) ||
+      e.id?.toString().includes(searchTerm)
+    ).map(e => ({
+      id: e.id,
+      name: e.name,
+      date: e.date,
+    }));
+  };
+
   // Load events
   useEffect(() => {
+    console.log('[RaceContext] Provider mounted — fetching events');
     const loadEvents = async () => {
       console.log('[RaceContext] Starting to fetch events...');
       try {
         setLoading(true);
         setError(null);
         const fetchedEvents = await fetchEvents();
-        console.log('[RaceContext] Events fetched successfully:', fetchedEvents);
+        console.log('[RaceContext] Events fetched successfully:', fetchedEvents.length, 'total events');
         setEvents(fetchedEvents);
+
+        // Update races timed (completed events)
+        const completedEvents = fetchedEvents.filter(e => new Date(e.date) <= new Date());
+        setTotalRacesTimed(completedEvents.length);
+
+        // Update athletes timed
+        await updateAthleteCount();
 
         const savedEventId = localStorage.getItem('selectedEventId');
         if (savedEventId) {
           const restored = fetchedEvents.find(e => e.id === savedEventId);
           if (restored) {
-            console.log('[RaceContext] Restoring selected event:', restored);
+            console.log('[RaceContext] Restoring selected event:', restored.name, restored.date);
             setSelectedEvent(restored);
           } else {
+            console.warn('[RaceContext] Saved event ID not found in fetched events');
             localStorage.removeItem('selectedEventId');
           }
         }
       } catch (err) {
         console.error('[RaceContext] Failed to load events:', err);
         setError(err.message || 'Failed to load events.');
+        setTotalAthletesTimed(0);
+        setTotalRacesTimed(0);
       } finally {
         setLoading(false);
       }
     };
     loadEvents();
+
+    return () => console.log('[RaceContext] Provider cleanup');
   }, []);
 
   // Persist selectedEvent
@@ -64,40 +108,44 @@ export function RaceProvider({ children }) {
       setRaces([]);
       return;
     }
-
     const loadRaces = async () => {
       try {
+        console.log(`[Races] Loading races for event ${selectedEvent.id}`);
         const fetchedRaces = await fetchRacesForEvent(selectedEvent.id);
         setRaces(fetchedRaces);
+        console.log(`[Races] Loaded ${fetchedRaces.length} races`);
       } catch (err) {
-        console.error('Failed to load races:', err);
+        console.error('[Races] Failed to load races:', err);
         setRaces([]);
       }
     };
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + calculate gender_place + live polling
+  // Load results — fixed + improved logging
   useEffect(() => {
     if (!selectedEvent) {
+      console.log('[Results] No selected event — clearing results');
       setResults([]);
+      setUniqueDivisions([]);
       setIsLiveRace(false);
       return;
     }
 
-    let interval;
+    console.log(`[Results] Loading results for event ${selectedEvent.id} — "${selectedEvent.name}" (${selectedEvent.date})`);
 
+    let interval;
     const loadResults = async (forceFresh = false) => {
       try {
         setLoadingResults(true);
         setError(null);
-
         let allResults = [];
 
-        // Cache first
+        // Load from Supabase cache
         let allCached = [];
         let page = 0;
         const pageSize = 1000;
+        console.log('[Results] Checking Supabase cache...');
         while (true) {
           const { data, error } = await supabase
             .from('chronotrack_results')
@@ -106,8 +154,12 @@ export function RaceProvider({ children }) {
             .order('place', { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
 
-          if (error) break;
+          if (error) {
+            console.error('[Supabase] Cache error:', error);
+            break;
+          }
           if (!data || data.length === 0) break;
+
           allCached = [...allCached, ...data];
           if (data.length < pageSize) break;
           page++;
@@ -115,35 +167,34 @@ export function RaceProvider({ children }) {
 
         if (allCached.length > 0) {
           allResults = allCached;
-          console.log(`[Supabase] Loaded ${allCached.length} results from cache`);
+          console.log(`[Results] Loaded ${allCached.length} results from Supabase cache`);
+        } else {
+          console.log('[Results] No cached results — forcing fresh fetch from ChronoTrack');
+          forceFresh = true;
         }
 
-        // Calculate todayStr here (fixed scope)
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
         setIsLiveRace(isRaceDay);
 
-        if (allCached.length === 0 || isRaceDay || forceFresh) {
-          console.log('[RaceContext] Fetching fresh from ChronoTrack');
+        if (forceFresh || isRaceDay) {
+          console.log('[Results] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
-          console.log(`[ChronoTrack] Fresh results: ${fresh.length}`);
+          console.log(`[Results] Received ${fresh.length} fresh results from ChronoTrack`);
 
           if (fresh.length > 0) {
-            // Calculate gender_place
             const freshWithGenderPlace = fresh.map(r => {
               const sameGender = fresh.filter(other => other.gender === r.gender);
               const fasterSameGender = sameGender.filter(other =>
                 other.chip_time < r.chip_time ||
                 (other.chip_time === r.chip_time && (other.place || Infinity) < (r.place || Infinity))
               ).length;
-
               return {
                 ...r,
                 gender_place: fasterSameGender + 1,
               };
             });
 
-            // Upsert with calculated gender_place
             const toUpsert = freshWithGenderPlace.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -175,32 +226,38 @@ export function RaceProvider({ children }) {
             }
 
             allResults = freshWithGenderPlace;
+            await updateAthleteCount();
+            console.log('[Results] Fresh results saved to Supabase and athlete count updated');
+          } else {
+            console.log('[Results] ChronoTrack returned no results');
           }
         }
 
         setResults(allResults);
-
         const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
         setUniqueDivisions(divisions);
+        console.log(`[Results] Final: ${allResults.length} results loaded`);
       } catch (err) {
-        console.error('[RaceContext] Results load error:', err);
+        console.error('[Results] Load error:', err);
         setError('Failed to load results.');
       } finally {
         setLoadingResults(false);
       }
     };
 
-    loadResults();
+    loadResults(); // Always run on mount/change
 
-    // Live polling on race day
     const todayStr = new Date().toISOString().split('T')[0];
     if (selectedEvent.date === todayStr) {
       interval = setInterval(() => loadResults(true), 120000);
-      console.log('[RaceContext] Live polling started');
+      console.log('[Results] Live polling started (every 2 minutes)');
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+        console.log('[Results] Live polling stopped');
+      }
     };
   }, [selectedEvent]);
 
@@ -218,6 +275,9 @@ export function RaceProvider({ children }) {
       eventLogos,
       ads,
       isLiveRace,
+      totalAthletesTimed,
+      totalRacesTimed,
+      debug: { findEvents },
     }}>
       {children}
     </RaceContext.Provider>

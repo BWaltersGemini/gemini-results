@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (Final – Division link auto-filters correctly on results page)
+// src/pages/ParticipantPage.jsx (FINAL — Proper time formatting + only show relevant races)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -9,8 +9,14 @@ export default function ParticipantPage() {
   const navigate = useNavigate();
   const params = useParams();
   const { bib, masterKey, year, raceSlug } = params;
-
-  const { events, results: contextResults, eventLogos, ads, loading: contextLoading } = useContext(RaceContext);
+  const {
+    events,
+    races = [],
+    results: contextResults,
+    eventLogos,
+    ads,
+    loading: contextLoading,
+  } = useContext(RaceContext);
 
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
   const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
@@ -22,6 +28,37 @@ export default function ParticipantPage() {
   const [showSplits, setShowSplits] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
+
+  // Time formatting function
+  const formatTime = (timeStr) => {
+    if (!timeStr || timeStr.trim() === '') return '—';
+
+    const trim = timeStr.trim();
+    const parts = trim.split(':');
+    let hours = 0;
+    let minutes = '0';
+    let seconds = '00.0';
+
+    if (parts.length === 3) {
+      hours = parseInt(parts[0], 10);
+      minutes = parts[1];
+      seconds = parts[2];
+    } else if (parts.length === 2) {
+      minutes = parts[0];
+      seconds = parts[1];
+    } else if (parts.length === 1) {
+      seconds = parts[0];
+    }
+
+    const [secs, tenths = '0'] = seconds.split('.');
+    const formattedSeconds = `${secs.padStart(2, '0')}.${tenths.padStart(1, '0')}`;
+
+    if (hours > 0) {
+      return `${hours}:${minutes.padStart(2, '0')}:${formattedSeconds}`;
+    } else {
+      return `${parseInt(minutes)}:${formattedSeconds}`;
+    }
+  };
 
   const cleanName = (text) => {
     if (!text || typeof text !== 'string') return '';
@@ -49,6 +86,7 @@ export default function ParticipantPage() {
     });
   };
 
+  // Fetch missing data
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (!participant || !selectedEvent || results.length === 0) {
@@ -64,7 +102,6 @@ export default function ParticipantPage() {
             cleanName(editedEvents[key]?.name || key) === cleanName(decodedMaster)
           );
           let groupEventIds = groupEntry ? groupEntry[1] : [];
-
           if (groupEventIds.length === 0) {
             groupEventIds = events
               .filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey ||
@@ -77,7 +114,6 @@ export default function ParticipantPage() {
             .sort((a, b) => new Date(b.date) - new Date(a.date));
 
           if (yearEvents.length === 0) throw new Error('No matching event found.');
-
           const targetEvent = yearEvents[0];
           setSelectedEvent(targetEvent);
 
@@ -89,7 +125,6 @@ export default function ParticipantPage() {
             .single();
 
           if (pError || !participantData) throw new Error('Participant not found.');
-
           setParticipant(participantData);
 
           if (results.length === 0) {
@@ -102,7 +137,6 @@ export default function ParticipantPage() {
                 .select('*')
                 .eq('event_id', targetEvent.id.toString())
                 .range(page * pageSize, (page + 1) * pageSize - 1);
-
               if (error) throw error;
               if (!data || data.length === 0) break;
               allResults = [...allResults, ...data];
@@ -119,20 +153,31 @@ export default function ParticipantPage() {
         }
       }
     };
-
     fetchDataIfMissing();
   }, [bib, masterKey, year, events, masterGroups, editedEvents, participant, selectedEvent, results, contextResults, contextLoading]);
 
   const goBackToResults = () => navigate(-1);
 
-  // NEW: Handle division click – send auto-filter state
   const handleDivisionClick = () => {
-    if (!participant.age_group_name) return;
+    if (!participant?.age_group_name || !selectedEvent) return;
 
-    navigate(-1, {
+    const participantRace = races.find(r => r.race_id === participant.race_id);
+    const targetRaceSlug = participantRace ? slugify(participantRace.race_name) : (raceSlug || 'overall');
+
+    let targetMasterSlug = masterKey;
+    if (!targetMasterSlug) {
+      const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
+        ids.includes(selectedEvent.id)
+      );
+      targetMasterSlug = foundMaster ? slugify(foundMaster[0]) : slugify(selectedEvent.name);
+    }
+
+    const eventYear = selectedEvent.date.split('-')[0];
+
+    navigate(`/results/${targetMasterSlug}/${eventYear}/${targetRaceSlug}`, {
       state: {
         autoFilterDivision: participant.age_group_name,
-        participantRaceId: participant.race_id,
+        autoFilterRaceId: participant.race_id,
       },
     });
   };
@@ -160,12 +205,10 @@ export default function ParticipantPage() {
     );
   }
 
-  // Safe calculations
   const raceResults = results.filter(r => r.race_id === participant.race_id);
   const overallTotal = raceResults.length || 1;
   const genderTotal = raceResults.filter(r => r.gender === participant.gender).length || 1;
   const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length || 1;
-
   const formattedEventDate = formatDate(selectedEvent?.date);
 
   return (
@@ -200,12 +243,12 @@ export default function ParticipantPage() {
             </div>
           </div>
 
-          {/* Key Stats + City/State */}
+          {/* Key Stats */}
           <div className="p-10 md:p-16">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center mb-12">
               <div>
                 <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Chip Time</p>
-                <p className="text-3xl font-bold text-[#80ccd6]">{participant.chip_time || '—'}</p>
+                <p className="text-3xl font-bold text-[#80ccd6]">{formatTime(participant.chip_time)}</p>
               </div>
               <div>
                 <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Pace</p>
@@ -225,8 +268,8 @@ export default function ParticipantPage() {
               </div>
             </div>
 
-            {/* City/State + Division (clickable) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12 text-center">
+            {/* Location, Age, Gender, Division */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
               {(participant.city || participant.state) && (
                 <div>
                   <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Location</p>
@@ -245,16 +288,16 @@ export default function ParticipantPage() {
                   {participant.gender === 'M' ? 'Male' : participant.gender === 'F' ? 'Female' : '—'}
                 </p>
               </div>
-              <div className="md:col-span-3">
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Division</p>
+              <div className="md:col-span-3 mt-8">
+                <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Division</p>
                 <button
                   onClick={handleDivisionClick}
-                  className="text-2xl font-bold text-[#80ccd6] hover:underline transition"
+                  className="text-3xl font-bold text-[#80ccd6] hover:underline transition cursor-pointer"
                 >
                   {participant.age_group_name || '—'} ({participant.age_group_place || '—'} of {divisionTotal})
                 </button>
-                <p className="text-sm text-gray-600 mt-2">
-                  Click to view all finishers in your division
+                <p className="text-base text-gray-600 mt-3">
+                  Click to view everyone in your division
                 </p>
               </div>
             </div>
@@ -270,7 +313,6 @@ export default function ParticipantPage() {
             >
               {showSplits ? 'Hide' : 'Show'} Split Times ({participant.splits.length})
             </button>
-
             {showSplits && (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -286,7 +328,7 @@ export default function ParticipantPage() {
                     {participant.splits.map((split, i) => (
                       <tr key={i} className="hover:bg-gray-50 transition">
                         <td className="px-8 py-5 font-medium">{split.name || `Split ${i + 1}`}</td>
-                        <td className="px-8 py-5">{split.time || '—'}</td>
+                        <td className="px-8 py-5">{formatTime(split.time) || '—'}</td>
                         <td className="px-8 py-5">{split.pace || '—'}</td>
                         <td className="px-8 py-5">{split.place || '—'}</td>
                       </tr>

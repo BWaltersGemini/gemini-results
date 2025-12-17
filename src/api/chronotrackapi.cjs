@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Bracket for age group place)
+// src/api/chronotrackapi.jsx (FINAL — Full pagination for ALL events with size=500 and format=json)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -46,14 +46,53 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
+// UPDATED: Fetch ALL events with full pagination, size=500, format=json
 export const fetchEvents = async () => {
   const authHeader = await getAuthHeader();
-  const response = await axios.get(`${baseUrl}/api/event`, {
-    headers: { Authorization: authHeader },
-    params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
-  });
 
-  return (response.data.event || []).map(event => ({
+  let allEvents = [];
+  let page = 1;
+  const perPage = 500; // Higher page size as per docs
+
+  console.log('[ChronoTrack] Starting to fetch ALL events (paginated, size=500)...');
+
+  while (true) {
+    try {
+      const response = await axios.get(`${baseUrl}/api/event`, {
+        headers: { Authorization: authHeader },
+        params: {
+          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+          page,
+          size: perPage,  // Changed to 'size' as per docs
+          format: 'json', // Added as per example
+          include_test_events: 'true', // Optional: include test events
+        },
+      });
+
+      const events = response.data.event || [];
+
+      if (events.length === 0) {
+        console.log('[ChronoTrack] No more events found — pagination complete.');
+        break;
+      }
+
+      allEvents = [...allEvents, ...events];
+      console.log(`[ChronoTrack] Fetched page ${page}: ${events.length} events → Total: ${allEvents.length}`);
+
+      if (events.length < perPage) {
+        break;
+      }
+
+      page++;
+    } catch (err) {
+      console.error('[ChronoTrack] Error fetching events page', page, ':', err.response?.data || err.message);
+      break; // Stop on error
+    }
+  }
+
+  console.log(`[ChronoTrack] Successfully fetched ALL ${allEvents.length} events`);
+
+  return allEvents.map(event => ({
     id: event.event_id,
     name: event.event_name,
     date: new Date(event.event_start_time * 1000).toISOString().split('T')[0],
