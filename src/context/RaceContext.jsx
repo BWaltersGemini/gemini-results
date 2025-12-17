@@ -1,8 +1,8 @@
-// src/context/RaceContext.jsx (UPDATED — Safe localStorage)
+// src/context/RaceContext.jsx (FINAL — Shared config from Supabase)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
-import { useLocalStorage } from '../utils/useLocalStorage';
+import { loadAppConfig } from '../utils/appConfig';
 
 export const RaceContext = createContext();
 
@@ -15,14 +15,59 @@ export function RaceProvider({ children }) {
   const [loadingResults, setLoadingResults] = useState(false);
   const [error, setError] = useState(null);
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
-
-  // Safe localStorage for eventLogos and ads
-  const [eventLogos, setEventLogos] = useLocalStorage('eventLogos', {});
-  const [ads, setAds] = useLocalStorage('ads', {});
-
   const [isLiveRace, setIsLiveRace] = useState(false);
   const [totalAthletesTimed, setTotalAthletesTimed] = useState(0);
   const [totalRacesTimed, setTotalRacesTimed] = useState(0);
+
+  // Shared global config loaded from Supabase
+  const [masterGroups, setMasterGroups] = useState({});
+  const [editedEvents, setEditedEvents] = useState({});
+  const [eventLogos, setEventLogos] = useState({});
+  const [hiddenMasters, setHiddenMasters] = useState([]);
+  const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
+  const [ads, setAds] = useState([]);
+
+  // Only keep localStorage for truly per-device preferences
+  // (e.g., last viewed event — not critical for public users)
+  useEffect(() => {
+    const savedEventId = typeof window !== 'undefined' ? localStorage.getItem('selectedEventId') : null;
+    if (savedEventId && events.length > 0) {
+      const restored = events.find(e => e.id === savedEventId);
+      if (restored) {
+        setSelectedEvent(restored);
+      } else {
+        localStorage.removeItem('selectedEventId');
+      }
+    }
+  }, [events]);
+
+  useEffect(() => {
+    if (selectedEvent) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('selectedEventId', selectedEvent.id);
+      }
+    } else {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('selectedEventId');
+      }
+    }
+  }, [selectedEvent]);
+
+  // Load global app config from Supabase once on mount
+  useEffect(() => {
+    const loadGlobalConfig = async () => {
+      const config = await loadAppConfig();
+      setMasterGroups(config.masterGroups || {});
+      setEditedEvents(config.editedEvents || {});
+      setEventLogos(config.eventLogos || {});
+      setHiddenMasters(config.hiddenMasters || []);
+      setShowAdsPerMaster(config.showAdsPerMaster || {});
+      setAds(config.ads || []);
+      console.log('[RaceContext] Global config loaded from Supabase');
+    };
+
+    loadGlobalConfig();
+  }, []);
 
   const updateAthleteCount = async () => {
     try {
@@ -49,6 +94,7 @@ export function RaceProvider({ children }) {
     }));
   };
 
+  // Fetch events from ChronoTrack
   useEffect(() => {
     console.log('[RaceContext] Provider mounted — fetching events');
     const loadEvents = async () => {
@@ -62,20 +108,7 @@ export function RaceProvider({ children }) {
 
         const completedEvents = fetchedEvents.filter(e => new Date(e.date) <= new Date());
         setTotalRacesTimed(completedEvents.length);
-
         await updateAthleteCount();
-
-        const savedEventId = localStorage.getItem('selectedEventId');
-        if (savedEventId) {
-          const restored = fetchedEvents.find(e => e.id === savedEventId);
-          if (restored) {
-            console.log('[RaceContext] Restoring selected event:', restored.name, restored.date);
-            setSelectedEvent(restored);
-          } else {
-            console.warn('[RaceContext] Saved event ID not found in fetched events');
-            localStorage.removeItem('selectedEventId');
-          }
-        }
       } catch (err) {
         console.error('[RaceContext] Failed to load events:', err);
         setError(err.message || 'Failed to load events.');
@@ -89,14 +122,7 @@ export function RaceProvider({ children }) {
     return () => console.log('[RaceContext] Provider cleanup');
   }, []);
 
-  useEffect(() => {
-    if (selectedEvent) {
-      localStorage.setItem('selectedEventId', selectedEvent.id);
-    } else {
-      localStorage.removeItem('selectedEventId');
-    }
-  }, [selectedEvent]);
-
+  // Load races for selected event
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
@@ -116,6 +142,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
+  // Load results + live polling
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[Results] No selected event — clearing results');
@@ -133,10 +160,10 @@ export function RaceProvider({ children }) {
         setLoadingResults(true);
         setError(null);
         let allResults = [];
-
         let allCached = [];
         let page = 0;
         const pageSize = 1000;
+
         console.log('[Results] Checking Supabase cache...');
         while (true) {
           const { data, error } = await supabase
@@ -145,6 +172,7 @@ export function RaceProvider({ children }) {
             .eq('event_id', selectedEvent.id.toString())
             .order('place', { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
+
           if (error) {
             console.error('[Supabase] Cache error:', error);
             break;
@@ -206,20 +234,21 @@ export function RaceProvider({ children }) {
               splits: r.splits || [],
             }));
 
+            // Delete old, insert fresh
+            await supabase.from('chronotrack_results').delete().eq('event_id', selectedEvent.id.toString());
+
             const chunkSize = 500;
             for (let i = 0; i < toUpsert.length; i += chunkSize) {
               const chunk = toUpsert.slice(i, i + chunkSize);
               const { error } = await supabase
                 .from('chronotrack_results')
-                .upsert(chunk, { ignoreDuplicates: true });
+                .insert(chunk);
               if (error) console.error('[Supabase] Upsert error:', error);
             }
 
             allResults = freshWithGenderPlace;
             await updateAthleteCount();
             console.log('[Results] Fresh results saved to Supabase and athlete count updated');
-          } else {
-            console.log('[Results] ChronoTrack returned no results');
           }
         }
 
@@ -263,9 +292,11 @@ export function RaceProvider({ children }) {
       error,
       uniqueDivisions,
       eventLogos,
-      setEventLogos,  // Expose setter if needed elsewhere
       ads,
-      setAds,         // Expose setter for ads upload
+      masterGroups,
+      editedEvents,
+      hiddenMasters,
+      showAdsPerMaster,
       isLiveRace,
       totalAthletesTimed,
       totalRacesTimed,

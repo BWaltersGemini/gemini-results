@@ -1,14 +1,14 @@
-// src/pages/ResultsPage.jsx (COMPLETE FINAL — Mobile-safe + finishers only + time formatting)
+// src/pages/ResultsPage.jsx (FINAL — Global config from Supabase via RaceContext)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { useLocalStorage } from '../utils/useLocalStorage';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { masterKey, year, raceSlug } = useParams();
+
   const {
     selectedEvent,
     events = [],
@@ -17,12 +17,13 @@ export default function ResultsPage() {
     loadingResults,
     uniqueDivisions = [],
     eventLogos = {},
-    ads,
+    ads = [],
+    masterGroups = {},
+    editedEvents = {},
+    hiddenMasters = [],
+    showAdsPerMaster = {},
     setSelectedEvent,
   } = useContext(RaceContext);
-
-  const [masterGroups, , isMasterGroupsLoading] = useLocalStorage('masterGroups', {});
-  const [editedEvents] = useLocalStorage('editedEvents', {});
 
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
@@ -67,13 +68,16 @@ export default function ResultsPage() {
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
+  // Handle masterKey/year → select correct event
   useEffect(() => {
-    if (!masterKey || !year || events.length === 0) return;
-    const normalizedUrlKey = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
+    if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
+
+    const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
     const storedMasterKey = Object.keys(masterGroups).find(key =>
       key.toLowerCase() === normalizedUrlKey ||
       slugify(key) === masterKey.toLowerCase()
     );
+
     if (!storedMasterKey) return;
 
     const groupEventIds = masterGroups[storedMasterKey] || [];
@@ -89,6 +93,7 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
+  // Auto-scroll + filter from participant page
   useEffect(() => {
     if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent && races.length > 0) {
       const { autoFilterDivision, autoFilterRaceId } = location.state;
@@ -109,6 +114,7 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, races, navigate]);
 
+  // Only show races with finishers
   const racesWithFinishers = races.filter(race => {
     return results.some(r => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '');
   });
@@ -147,9 +153,9 @@ export default function ResultsPage() {
     });
   };
 
-  // ——— LANDING: Master Event Selection ———
+  // MASTER EVENT LANDING PAGE (when no event selected)
   if (!selectedEvent) {
-    if (isMasterGroupsLoading) {
+    if (Object.keys(masterGroups).length === 0) {
       return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20 flex items-center justify-center">
           <div className="text-center">
@@ -160,15 +166,19 @@ export default function ResultsPage() {
       );
     }
 
-    const masterEventTiles = Object.keys(masterGroups).map(storedKey => {
+    const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
+
+    const masterEventTiles = visibleMasters.map(storedKey => {
       const displayName = editedEvents[storedKey]?.name || storedKey;
-      const eventIds = masterGroups[storedKey];
+      const eventIds = masterGroups[storedKey] || [];
       const masterEvents = events.filter(e => eventIds.includes(e.id.toString()));
       if (masterEvents.length === 0) return null;
+
       const latestEvent = masterEvents.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
       const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
       const masterSlug = slugify(storedKey);
       const latestYear = latestEvent.date.split('-')[0];
+
       return { storedKey, displayName, logo, date: latestEvent.date, masterSlug, latestYear };
     }).filter(Boolean);
 
@@ -181,37 +191,39 @@ export default function ResultsPage() {
             </h1>
             <p className="text-xl text-gray-600">Select a race series to view results</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {masterEventTiles.map(master => (
-              <Link
-                key={master.storedKey}
-                to={`/results/${master.masterSlug}/${master.latestYear}`}
-                className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
-              >
-                <div className="h-72 bg-gray-50 flex items-center justify-center p-8">
-                  {master.logo ? (
-                    <img src={master.logo} alt={master.displayName} className="max-h-56 max-w-full object-contain" />
-                  ) : (
-                    <span className="text-9xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
-                  )}
-                </div>
-                <div className="p-10 text-center">
-                  <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
-                    {master.displayName}
-                  </h3>
-                  <p className="text-lg text-gray-600 mb-6">
-                    Latest: {formatDate(master.date)}
-                  </p>
-                  <span className="text-gemini-blue font-bold group-hover:underline">
-                    View Results →
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-          {masterEventTiles.length === 0 && (
+
+          {masterEventTiles.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {masterEventTiles.map(master => (
+                <Link
+                  key={master.storedKey}
+                  to={`/results/${master.masterSlug}/${master.latestYear}`}
+                  className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                >
+                  <div className="h-72 bg-gray-50 flex items-center justify-center p-8">
+                    {master.logo ? (
+                      <img src={master.logo} alt={master.displayName} className="max-h-56 max-w-full object-contain" />
+                    ) : (
+                      <span className="text-9xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
+                    )}
+                  </div>
+                  <div className="p-10 text-center">
+                    <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
+                      {master.displayName}
+                    </h3>
+                    <p className="text-lg text-gray-600 mb-6">
+                      Latest: {formatDate(master.date)}
+                    </p>
+                    <span className="text-gemini-blue font-bold group-hover:underline">
+                      View Results →
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
             <p className="text-center text-gray-600 text-xl mt-20">
-              No master events configured yet. Visit Admin to set up master events.
+              No race series configured yet.
             </p>
           )}
         </div>
@@ -219,10 +231,10 @@ export default function ResultsPage() {
     );
   }
 
-  // Available years for selector
+  // Available years for this master
   let availableYears = [];
-  if (masterKey) {
-    const normalizedUrlKey = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
+  if (masterKey && Object.keys(masterGroups).length > 0) {
+    const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
     const storedMasterKey = Object.keys(masterGroups).find(key =>
       key.toLowerCase() === normalizedUrlKey ||
       slugify(key) === masterKey.toLowerCase()
@@ -332,6 +344,7 @@ export default function ResultsPage() {
             {displayedRaces.map((race) => {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const searchLower = (filters.search || '').toLowerCase();
+
               const filtered = results
                 .filter(r => r.race_id === race.race_id)
                 .filter(r => {
@@ -342,6 +355,7 @@ export default function ResultsPage() {
                   const matchesDivision = !filters.division || (r.age_group_name || '') === filters.division;
                   return matchesSearch && matchesGender && matchesDivision;
                 });
+
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
               const page = currentPages[race.race_id] || 1;
               const start = (page - 1) * pageSize;
@@ -454,7 +468,7 @@ export default function ResultsPage() {
               );
             })}
 
-            {/* Sponsors */}
+            {/* Sponsors (only if enabled for this master) */}
             {ads.length > 0 && (
               <section className="mt-20">
                 <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">

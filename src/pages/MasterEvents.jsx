@@ -1,8 +1,9 @@
-// src/pages/MasterEvents.jsx (FIXED — Loading state for masterGroups)
+// src/pages/MasterEvents.jsx (FINAL — Full Supabase read/write for global config)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.cjs';
-import { useLocalStorage } from '../utils/useLocalStorage';
+import { supabase } from '../supabaseClient';
+import { loadAppConfig } from '../utils/appConfig';
 
 export default function MasterEvents() {
   const navigate = useNavigate();
@@ -12,14 +13,49 @@ export default function MasterEvents() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  const [masterGroups, , masterGroupsLoading] = useLocalStorage('masterGroups', {});
-  const [editedEvents, setEditedEvents] = useLocalStorage('editedEvents', {});
-  const [hiddenMasters, setHiddenMasters] = useLocalStorage('hiddenMasters', []);
-  const [showAdsPerMaster, setShowAdsPerMaster] = useLocalStorage('showAdsPerMaster', {});
-  const [eventLogos, setEventLogos] = useLocalStorage('eventLogos', {});
+  // Global config loaded from Supabase
+  const [masterGroups, setMasterGroups] = useState({});
+  const [editedEvents, setEditedEvents] = useState({});
+  const [hiddenMasters, setHiddenMasters] = useState([]);
+  const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
+  const [eventLogos, setEventLogos] = useState({});
 
   const [chronoEvents, setChronoEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Load global config from Supabase
+  const loadGlobalConfig = async () => {
+    const config = await loadAppConfig();
+    setMasterGroups(config.masterGroups || {});
+    setEditedEvents(config.editedEvents || {});
+    setEventLogos(config.eventLogos || {});
+    setHiddenMasters(config.hiddenMasters || []);
+    setShowAdsPerMaster(config.showAdsPerMaster || {});
+  };
+
+  // Save individual config key to Supabase
+  const saveConfig = async (key, value) => {
+    try {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert({ key, value }, { onConflict: 'key' });
+
+      if (error) throw error;
+      console.log(`[MasterEvents] Saved ${key} to Supabase`);
+    } catch (err) {
+      console.error(`[MasterEvents] Failed to save ${key}:`, err);
+      alert(`Failed to save ${key}. Check console.`);
+    }
+  };
+
+  // Login check + load config
+  useEffect(() => {
+    const loggedIn = typeof window !== 'undefined' && localStorage.getItem('adminLoggedIn') === 'true';
+    setIsLoggedIn(loggedIn);
+    if (loggedIn) {
+      loadGlobalConfig();
+    }
+  }, []);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Date TBD';
@@ -30,7 +66,6 @@ export default function MasterEvents() {
     const day = parseInt(parts[2]);
     if (isNaN(year) || isNaN(month) || isNaN(day)) return 'Invalid Date';
     const d = new Date(year, month - 1, day);
-    if (isNaN(d.getTime())) return 'Invalid Date';
     return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
@@ -44,12 +79,6 @@ export default function MasterEvents() {
     if (isNaN(year) || isNaN(month) || isNaN(day)) return new Date(NaN);
     return new Date(year, month - 1, day);
   };
-
-  // Check login status
-  useEffect(() => {
-    const loggedIn = typeof window !== 'undefined' && localStorage.getItem('adminLoggedIn') === 'true';
-    setIsLoggedIn(loggedIn);
-  }, []);
 
   // Fetch events when logged in
   useEffect(() => {
@@ -79,9 +108,12 @@ export default function MasterEvents() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'password') {
+    // Using the same credentials as AdminPage
+    if (username === 'G3M1N1_1912' && password === 'Br@nd0n81') {
       localStorage.setItem('adminLoggedIn', 'true');
       setIsLoggedIn(true);
+      setError(null);
+      loadGlobalConfig();
     } else {
       setError('Invalid credentials');
     }
@@ -94,46 +126,60 @@ export default function MasterEvents() {
       .sort((a, b) => parseDate(b.date) - parseDate(a.date));
   };
 
-  const handleEditName = (id, value) => {
-    setEditedEvents(prev => ({
-      ...prev,
-      [id]: { ...prev[id], name: value }
-    }));
+  const handleEditName = async (masterKey, value) => {
+    const newEdited = {
+      ...editedEvents,
+      [masterKey]: { ...editedEvents[masterKey], name: value }
+    };
+    setEditedEvents(newEdited);
+    await saveConfig('editedEvents', newEdited);
   };
 
-  const toggleMasterVisibility = (masterKey) => {
-    setHiddenMasters(prev => prev.includes(masterKey) ? prev.filter(id => id !== masterKey) : [...prev, masterKey]);
+  const toggleMasterVisibility = async (masterKey) => {
+    const newHidden = hiddenMasters.includes(masterKey)
+      ? hiddenMasters.filter(k => k !== masterKey)
+      : [...hiddenMasters, masterKey];
+    setHiddenMasters(newHidden);
+    await saveConfig('hiddenMasters', newHidden);
   };
 
-  const toggleShowAds = (masterKey) => {
-    setShowAdsPerMaster(prev => ({ ...prev, [masterKey]: !prev[masterKey] }));
+  const toggleShowAds = async (masterKey) => {
+    const newShow = { ...showAdsPerMaster, [masterKey]: !showAdsPerMaster[masterKey] };
+    setShowAdsPerMaster(newShow);
+    await saveConfig('showAdsPerMaster', newShow);
   };
 
-  const handleFileUpload = (e, type, id) => {
+  const handleFileUpload = async (e, masterKey) => {
     const files = Array.from(e.target.files);
-    files.forEach(file => {
+    for (const file of files) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        if (type === 'logo') {
-          setEventLogos(prev => ({ ...prev, [id]: reader.result }));
-        }
+      reader.onloadend = async () => {
+        const newLogos = { ...eventLogos, [masterKey]: reader.result };
+        setEventLogos(newLogos);
+        await saveConfig('eventLogos', newLogos);
       };
       reader.readAsDataURL(file);
-    });
+    }
   };
 
-  const handleSaveChanges = () => {
-    alert('Changes saved!');
+  const handleSaveChanges = async () => {
+    await Promise.all([
+      saveConfig('editedEvents', editedEvents),
+      saveConfig('hiddenMasters', hiddenMasters),
+      saveConfig('showAdsPerMaster', showAdsPerMaster),
+      saveConfig('eventLogos', eventLogos),
+    ]);
+    alert('All changes saved to Supabase successfully!');
   };
 
-  // Show loading if either events or masterGroups are loading
+  // Show loading or login
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gemini-light-gray pt-32 py-12">
-        <div className="max-w-7xl mx-auto px-6">
-          <form onSubmit={handleLogin} className="max-w-md mx-auto bg-white p-8 rounded-lg shadow">
-            <h2 className="text-3xl font-bold mb-6 text-center">Admin Login</h2>
-            {error && <p className="text-gemini-red mb-4">{error}</p>}
+        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow">
+          <h2 className="text-3xl font-bold mb-6 text-center">Admin Login</h2>
+          {error && <p className="text-gemini-red mb-4">{error}</p>}
+          <form onSubmit={handleLogin}>
             <input
               type="text"
               value={username}
@@ -159,7 +205,7 @@ export default function MasterEvents() {
     );
   }
 
-  if (loading || masterGroupsLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gemini-light-gray pt-32 py-12 flex items-center justify-center">
         <div className="text-center">
@@ -177,70 +223,86 @@ export default function MasterEvents() {
           onClick={() => navigate('/admin')}
           className="mb-6 bg-blue-500 text-white px-6 py-3 rounded-xl hover:bg-blue-600"
         >
-          Back to Admin Page
+          Back to Admin Dashboard
         </button>
+
         <h1 className="text-4xl font-bold mb-12 text-center text-gemini-dark-gray">Manage Master Events</h1>
 
         <section className="mb-12">
           {Object.keys(masterGroups).length === 0 ? (
             <p className="text-center text-gray-600 text-xl">
-              No master events created yet. Create them in the main Admin page.
+              No master events created yet. Create and assign them in the main Admin Dashboard.
             </p>
           ) : (
             Object.keys(masterGroups).sort().map((masterKey) => {
               const linkedEvents = getLinkedEvents(masterKey);
+              const displayName = editedEvents[masterKey]?.name || masterKey;
+              const logo = eventLogos[masterKey];
+
               return (
-                <div key={masterKey} className="mb-8 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
-                  <div className="flex flex-col space-y-4 mb-6">
+                <div key={masterKey} className="mb-12 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
+                  <div className="flex flex-col space-y-6 mb-8">
                     <div>
                       <span className="text-sm text-gray-500">Key:</span>
                       <span className="ml-2 font-mono text-sm bg-gray-100 px-2 py-1 rounded">{masterKey}</span>
                     </div>
+
                     <input
                       type="text"
-                      value={editedEvents[masterKey]?.name || masterKey}
+                      value={displayName}
                       onChange={e => handleEditName(masterKey, e.target.value)}
-                      className="text-3xl font-bold p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+                      className="text-3xl font-bold p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
                       placeholder="Master Event Display Name"
                     />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                     <div>
-                      <label className="block font-medium mb-2">Upload Logo</label>
-                      <input type="file" onChange={e => handleFileUpload(e, 'logo', masterKey)} accept="image/*" className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90" />
-                      {eventLogos[masterKey] && (
-                        <img src={eventLogos[masterKey]} alt="Master Logo" className="mt-4 max-h-32 rounded-lg shadow-md" />
+                      <label className="block font-medium mb-3 text-lg">Upload Logo</label>
+                      <input
+                        type="file"
+                        onChange={e => handleFileUpload(e, masterKey)}
+                        accept="image/*"
+                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90"
+                      />
+                      {logo && (
+                        <img src={logo} alt={`${displayName} Logo`} className="mt-6 max-h-40 rounded-xl shadow-lg" />
                       )}
                     </div>
-                    <div className="flex flex-col justify-center space-y-4">
-                      <label className="flex items-center">
+
+                    <div className="flex flex-col justify-center space-y-6">
+                      <label className="flex items-center text-lg">
                         <input
                           type="checkbox"
                           checked={!hiddenMasters.includes(masterKey)}
                           onChange={() => toggleMasterVisibility(masterKey)}
-                          className="mr-3 h-5 w-5 text-gemini-blue"
+                          className="mr-4 h-6 w-6 text-gemini-blue rounded"
                         />
-                        <span className="text-lg">Visible in App</span>
+                        <span>Visible in App</span>
                       </label>
-                      <label className="flex items-center">
+
+                      <label className="flex items-center text-lg">
                         <input
                           type="checkbox"
                           checked={!!showAdsPerMaster[masterKey]}
                           onChange={() => toggleShowAds(masterKey)}
-                          className="mr-3 h-5 w-5 text-gemini-blue"
+                          className="mr-4 h-6 w-6 text-gemini-blue rounded"
                         />
-                        <span className="text-lg">Show Ads</span>
+                        <span>Show Ads on This Series</span>
                       </label>
                     </div>
                   </div>
+
                   <div>
-                    <h3 className="text-2xl font-bold mb-4 text-gemini-dark-gray">Linked Event Years ({linkedEvents.length})</h3>
+                    <h3 className="text-2xl font-bold mb-6 text-gemini-dark-gray">
+                      Linked Event Years ({linkedEvents.length})
+                    </h3>
                     {linkedEvents.length > 0 ? (
-                      <ul className="space-y-3">
+                      <ul className="space-y-4">
                         {linkedEvents.map(event => (
-                          <li key={event.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <span className="font-medium">{formatDate(event.date)}</span> —
-                            <span className="ml-2">{editedEvents[event.id]?.name || event.name}</span>
+                          <li key={event.id} className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex justify-between items-center">
+                            <span className="font-medium">{formatDate(event.date)}</span>
+                            <span className="text-gray-700">{editedEvents[event.id]?.name || event.name}</span>
                           </li>
                         ))}
                       </ul>
@@ -252,9 +314,13 @@ export default function MasterEvents() {
               );
             })
           )}
-          <div className="text-center mt-12">
-            <button onClick={handleSaveChanges} className="bg-gemini-blue text-white px-12 py-4 rounded-full text-xl font-bold hover:bg-gemini-blue/90 shadow-lg">
-              Save All Changes
+
+          <div className="text-center mt-16">
+            <button
+              onClick={handleSaveChanges}
+              className="bg-gemini-blue text-white px-16 py-6 rounded-full text-2xl font-bold hover:bg-gemini-blue/90 shadow-2xl transition"
+            >
+              Save All Changes to Supabase
             </button>
           </div>
         </section>
