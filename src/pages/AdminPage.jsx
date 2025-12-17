@@ -1,8 +1,8 @@
-// src/pages/AdminPage.jsx (FINAL — Full Supabase read/write for global config)
+// src/pages/AdminPage.jsx (FINAL — Uses admin client for all writes to Supabase)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
-import { supabase } from '../supabaseClient';
+import { createAdminSupabaseClient } from '../supabaseClient'; // ← Admin client only
 import { loadAppConfig } from '../utils/appConfig';
 
 export default function AdminPage() {
@@ -40,7 +40,10 @@ export default function AdminPage() {
   const [eventResultsCount, setEventResultsCount] = useState({});
   const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
 
-  // Load global config from Supabase on mount (after login)
+  // Create admin client (bypasses RLS)
+  const adminSupabase = createAdminSupabaseClient();
+
+  // Load global config from Supabase (public read is fine)
   const loadGlobalConfig = async () => {
     const config = await loadAppConfig();
     setMasterGroups(config.masterGroups || {});
@@ -49,14 +52,14 @@ export default function AdminPage() {
     setHiddenMasters(config.hiddenMasters || []);
     setShowAdsPerMaster(config.showAdsPerMaster || {});
     setAds(config.ads || []);
-    setHiddenEvents(config.hiddenEvents || []); // if you add this key later
-    setHiddenRaces(config.hiddenRaces || {});   // if you add this key later
+    setHiddenEvents(config.hiddenEvents || []);
+    setHiddenRaces(config.hiddenRaces || {});
   };
 
-  // Save individual config key to Supabase
+  // Save individual config key to Supabase using admin client
   const saveConfig = async (key, value) => {
     try {
-      const { error } = await supabase
+      const { error } = await adminSupabase
         .from('app_config')
         .upsert({ key, value }, { onConflict: 'key' });
 
@@ -64,7 +67,7 @@ export default function AdminPage() {
       console.log(`[Admin] Saved ${key} to Supabase`);
     } catch (err) {
       console.error(`[Admin] Failed to save ${key}:`, err);
-      alert(`Failed to save ${key}. Check console.`);
+      alert(`Failed to save ${key}. Check console for details.`);
     }
   };
 
@@ -104,7 +107,7 @@ export default function AdminPage() {
           const counts = {};
           for (const event of events) {
             try {
-              const { count } = await supabase
+              const { count } = await supabase // public client is fine for count
                 .from('chronotrack_results')
                 .select('*', { count: 'exact', head: true })
                 .eq('event_id', event.id.toString());
@@ -270,12 +273,10 @@ export default function AdminPage() {
   const assignToMaster = async (eventId, masterKey) => {
     if (!masterKey) return;
     const newGroups = { ...masterGroups };
-    // Remove from any existing master
     Object.keys(newGroups).forEach(key => {
       newGroups[key] = newGroups[key].filter(id => id !== eventId);
       if (newGroups[key].length === 0) delete newGroups[key];
     });
-    // Add to new master
     if (!newGroups[masterKey]) newGroups[masterKey] = [];
     newGroups[masterKey].push(eventId);
     setMasterGroups(newGroups);
@@ -288,23 +289,23 @@ export default function AdminPage() {
     }
   };
 
-  const toggleMasterVisibility = (masterKey) => {
+  const toggleMasterVisibility = async (masterKey) => {
     const newHidden = hiddenMasters.includes(masterKey)
       ? hiddenMasters.filter(k => k !== masterKey)
       : [...hiddenMasters, masterKey];
     setHiddenMasters(newHidden);
-    saveConfig('hiddenMasters', newHidden);
+    await saveConfig('hiddenMasters', newHidden);
   };
 
-  const toggleShowAds = (masterKey) => {
+  const toggleShowAds = async (masterKey) => {
     const newShow = { ...showAdsPerMaster, [masterKey]: !showAdsPerMaster[masterKey] };
     setShowAdsPerMaster(newShow);
-    saveConfig('showAdsPerMaster', newShow);
+    await saveConfig('showAdsPerMaster', newShow);
   };
 
-  const handleFileUpload = (e, type, id) => {
+  const handleFileUpload = async (e, type, id) => {
     const files = Array.from(e.target.files);
-    files.forEach(file => {
+    for (const file of files) {
       const reader = new FileReader();
       reader.onloadend = async () => {
         if (type === 'logo') {
@@ -318,7 +319,7 @@ export default function AdminPage() {
         }
       };
       reader.readAsDataURL(file);
-    });
+    }
   };
 
   const handleSaveChanges = async () => {
@@ -354,10 +355,10 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gemini-light-gray pt-32 py-12">
         <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow">
           <h2 className="text-3xl font-bold mb-6 text-center">Admin Login</h2>
-          {error && <p className="text-red-600 mb-4">{error}</p>}
+          {error && <p className="text-gemini-red mb-4">{error}</p>}
           <form onSubmit={handleLogin}>
-            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" className="w-full p-4 mb-4 rounded-lg border" required />
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="w-full p-4 mb-6 rounded-lg border" required />
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" className="w-full p-4 mb-4 rounded-lg border border-gray-300" required />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="w-full p-4 mb-6 rounded-lg border border-gray-300" required />
             <button type="submit" className="w-full bg-gemini-blue text-white p-4 rounded-lg hover:bg-gemini-blue/90">Login</button>
           </form>
         </div>
@@ -440,7 +441,6 @@ export default function AdminPage() {
 
                           return (
                             <div key={event.id} className="p-6 bg-white rounded-xl shadow hover:shadow-lg transition">
-                              {/* Event header */}
                               <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleExpandEvent(event.id)}>
                                 <div className="flex flex-col flex-1">
                                   <span className="text-sm text-gray-500">Original: {event.name}</span>
@@ -461,7 +461,6 @@ export default function AdminPage() {
                                 <span>Visible in App</span>
                               </div>
 
-                              {/* Sync button + count */}
                               <div className="mt-4 flex items-center gap-4">
                                 <button onClick={(e) => { e.stopPropagation(); handleSyncResults(event.id); }} disabled={syncingEvents.includes(event.id)} className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center gap-2">
                                   {syncingEvents.includes(event.id) ? <> <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div> Syncing... </> : '↻ Sync Results'}
@@ -469,7 +468,6 @@ export default function AdminPage() {
                                 <span className="text-sm text-gray-600">{resultsCount > 0 ? `${resultsCount} finishers` : 'No results'}</span>
                               </div>
 
-                              {/* Master assignment */}
                               <div className="mt-4">
                                 <p className="font-bold">Current Master: <span className="text-gemini-blue">{currentMaster}</span></p>
                                 <div className="flex items-center gap-2 mt-2">
@@ -493,7 +491,6 @@ export default function AdminPage() {
                                 </div>
                               </div>
 
-                              {/* Races */}
                               {expandedEvents[event.id] && raceEvents[event.id] && (
                                 <div className="mt-6 border-t pt-6">
                                   <h4 className="text-xl font-bold mb-4">Races</h4>

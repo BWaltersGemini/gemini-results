@@ -1,8 +1,8 @@
-// src/pages/MasterEvents.jsx (FINAL — Full Supabase read/write for global config)
+// src/pages/MasterEvents.jsx (FINAL — Uses admin client for all writes to Supabase)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.cjs';
-import { supabase } from '../supabaseClient';
+import { createAdminSupabaseClient } from '../supabaseClient'; // ← Admin client only
 import { loadAppConfig } from '../utils/appConfig';
 
 export default function MasterEvents() {
@@ -23,7 +23,10 @@ export default function MasterEvents() {
   const [chronoEvents, setChronoEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load global config from Supabase
+  // Create admin client (bypasses RLS)
+  const adminSupabase = createAdminSupabaseClient();
+
+  // Load global config from Supabase (public read is fine)
   const loadGlobalConfig = async () => {
     const config = await loadAppConfig();
     setMasterGroups(config.masterGroups || {});
@@ -33,10 +36,10 @@ export default function MasterEvents() {
     setShowAdsPerMaster(config.showAdsPerMaster || {});
   };
 
-  // Save individual config key to Supabase
+  // Save individual config key to Supabase using admin client
   const saveConfig = async (key, value) => {
     try {
-      const { error } = await supabase
+      const { error } = await adminSupabase
         .from('app_config')
         .upsert({ key, value }, { onConflict: 'key' });
 
@@ -44,7 +47,7 @@ export default function MasterEvents() {
       console.log(`[MasterEvents] Saved ${key} to Supabase`);
     } catch (err) {
       console.error(`[MasterEvents] Failed to save ${key}:`, err);
-      alert(`Failed to save ${key}. Check console.`);
+      alert(`Failed to save ${key}. Check console for details.`);
     }
   };
 
@@ -108,7 +111,7 @@ export default function MasterEvents() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    // Using the same credentials as AdminPage
+    // Same credentials as AdminPage
     if (username === 'G3M1N1_1912' && password === 'Br@nd0n81') {
       localStorage.setItem('adminLoggedIn', 'true');
       setIsLoggedIn(true);
@@ -172,7 +175,7 @@ export default function MasterEvents() {
     alert('All changes saved to Supabase successfully!');
   };
 
-  // Show loading or login
+  // Login screen
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gemini-light-gray pt-32 py-12">
@@ -205,6 +208,7 @@ export default function MasterEvents() {
     );
   }
 
+  // Loading
   if (loading) {
     return (
       <div className="min-h-screen bg-gemini-light-gray pt-32 py-12 flex items-center justify-center">
