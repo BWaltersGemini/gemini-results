@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Gender place calculation removed)
+// src/context/RaceContext.jsx (FINAL — Gender place removed, division place restored via bracket fetch)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
@@ -140,7 +140,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + live polling — NO gender place calculation here anymore
+  // Load results + live polling — NO gender place calculation, age_group_place from bracket fetch
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[Results] No selected event — clearing results');
@@ -199,7 +199,8 @@ export function RaceProvider({ children }) {
           console.log(`[Results] Received ${fresh.length} fresh results from ChronoTrack`);
 
           if (fresh.length > 0) {
-            // NO gender place calculation here — it's now done per-race in ResultsPage
+            // Save raw fresh data (age_group_place comes from bracket fetch in chronotrackapi)
+            // gender_place is null — calculated per-race in ResultsPage
             const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -214,14 +215,15 @@ export function RaceProvider({ children }) {
               chip_time: r.chip_time || null,
               clock_time: r.clock_time || null,
               place: r.place ? parseInt(r.place, 10) : null,
-              gender_place: null, // Explicitly null — calculated on display
+              gender_place: null,
               age_group_name: r.age_group_name || null,
               age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
               pace: r.pace || null,
               splits: r.splits || [],
+              entry_id: r.entry_id || null,
             }));
 
-            // Clear old results and insert fresh
+            // Clear old and insert fresh
             await supabase.from('chronotrack_results').delete().eq('event_id', selectedEvent.id.toString());
 
             const chunkSize = 500;
@@ -231,7 +233,7 @@ export function RaceProvider({ children }) {
               if (error) console.error('[Supabase] Insert error:', error);
             }
 
-            allResults = fresh; // Use raw fresh data (gender_place will be calculated in ResultsPage)
+            allResults = fresh;
             await updateAthleteCount();
             console.log('[Results] Fresh results saved to Supabase and athlete count updated');
           }
