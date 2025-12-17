@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Restored bracket fetching for ALL races)
+// src/api/chronotrackapi.jsx (UPDATED — Enhanced per-race bracket logging + summaries)
 
 import axios from 'axios';
 
@@ -109,40 +109,61 @@ export const fetchResultsForEvent = async (eventId) => {
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
     brackets = bracketRes.data.event_bracket || [];
-    console.log(`[ChronoTrack] Found ${brackets.length} total brackets (across all races)`);
+    console.log(`[ChronoTrack] Found ${brackets.length} total brackets across all races`);
   } catch (err) {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Build map: entry_id → age group place
-  const bracketPlaces = {};
-
-  for (const bracket of brackets) {
-    if (bracket.bracket_type !== 'AGE') continue;
+  // Group brackets by race_id for better logging
+  const bracketsByRace = {};
+  brackets.forEach(bracket => {
+    if (bracket.bracket_type !== 'AGE') return;
 
     const raceId = bracket.race_id || bracket.bracket_race_id || 'unknown';
-    const bracketName = bracket.bracket_name || 'Unnamed';
-
-    console.log(`[ChronoTrack] Processing AGE bracket ${bracket.bracket_id} (race_id: ${raceId}) - "${bracketName}"`);
-
-    try {
-      const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
-        headers: { Authorization: authHeader },
-        params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
-      });
-
-      const bracketResults = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] Bracket ${bracket.bracket_id} returned ${bracketResults.length} ranked results`);
-
-      bracketResults.forEach(r => {
-        const entryId = r.results_entry_id;
-        if (entryId) {
-          bracketPlaces[entryId] = r.results_rank ? parseInt(r.results_rank, 10) : null;
-        }
-      });
-    } catch (err) {
-      console.warn(`[ChronoTrack] Failed bracket ${bracket.bracket_id} (race_id: ${raceId})`, err.response?.status || err.message);
+    if (!bracketsByRace[raceId]) {
+      bracketsByRace[raceId] = [];
     }
+    bracketsByRace[raceId].push(bracket);
+  });
+
+  // Log summary of brackets per race
+  console.log('[ChronoTrack] Bracket summary per race:');
+  Object.keys(bracketsByRace).forEach(raceId => {
+    console.log(`[ChronoTrack] Race ${raceId}: ${bracketsByRace[raceId].length} AGE brackets`);
+  });
+
+  // Fetch bracket results for ALL AGE brackets
+  const bracketPlaces = {}; // entry_id → age_group_place
+
+  for (const raceId in bracketsByRace) {
+    console.log(`[ChronoTrack] Starting bracket results fetch for race ${raceId} (${bracketsByRace[raceId].length} brackets)`);
+
+    for (const bracket of bracketsByRace[raceId]) {
+      const bracketName = bracket.bracket_name || 'Unnamed';
+
+      console.log(`[ChronoTrack] Processing AGE bracket ${bracket.bracket_id} (race_id: ${raceId}) - "${bracketName}"`);
+
+      try {
+        const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
+          headers: { Authorization: authHeader },
+          params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+        });
+
+        const bracketResults = res.data.bracket_results || [];
+        console.log(`[ChronoTrack] Bracket ${bracket.bracket_id} (race_id: ${raceId}) returned ${bracketResults.length} ranked results`);
+
+        bracketResults.forEach(r => {
+          const entryId = r.results_entry_id;
+          if (entryId) {
+            bracketPlaces[entryId] = r.results_rank ? parseInt(r.results_rank, 10) : null;
+          }
+        });
+      } catch (err) {
+        console.warn(`[ChronoTrack] Failed bracket ${bracket.bracket_id} (race_id: ${raceId})`, err.response?.status || err.message);
+      }
+    }
+
+    console.log(`[ChronoTrack] Completed bracket results for race ${raceId}`);
   }
 
   // Map final results with correct age group places
@@ -156,7 +177,7 @@ export const fetchResultsForEvent = async (eventId) => {
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: null, // Will be calculated in frontend if needed
+      gender_place: null, // Calculated in frontend if needed
       age_group_name: r.results_primary_bracket_name || '',
       age_group_place: ageGroupPlace,
       pace: r.results_pace || '',
