@@ -1,8 +1,8 @@
-// src/pages/AdminPage.jsx (FINAL — Uses admin client for all writes to Supabase)
+// src/pages/AdminPage.jsx (COMPLETE FINAL VERSION — All fixes applied)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
-import { createAdminSupabaseClient } from '../supabaseClient'; // ← Admin client only
+import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 
 export default function AdminPage() {
@@ -13,7 +13,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  // Global config loaded from Supabase
+  // Global config state
   const [editedEvents, setEditedEvents] = useState({});
   const [masterGroups, setMasterGroups] = useState({});
   const [hiddenEvents, setHiddenEvents] = useState([]);
@@ -26,7 +26,6 @@ export default function AdminPage() {
   const [expandedEvents, setExpandedEvents] = useState({});
   const [raceEvents, setRaceEvents] = useState({});
   const [chronotrackEnabled, setChronotrackEnabled] = useState(true);
-  const [apiFrequency, setApiFrequency] = useState(60);
   const [loading, setLoading] = useState(true);
   const [chronoEvents, setChronoEvents] = useState([]);
   const [newMasterKeys, setNewMasterKeys] = useState({});
@@ -40,10 +39,10 @@ export default function AdminPage() {
   const [eventResultsCount, setEventResultsCount] = useState({});
   const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
 
-  // Create admin client (bypasses RLS)
+  // Admin Supabase client (service_role — bypasses RLS)
   const adminSupabase = createAdminSupabaseClient();
 
-  // Load global config from Supabase (public read is fine)
+  // Load global config from Supabase
   const loadGlobalConfig = async () => {
     const config = await loadAppConfig();
     setMasterGroups(config.masterGroups || {});
@@ -56,7 +55,7 @@ export default function AdminPage() {
     setHiddenRaces(config.hiddenRaces || {});
   };
 
-  // Save individual config key to Supabase using admin client
+  // Save config using admin client
   const saveConfig = async (key, value) => {
     try {
       const { error } = await adminSupabase
@@ -67,7 +66,7 @@ export default function AdminPage() {
       console.log(`[Admin] Saved ${key} to Supabase`);
     } catch (err) {
       console.error(`[Admin] Failed to save ${key}:`, err);
-      alert(`Failed to save ${key}. Check console for details.`);
+      alert(`Failed to save ${key}. Check console.`);
     }
   };
 
@@ -87,7 +86,7 @@ export default function AdminPage() {
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Fetch events
+  // Fetch events from ChronoTrack
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
       const loadEvents = async () => {
@@ -103,11 +102,11 @@ export default function AdminPage() {
           years.forEach(y => initialCollapsed[y] = true);
           setCollapsedYears(initialCollapsed);
 
-          // Load cached result counts
+          // Load cached result counts (admin client is fine for reads)
           const counts = {};
           for (const event of events) {
             try {
-              const { count } = await supabase // public client is fine for count
+              const { count } = await adminSupabase
                 .from('chronotrack_results')
                 .select('*', { count: 'exact', head: true })
                 .eq('event_id', event.id.toString());
@@ -159,6 +158,7 @@ export default function AdminPage() {
     }
   };
 
+  // Results sync — now using adminSupabase
   const handleSyncResults = async (eventId) => {
     if (syncingEvents.includes(eventId)) return;
     setSyncingEvents(prev => [...prev, eventId]);
@@ -169,7 +169,7 @@ export default function AdminPage() {
         return;
       }
 
-      // Calculate gender places
+      // Gender place calculation
       const genderPlaceMap = {};
       ['M', 'F'].forEach(gender => {
         const genderResults = fresh.filter(r => r.gender === gender)
@@ -200,6 +200,7 @@ export default function AdminPage() {
         splits: r.splits || [],
       }));
 
+      // Delete old results and insert fresh
       await adminSupabase.from('chronotrack_results').delete().eq('event_id', eventId.toString());
 
       const chunkSize = 500;
@@ -373,8 +374,12 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="flex mb-8">
-          <button onClick={() => setActiveTab('event')} className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'event' ? 'bg-white shadow' : 'bg-gray-200'}`}>Event Management</button>
-          <button onClick={() => setActiveTab('website')} className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'website' ? 'bg-white shadow' : 'bg-gray-200'}`}>Website Management</button>
+          <button onClick={() => setActiveTab('event')} className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'event' ? 'bg-white shadow' : 'bg-gray-200'}`}>
+            Event Management
+          </button>
+          <button onClick={() => setActiveTab('website')} className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'website' ? 'bg-white shadow' : 'bg-gray-200'}`}>
+            Website Management
+          </button>
         </div>
 
         {/* Event Management Tab */}
@@ -385,11 +390,22 @@ export default function AdminPage() {
                 Manage Master Events
               </button>
               <button onClick={handleRefreshAllEvents} disabled={refreshingEvents || !chronotrackEnabled} className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-bold px-8 py-4 rounded-xl shadow-lg transition flex items-center gap-3">
-                {refreshingEvents ? <> <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div> Fetching... </> : '↻ Refresh All Events'}
+                {refreshingEvents ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
+                    Fetching...
+                  </>
+                ) : (
+                  '↻ Refresh All Events'
+                )}
               </button>
             </div>
 
-            {refreshStatus && <div className={`mb-6 p-4 rounded-lg text-center font-medium ${refreshStatus.includes('Success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{refreshStatus}</div>}
+            {refreshStatus && (
+              <div className={`mb-6 p-4 rounded-lg text-center font-medium ${refreshStatus.includes('Success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                {refreshStatus}
+              </div>
+            )}
 
             <div className="flex items-center justify-end mb-6">
               <label className="flex items-center cursor-pointer">
@@ -410,7 +426,9 @@ export default function AdminPage() {
                 <select value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)} className="flex-1 p-4 rounded-lg border border-gray-300" disabled={!chronotrackEnabled}>
                   <option value="">Select Event</option>
                   {chronoEvents.map(event => (
-                    <option key={event.id} value={event.id}>{event.name} ({formatDate(event.date)})</option>
+                    <option key={event.id} value={event.id}>
+                      {event.name} ({formatDate(event.date)})
+                    </option>
                   ))}
                 </select>
                 <button onClick={() => handleSyncResults(selectedEventId)} disabled={!selectedEventId} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg">
@@ -463,27 +481,38 @@ export default function AdminPage() {
 
                               <div className="mt-4 flex items-center gap-4">
                                 <button onClick={(e) => { e.stopPropagation(); handleSyncResults(event.id); }} disabled={syncingEvents.includes(event.id)} className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                                  {syncingEvents.includes(event.id) ? <> <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div> Syncing... </> : '↻ Sync Results'}
+                                  {syncingEvents.includes(event.id) ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
+                                      Syncing...
+                                    </>
+                                  ) : (
+                                    '↻ Sync Results'
+                                  )}
                                 </button>
-                                <span className="text-sm text-gray-600">{resultsCount > 0 ? `${resultsCount} finishers` : 'No results'}</span>
+                                <span className="text-sm text-gray-600">
+                                  {resultsCount > 0 ? `${resultsCount} finishers cached` : 'No results cached'}
+                                </span>
                               </div>
 
                               <div className="mt-4">
                                 <p className="font-bold">Current Master: <span className="text-gemini-blue">{currentMaster}</span></p>
                                 <div className="flex items-center gap-2 mt-2">
                                   <input type="checkbox" checked={autoSyncOnAssign[event.id] || false} onChange={e => setAutoSyncOnAssign(prev => ({ ...prev, [event.id]: e.target.checked }))} />
-                                  <span className="text-sm">Auto-sync after assign</span>
+                                  <span className="text-sm text-gray-700">Sync results after assigning</span>
                                 </div>
                                 <div className="flex items-center gap-2 mt-2">
                                   <input
                                     list="master-keys"
-                                    placeholder="Master Key"
+                                    placeholder="Enter or select Master Key"
                                     value={newMasterKeys[event.id] || ''}
                                     onChange={e => setNewMasterKeys(prev => ({ ...prev, [event.id]: e.target.value }))}
                                     className="p-2 border border-gray-300 rounded flex-1"
                                   />
                                   <datalist id="master-keys">
-                                    {Object.keys(masterGroups).map(key => <option key={key} value={key} />)}
+                                    {Object.keys(masterGroups).map(key => (
+                                      <option key={key} value={key} />
+                                    ))}
                                   </datalist>
                                   <button onClick={() => assignToMaster(event.id, newMasterKeys[event.id])} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
                                     Assign
@@ -496,14 +525,19 @@ export default function AdminPage() {
                                   <h4 className="text-xl font-bold mb-4">Races</h4>
                                   {raceEvents[event.id].map(race => (
                                     <div key={race.race_id} className="flex items-center mb-3 ml-4">
-                                      <input type="checkbox" checked={!(hiddenRaces[event.id] || []).includes(race.race_id)} onChange={() => toggleRaceVisibility(event.id, race.race_id)} className="mr-3" />
-                                      <div className="flex flex-col flex-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={!(hiddenRaces[event.id] || []).includes(race.race_id)}
+                                        onChange={() => toggleRaceVisibility(event.id, race.race_id)}
+                                        className="mr-3"
+                                      />
+                                      <div className="flex flex-col space-y-1 flex-1">
                                         <span className="text-sm text-gray-500">Original: {race.race_name}</span>
                                         <input
                                           type="text"
                                           value={editedEvents[event.id]?.races?.[race.race_id] || race.race_name}
                                           onChange={e => handleEditRaceName(event.id, race.race_id, e.target.value)}
-                                          className="w-full p-2 border border-gray-300 rounded"
+                                          className="w-full p-1 border border-gray-300 rounded"
                                         />
                                       </div>
                                     </div>
@@ -526,15 +560,12 @@ export default function AdminPage() {
         {activeTab === 'website' && (
           <>
             <section className="mb-12">
-              <h2 className="text-3xl font-bold mb-4">API Frequency (minutes)</h2>
-              <input type="number" value={apiFrequency} onChange={e => setApiFrequency(parseInt(e.target.value) || 60)} className="w-full max-w-xs p-4 rounded-lg border border-gray-300" />
-            </section>
-
-            <section className="mb-12">
               <h2 className="text-3xl font-bold mb-4">Upload Advertisements</h2>
               <input type="file" onChange={e => handleFileUpload(e, 'ad')} accept="image/*" multiple />
-              <div className="grid grid-cols-3 gap-4 mt-8">
-                {ads.map((ad, i) => <img key={i} src={ad} alt="Ad" className="w-full h-auto rounded shadow" />)}
+              <div className="grid grid-cols-3 gap-4 mt-4">
+                {ads.map((ad, index) => (
+                  <img key={index} src={ad} alt={`Ad ${index + 1}`} className="w-full h-auto rounded shadow" />
+                ))}
               </div>
             </section>
           </>
