@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (UPDATED — /bracket now uses size=500)
+// src/api/chronotrackapi.jsx (FINAL — Fixed pagination bug + size=500 on brackets + full logging)
 
 import axios from 'axios';
 
@@ -83,10 +83,11 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // Fetch main results
+  // Fetch main results — fixed scoping bug
   let allResults = [];
   let page = 1;
   const perPage = 50;
+  let fetched = [];  // ← Now declared outside the loop
 
   console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
 
@@ -100,7 +101,7 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
 
-    const fetched = response.data.event_results || [];
+    fetched = response.data.event_results || [];  // ← Assigned here
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
@@ -108,18 +109,18 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  // Fetch ALL brackets in one call using size=500
+  // Fetch ALL brackets with size=500
   let brackets = [];
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
       headers: { Authorization: authHeader },
       params: {
         client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-        size: 500,  // ← This ensures we get all brackets
+        size: 500,
       },
     });
     brackets = bracketRes.data.event_bracket || [];
-    console.log(`[ChronoTrack] Found ${brackets.length} total AGE brackets (fetched with size=500)`);
+    console.log(`[ChronoTrack] Found ${brackets.length} total AGE brackets (size=500)`);
   } catch (err) {
     console.warn('[ChronoTrack] Could not fetch brackets', err.response?.data || err.message);
   }
@@ -176,7 +177,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.log(`[ChronoTrack] Completed bracket results for race ${raceId}`);
   }
 
-  // Map results with age group places
+  // Map final results
   return allResults.map(r => {
     const entryId = r.results_entry_id;
     const ageGroupPlace = entryId ? bracketPlaces[entryId] : null;
