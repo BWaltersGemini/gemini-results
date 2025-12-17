@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs (FINAL — Full pagination + robust bracket leaderboard + fixed fetched scope)
+// src/api/chronotrackapi.cjs (FINAL — Fetch FULL bracket results for age group places)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -108,7 +108,7 @@ export const fetchResultsForEvent = async (eventId) => {
   let allResults = [];
   let page = 1;
   const perPage = 50;
-  let fetched = []; // Declared outside the loop to fix scope error
+  let fetched = [];
 
   console.log(`[ChronoTrack] Fetching overall results for event ${eventId}`);
 
@@ -143,10 +143,10 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Fetch age group places from bracket results — ROBUST CHECK
+  // Fetch FULL bracket results for age group places (all participants, not just top 10)
   const bracketPlaces = {}; // entry_id → age_group_place
   for (const bracket of brackets) {
-    // Accept various formats for leaderboard enabled
+    // Robust leaderboard check
     const wantsLeaderboard = bracket.bracket_wants_leaderboard;
     const isEnabled = wantsLeaderboard === '1' ||
                       wantsLeaderboard === 1 ||
@@ -157,6 +157,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
     if (!isEnabled || bracket.bracket_type !== 'AGE') continue;
 
+    // Fetch ALL results for this bracket (no page limit — ChronoTrack returns all)
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
@@ -164,6 +165,8 @@ export const fetchResultsForEvent = async (eventId) => {
       });
 
       const bracketResults = res.data.bracket_results || [];
+      console.log(`[ChronoTrack] Full bracket ${bracket.bracket_id}: ${bracketResults.length} ranked results`);
+
       bracketResults.forEach(r => {
         const entryId = r.results_entry_id;
         if (entryId) {
@@ -171,7 +174,7 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed to fetch results for bracket ${bracket.bracket_id}`, err);
+      console.warn(`[ChronoTrack] Failed to fetch full results for bracket ${bracket.bracket_id}`, err);
     }
   }
 
