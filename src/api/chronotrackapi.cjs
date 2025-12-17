@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (UPDATED — Enhanced per-race bracket logging + summaries)
+// src/api/chronotrackapi.jsx (UPDATED — /bracket now uses size=500)
 
 import axios from 'axios';
 
@@ -66,20 +66,27 @@ export const fetchRacesForEvent = async (eventId) => {
     headers: { Authorization: authHeader },
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
-  return (response.data.event_race || []).map(race => ({
+
+  const races = (response.data.event_race || []).map(race => ({
     race_id: race.race_id,
     race_name: race.race_name || `Race ${race.race_id}`,
   }));
+
+  console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races:`);
+  races.forEach(race => {
+    console.log(`[ChronoTrack]   → Race ID: ${race.race_id} | Name: ${race.race_name}`);
+  });
+
+  return races;
 };
 
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // Fetch main results with full pagination
+  // Fetch main results
   let allResults = [];
   let page = 1;
   const perPage = 50;
-  let fetched = [];
 
   console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
 
@@ -93,7 +100,7 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
 
-    fetched = response.data.event_results || [];
+    const fetched = response.data.event_results || [];
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
@@ -101,47 +108,50 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  // Fetch all brackets
+  // Fetch ALL brackets in one call using size=500
   let brackets = [];
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
       headers: { Authorization: authHeader },
-      params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+      params: {
+        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+        size: 500,  // ← This ensures we get all brackets
+      },
     });
     brackets = bracketRes.data.event_bracket || [];
-    console.log(`[ChronoTrack] Found ${brackets.length} total brackets across all races`);
+    console.log(`[ChronoTrack] Found ${brackets.length} total AGE brackets (fetched with size=500)`);
   } catch (err) {
-    console.warn('[ChronoTrack] Could not fetch brackets', err);
+    console.warn('[ChronoTrack] Could not fetch brackets', err.response?.data || err.message);
   }
 
-  // Group brackets by race_id for better logging
+  // Group and log bracket distribution
   const bracketsByRace = {};
   brackets.forEach(bracket => {
     if (bracket.bracket_type !== 'AGE') return;
-
     const raceId = bracket.race_id || bracket.bracket_race_id || 'unknown';
-    if (!bracketsByRace[raceId]) {
-      bracketsByRace[raceId] = [];
-    }
+    if (!bracketsByRace[raceId]) bracketsByRace[raceId] = [];
     bracketsByRace[raceId].push(bracket);
   });
 
-  // Log summary of brackets per race
-  console.log('[ChronoTrack] Bracket summary per race:');
-  Object.keys(bracketsByRace).forEach(raceId => {
-    console.log(`[ChronoTrack] Race ${raceId}: ${bracketsByRace[raceId].length} AGE brackets`);
-  });
+  console.log('[ChronoTrack] AGE bracket distribution per race:');
+  const raceIds = Object.keys(bracketsByRace).sort();
+  if (raceIds.length === 0) {
+    console.log('[ChronoTrack]   → No AGE brackets found for any race in this event');
+  } else {
+    raceIds.forEach(raceId => {
+      console.log(`[ChronoTrack]   → Race ${raceId}: ${bracketsByRace[raceId].length} AGE brackets`);
+    });
+  }
 
-  // Fetch bracket results for ALL AGE brackets
-  const bracketPlaces = {}; // entry_id → age_group_place
+  // Fetch bracket results
+  const bracketPlaces = {};
 
   for (const raceId in bracketsByRace) {
     console.log(`[ChronoTrack] Starting bracket results fetch for race ${raceId} (${bracketsByRace[raceId].length} brackets)`);
 
     for (const bracket of bracketsByRace[raceId]) {
       const bracketName = bracket.bracket_name || 'Unnamed';
-
-      console.log(`[ChronoTrack] Processing AGE bracket ${bracket.bracket_id} (race_id: ${raceId}) - "${bracketName}"`);
+      console.log(`[ChronoTrack] Processing bracket ${bracket.bracket_id} (race_id: ${raceId}) - "${bracketName}"`);
 
       try {
         const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
@@ -150,7 +160,7 @@ export const fetchResultsForEvent = async (eventId) => {
         });
 
         const bracketResults = res.data.bracket_results || [];
-        console.log(`[ChronoTrack] Bracket ${bracket.bracket_id} (race_id: ${raceId}) returned ${bracketResults.length} ranked results`);
+        console.log(`[ChronoTrack] Bracket ${bracket.bracket_id} returned ${bracketResults.length} ranked results`);
 
         bracketResults.forEach(r => {
           const entryId = r.results_entry_id;
@@ -166,7 +176,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.log(`[ChronoTrack] Completed bracket results for race ${raceId}`);
   }
 
-  // Map final results with correct age group places
+  // Map results with age group places
   return allResults.map(r => {
     const entryId = r.results_entry_id;
     const ageGroupPlace = entryId ? bracketPlaces[entryId] : null;
@@ -177,7 +187,7 @@ export const fetchResultsForEvent = async (eventId) => {
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: null, // Calculated in frontend if needed
+      gender_place: null,
       age_group_name: r.results_primary_bracket_name || '',
       age_group_place: ageGroupPlace,
       pace: r.results_pace || '',
