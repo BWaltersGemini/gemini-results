@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (COMPLETE FINAL VERSION — All fixes applied)
+// src/pages/AdminPage.jsx (FINAL — Gender place calculation removed)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
@@ -102,7 +102,7 @@ export default function AdminPage() {
           years.forEach(y => initialCollapsed[y] = true);
           setCollapsedYears(initialCollapsed);
 
-          // Load cached result counts (admin client is fine for reads)
+          // Load cached result counts
           const counts = {};
           for (const event of events) {
             try {
@@ -158,7 +158,7 @@ export default function AdminPage() {
     }
   };
 
-  // Results sync — now using adminSupabase
+  // Results sync — NO gender place calculation (now done in ResultsPage per race)
   const handleSyncResults = async (eventId) => {
     if (syncingEvents.includes(eventId)) return;
     setSyncingEvents(prev => [...prev, eventId]);
@@ -169,16 +169,7 @@ export default function AdminPage() {
         return;
       }
 
-      // Gender place calculation
-      const genderPlaceMap = {};
-      ['M', 'F'].forEach(gender => {
-        const genderResults = fresh.filter(r => r.gender === gender)
-          .sort((a, b) => a.chip_time.localeCompare(b.chip_time));
-        genderResults.forEach((r, i) => {
-          genderPlaceMap[r.entry_id] = i + 1;
-        });
-      });
-
+      // Save raw data — gender_place will be calculated on display in ResultsPage
       const toInsert = fresh.map(r => ({
         event_id: eventId.toString(),
         race_id: r.race_id || null,
@@ -193,14 +184,14 @@ export default function AdminPage() {
         chip_time: r.chip_time || null,
         clock_time: r.clock_time || null,
         place: r.place ? parseInt(r.place, 10) : null,
-        gender_place: genderPlaceMap[r.entry_id] || null,
+        gender_place: null, // Explicitly null — calculated per-race in ResultsPage
         age_group_name: r.age_group_name || null,
         age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
         pace: r.pace || null,
         splits: r.splits || [],
       }));
 
-      // Delete old results and insert fresh
+      // Clear old and insert fresh
       await adminSupabase.from('chronotrack_results').delete().eq('event_id', eventId.toString());
 
       const chunkSize = 500;

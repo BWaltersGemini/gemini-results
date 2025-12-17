@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Shared config from Supabase)
+// src/context/RaceContext.jsx (FINAL — Gender place calculation removed)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
@@ -27,8 +27,7 @@ export function RaceProvider({ children }) {
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [ads, setAds] = useState([]);
 
-  // Only keep localStorage for truly per-device preferences
-  // (e.g., last viewed event — not critical for public users)
+  // Persist last viewed event in localStorage (user preference)
   useEffect(() => {
     const savedEventId = typeof window !== 'undefined' ? localStorage.getItem('selectedEventId') : null;
     if (savedEventId && events.length > 0) {
@@ -65,7 +64,6 @@ export function RaceProvider({ children }) {
       setAds(config.ads || []);
       console.log('[RaceContext] Global config loaded from Supabase');
     };
-
     loadGlobalConfig();
   }, []);
 
@@ -142,7 +140,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results + live polling
+  // Load results + live polling — NO gender place calculation here anymore
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[Results] No selected event — clearing results');
@@ -201,19 +199,8 @@ export function RaceProvider({ children }) {
           console.log(`[Results] Received ${fresh.length} fresh results from ChronoTrack`);
 
           if (fresh.length > 0) {
-            const freshWithGenderPlace = fresh.map(r => {
-              const sameGender = fresh.filter(other => other.gender === r.gender);
-              const fasterSameGender = sameGender.filter(other =>
-                other.chip_time < r.chip_time ||
-                (other.chip_time === r.chip_time && (other.place || Infinity) < (r.place || Infinity))
-              ).length;
-              return {
-                ...r,
-                gender_place: fasterSameGender + 1,
-              };
-            });
-
-            const toUpsert = freshWithGenderPlace.map(r => ({
+            // NO gender place calculation here — it's now done per-race in ResultsPage
+            const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
               bib: r.bib || null,
@@ -227,26 +214,24 @@ export function RaceProvider({ children }) {
               chip_time: r.chip_time || null,
               clock_time: r.clock_time || null,
               place: r.place ? parseInt(r.place, 10) : null,
-              gender_place: r.gender_place ? parseInt(r.gender_place, 10) : null,
+              gender_place: null, // Explicitly null — calculated on display
               age_group_name: r.age_group_name || null,
               age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
               pace: r.pace || null,
               splits: r.splits || [],
             }));
 
-            // Delete old, insert fresh
+            // Clear old results and insert fresh
             await supabase.from('chronotrack_results').delete().eq('event_id', selectedEvent.id.toString());
 
             const chunkSize = 500;
             for (let i = 0; i < toUpsert.length; i += chunkSize) {
               const chunk = toUpsert.slice(i, i + chunkSize);
-              const { error } = await supabase
-                .from('chronotrack_results')
-                .insert(chunk);
-              if (error) console.error('[Supabase] Upsert error:', error);
+              const { error } = await supabase.from('chronotrack_results').insert(chunk);
+              if (error) console.error('[Supabase] Insert error:', error);
             }
 
-            allResults = freshWithGenderPlace;
+            allResults = fresh; // Use raw fresh data (gender_place will be calculated in ResultsPage)
             await updateAthleteCount();
             console.log('[Results] Fresh results saved to Supabase and athlete count updated');
           }

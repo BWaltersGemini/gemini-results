@@ -1,8 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL — Global config from Supabase via RaceContext)
+// src/pages/ResultsPage.jsx (FINAL — Correct per-race gender ranking)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
+import { parseChipTime } from '../utils/timeUtils'; // ← Import the parser
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -21,7 +22,6 @@ export default function ResultsPage() {
     masterGroups = {},
     editedEvents = {},
     hiddenMasters = [],
-    showAdsPerMaster = {},
     setSelectedEvent,
   } = useContext(RaceContext);
 
@@ -29,32 +29,6 @@ export default function ResultsPage() {
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const raceRefs = useRef({});
-
-  const formatTime = (timeStr) => {
-    if (!timeStr || timeStr.trim() === '') return '—';
-    const trim = timeStr.trim();
-    const parts = trim.split(':');
-    let hours = 0;
-    let minutes = '0';
-    let seconds = '00.0';
-    if (parts.length === 3) {
-      hours = parseInt(parts[0], 10);
-      minutes = parts[1];
-      seconds = parts[2];
-    } else if (parts.length === 2) {
-      minutes = parts[0];
-      seconds = parts[1];
-    } else if (parts.length === 1) {
-      seconds = parts[0];
-    }
-    const [secs, tenths = '0'] = seconds.split('.');
-    const formattedSeconds = `${secs.padStart(2, '0')}.${tenths.padStart(1, '0')}`;
-    if (hours > 0) {
-      return `${hours}:${minutes.padStart(2, '0')}:${formattedSeconds}`;
-    } else {
-      return `${parseInt(minutes)}:${formattedSeconds}`;
-    }
-  };
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -68,7 +42,7 @@ export default function ResultsPage() {
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Handle masterKey/year → select correct event
+  // Master/year event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -114,7 +88,7 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, races, navigate]);
 
-  // Only show races with finishers
+  // Filter races with finishers
   const racesWithFinishers = races.filter(race => {
     return results.some(r => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '');
   });
@@ -153,7 +127,7 @@ export default function ResultsPage() {
     });
   };
 
-  // MASTER EVENT LANDING PAGE (when no event selected)
+  // MASTER LANDING PAGE
   if (!selectedEvent) {
     if (Object.keys(masterGroups).length === 0) {
       return (
@@ -231,7 +205,7 @@ export default function ResultsPage() {
     );
   }
 
-  // Available years for this master
+  // Year selector
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
@@ -252,7 +226,7 @@ export default function ResultsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
       <div className="max-w-7xl mx-auto px-6">
-        {/* Event Header */}
+        {/* Header */}
         <div className="text-center mb-16">
           {eventLogos[selectedEvent?.id] ? (
             <img
@@ -345,21 +319,42 @@ export default function ResultsPage() {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const searchLower = (filters.search || '').toLowerCase();
 
-              const filtered = results
-                .filter(r => r.race_id === race.race_id)
-                .filter(r => {
-                  const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
-                  const bibStr = r.bib ? r.bib.toString() : '';
-                  const matchesSearch = nameLower.includes(searchLower) || bibStr.includes(searchLower);
-                  const matchesGender = !filters.gender || r.gender === filters.gender;
-                  const matchesDivision = !filters.division || (r.age_group_name || '') === filters.division;
-                  return matchesSearch && matchesGender && matchesDivision;
-                });
+              // All results for this specific race
+              const raceResults = results.filter(r => r.race_id === race.race_id);
 
+              // Calculate gender place per race
+              const genderPlaceMap = {};
+              ['M', 'F'].forEach(g => {
+                const genderGroup = raceResults
+                  .filter(r => r.gender === g && r.chip_time)
+                  .sort((a, b) => parseChipTime(a.chip_time) - parseChipTime(b.chip_time));
+
+                genderGroup.forEach((r, idx) => {
+                  const key = r.entry_id || r.bib;
+                  genderPlaceMap[key] = idx + 1;
+                });
+              });
+
+              // Apply search/gender/division filters
+              const filtered = raceResults.filter(r => {
+                const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
+                const bibStr = r.bib ? r.bib.toString() : '';
+                const matchesSearch = nameLower.includes(searchLower) || bibStr.includes(searchLower);
+                const matchesGender = !filters.gender || r.gender === filters.gender;
+                const matchesDivision = !filters.division || r.age_group_name === filters.division;
+                return matchesSearch && matchesGender && matchesDivision;
+              });
+
+              // Sort by overall place
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+
               const page = currentPages[race.race_id] || 1;
               const start = (page - 1) * pageSize;
-              const display = sorted.slice(start, start + pageSize);
+              const display = sorted.slice(start, start + pageSize).map(r => ({
+                ...r,
+                gender_place: genderPlaceMap[r.entry_id || r.bib] || null,
+              }));
+
               const totalPages = Math.ceil(sorted.length / pageSize);
 
               return (
@@ -429,10 +424,10 @@ export default function ResultsPage() {
                   {/* Results Table */}
                   <div className="overflow-x-auto">
                     <div className="md:hidden">
-                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} formatTime={formatTime} />
+                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} />
                     </div>
                     <div className="hidden md:block">
-                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={false} formatTime={formatTime} />
+                      <ResultsTable data={display} onNameClick={handleNameClick} isMobile={false} />
                     </div>
                   </div>
 
@@ -468,7 +463,7 @@ export default function ResultsPage() {
               );
             })}
 
-            {/* Sponsors (only if enabled for this master) */}
+            {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20">
                 <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">
