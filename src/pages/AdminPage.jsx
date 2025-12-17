@@ -200,12 +200,12 @@ export default function AdminPage() {
         splits: r.splits || [],
       }));
 
-      await supabase.from('chronotrack_results').delete().eq('event_id', eventId.toString());
+      await adminSupabase.from('chronotrack_results').delete().eq('event_id', eventId.toString());
 
       const chunkSize = 500;
       for (let i = 0; i < toInsert.length; i += chunkSize) {
         const chunk = toInsert.slice(i, i + chunkSize);
-        const { error } = await supabase.from('chronotrack_results').insert(chunk);
+        const { error } = await adminSupabase.from('chronotrack_results').insert(chunk);
         if (error) throw error;
       }
 
