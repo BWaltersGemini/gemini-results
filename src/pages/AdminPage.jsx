@@ -1,72 +1,48 @@
-// src/pages/AdminPage.jsx (COMPLETE FINAL — All features working)
+// src/pages/AdminPage.jsx (COMPLETE — Safe localStorage + all features)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../lib/supabase';
+import { useLocalStorage } from '../utils/useLocalStorage';
 
 export default function AdminPage() {
   const navigate = useNavigate();
 
-  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('adminLoggedIn') === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  const [editedEvents, setEditedEvents] = useState(() => {
-    const stored = localStorage.getItem('editedEvents');
-    return stored ? JSON.parse(stored) : {};
-  });
+  const [editedEvents, setEditedEvents] = useLocalStorage('editedEvents', {});
   const [expandedEvents, setExpandedEvents] = useState({});
   const [raceEvents, setRaceEvents] = useState({});
-  const [hiddenEvents, setHiddenEvents] = useState(() => {
-    const stored = localStorage.getItem('hiddenEvents');
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [hiddenRaces, setHiddenRaces] = useState(() => {
-    const stored = localStorage.getItem('hiddenRaces');
-    return stored ? JSON.parse(stored) : {};
-  });
-  const [hiddenMasters, setHiddenMasters] = useState(() => {
-    const stored = localStorage.getItem('hiddenMasters');
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [showAdsPerMaster, setShowAdsPerMaster] = useState(() => {
-    const stored = localStorage.getItem('showAdsPerMaster');
-    return stored ? JSON.parse(stored) : {};
-  });
-  const [apiFrequency, setApiFrequency] = useState(localStorage.getItem('apiFrequency') || 60);
-  const [eventLogos, setEventLogos] = useState(() => {
-    const stored = localStorage.getItem('eventLogos');
-    return stored ? JSON.parse(stored) : {};
-  });
-  const [ads, setAds] = useState(() => {
-    const stored = localStorage.getItem('ads');
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [chronotrackEnabled, setChronotrackEnabled] = useState(() => {
-    const stored = localStorage.getItem('chronotrackEnabled');
-    return stored === null || stored === 'true';
-  });
-
+  const [hiddenEvents, setHiddenEvents] = useLocalStorage('hiddenEvents', []);
+  const [hiddenRaces, setHiddenRaces] = useLocalStorage('hiddenRaces', {});
+  const [hiddenMasters, setHiddenMasters] = useLocalStorage('hiddenMasters', []);
+  const [showAdsPerMaster, setShowAdsPerMaster] = useLocalStorage('showAdsPerMaster', {});
+  const [apiFrequency, setApiFrequency] = useLocalStorage('apiFrequency', 60);
+  const [eventLogos, setEventLogos] = useLocalStorage('eventLogos', {});
+  const [ads, setAds] = useLocalStorage('ads', []);
+  const [chronotrackEnabled, setChronotrackEnabled] = useLocalStorage('chronotrackEnabled', true);
   const [loading, setLoading] = useState(true);
   const [chronoEvents, setChronoEvents] = useState([]);
-  const [masterGroups, setMasterGroups] = useState(() => {
-    const stored = localStorage.getItem('masterGroups');
-    return stored ? JSON.parse(stored) : {};
-  });
+  const [masterGroups, setMasterGroups] = useLocalStorage('masterGroups', {});
   const [newMasterKeys, setNewMasterKeys] = useState({});
   const [selectedEventId, setSelectedEventId] = useState('');
   const [refreshStatus, setRefreshStatus] = useState('');
   const [activeTab, setActiveTab] = useState('event');
   const [refreshingEvents, setRefreshingEvents] = useState(false);
-
   const [showAssignedEvents, setShowAssignedEvents] = useState(false);
   const [collapsedYears, setCollapsedYears] = useState({});
-
-  // Syncing state, cached result counts, and auto-sync checkbox
   const [syncingEvents, setSyncingEvents] = useState([]);
   const [eventResultsCount, setEventResultsCount] = useState({});
-  const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
+  const [autoSyncOnAssign, setAutoSyncOnAssign] = useLocalStorage('autoSyncOnAssign', {});
+
+  // Login check on mount
+  useEffect(() => {
+    const loggedIn = typeof window !== 'undefined' && localStorage.getItem('adminLoggedIn') === 'true';
+    setIsLoggedIn(loggedIn);
+  }, []);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Date TBD';
@@ -76,11 +52,6 @@ export default function AdminPage() {
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
-
-  // Persist ChronoTrack toggle
-  useEffect(() => {
-    localStorage.setItem('chronotrackEnabled', chronotrackEnabled);
-  }, [chronotrackEnabled]);
 
   // Initial load of events + cached result counts
   useEffect(() => {
@@ -132,20 +103,16 @@ export default function AdminPage() {
       return;
     }
     if (refreshingEvents) return;
-
     setRefreshingEvents(true);
     setRefreshStatus('Fetching all events from ChronoTrack...');
-
     try {
       const events = await fetchChronoEvents();
       const sortedEvents = events.sort((a, b) => new Date(b.date) - new Date(a.date));
       setChronoEvents(sortedEvents);
-
       const years = [...new Set(events.map(e => e.date.split('-')[0]))];
       const initialCollapsed = {};
       years.forEach(y => initialCollapsed[y] = true);
       setCollapsedYears(initialCollapsed);
-
       setRefreshStatus(`Success: Loaded ${events.length} events!`);
     } catch (err) {
       console.error('Failed to refresh events:', err);
@@ -159,9 +126,7 @@ export default function AdminPage() {
   // Sync results for a single event
   const handleSyncResults = async (eventId) => {
     if (syncingEvents.includes(eventId)) return;
-
     setSyncingEvents(prev => [...prev, eventId]);
-
     try {
       const rawResults = await fetchResultsForEvent(eventId);
       console.log(`Synced ${rawResults.length} results for event ${eventId}`);
@@ -214,7 +179,6 @@ export default function AdminPage() {
     }
   };
 
-  // Refresh & Publish Results (uses handleSyncResults)
   const handleRefreshAndPublish = async () => {
     if (!selectedEventId) return;
     setRefreshStatus('Refreshing...');
@@ -289,10 +253,8 @@ export default function AdminPage() {
     });
   };
 
-  // Assign to master with optional auto-sync
   const assignToMaster = async (eventId, masterKey) => {
     if (!masterKey) return;
-
     const newGroups = { ...masterGroups };
     Object.keys(newGroups).forEach(key => {
       newGroups[key] = newGroups[key].filter(id => id !== eventId);
@@ -302,7 +264,6 @@ export default function AdminPage() {
     newGroups[masterKey].push(eventId);
     setMasterGroups(newGroups);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
-
     if (autoSyncOnAssign[eventId]) {
       await handleSyncResults(eventId);
       setAutoSyncOnAssign(prev => ({ ...prev, [eventId]: false }));
@@ -310,15 +271,6 @@ export default function AdminPage() {
   };
 
   const handleSaveChanges = () => {
-    localStorage.setItem('editedEvents', JSON.stringify(editedEvents));
-    localStorage.setItem('hiddenEvents', JSON.stringify(hiddenEvents));
-    localStorage.setItem('hiddenRaces', JSON.stringify(hiddenRaces));
-    localStorage.setItem('hiddenMasters', JSON.stringify(hiddenMasters));
-    localStorage.setItem('showAdsPerMaster', JSON.stringify(showAdsPerMaster));
-    localStorage.setItem('masterGroups', JSON.stringify(masterGroups));
-    localStorage.setItem('eventLogos', JSON.stringify(eventLogos));
-    localStorage.setItem('ads', JSON.stringify(ads));
-    localStorage.setItem('apiFrequency', apiFrequency);
     alert('All changes saved successfully!');
   };
 
@@ -328,10 +280,9 @@ export default function AdminPage() {
     const hours = parts.length > 2 ? parts[0] : 0;
     const minutes = parts.length > 2 ? parts[1] : parts[0];
     const seconds = parts.length > 2 ? parts[2] : parts[1];
-    return hours * 3600 + minutes * 60 + seconds;
+    return hours * 3600 + minutes * 60 + (seconds || 0);
   };
 
-  // Group events by year
   const eventsByYear = chronoEvents.reduce((acc, event) => {
     const year = event.date.split('-')[0];
     if (!acc[year]) acc[year] = [];
@@ -344,6 +295,19 @@ export default function AdminPage() {
 
   const toggleYearCollapse = (year) => {
     setCollapsedYears(prev => ({ ...prev, [year]: !prev[year] }));
+  };
+
+  const handleFileUpload = (e, type) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (type === 'ad') {
+          setAds(prev => [...prev, reader.result]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   return (
@@ -403,7 +367,6 @@ export default function AdminPage() {
                   >
                     Manage Master Events
                   </button>
-
                   <button
                     onClick={handleRefreshAllEvents}
                     disabled={refreshingEvents || !chronotrackEnabled}
@@ -480,7 +443,6 @@ export default function AdminPage() {
                 {/* Manage Events — Grouped by Year with Collapse */}
                 <section className="mb-12">
                   <h2 className="text-3xl font-bold mb-8">Manage Events (by Year)</h2>
-
                   {years.length === 0 ? (
                     <p className="text-center text-gray-600">No events loaded.</p>
                   ) : (
@@ -488,9 +450,7 @@ export default function AdminPage() {
                       const isCollapsed = collapsedYears[year] ?? true;
                       const yearEvents = eventsByYear[year]
                         .filter(event => showAssignedEvents || !assignedEventIds.has(event.id));
-
                       if (yearEvents.length === 0) return null;
-
                       return (
                         <div key={year} className="mb-12">
                           <button
@@ -502,13 +462,11 @@ export default function AdminPage() {
                             </span>
                             <span>{year} ({yearEvents.length} events)</span>
                           </button>
-
                           {!isCollapsed && (
                             <div className="space-y-6 pl-10">
                               {yearEvents.map(event => {
                                 const currentMaster = Object.keys(masterGroups).find(key => masterGroups[key].includes(event.id)) || 'None';
                                 const resultsCount = eventResultsCount[event.id] || 0;
-
                                 return (
                                   <div key={event.id} className="p-6 bg-white rounded-xl shadow hover:shadow-lg transition">
                                     <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleExpandEvent(event.id)}>
@@ -525,7 +483,6 @@ export default function AdminPage() {
                                       <span className="ml-2 text-xl text-gray-600">({formatDate(event.date)})</span>
                                       <span>{expandedEvents[event.id] ? '▲' : '▼'}</span>
                                     </div>
-
                                     <div className="flex items-center mt-2">
                                       <input
                                         type="checkbox"
@@ -535,7 +492,6 @@ export default function AdminPage() {
                                       />
                                       <span>Visible in App</span>
                                     </div>
-
                                     {/* Sync Results Button + Count */}
                                     <div className="mt-4 flex items-center gap-4">
                                       <button
@@ -559,7 +515,6 @@ export default function AdminPage() {
                                         {resultsCount > 0 ? `${resultsCount} finishers cached` : 'No results cached'}
                                       </span>
                                     </div>
-
                                     <div className="mt-4">
                                       <p className="font-bold">Current Master: <span className="text-gemini-blue">{currentMaster}</span></p>
                                       <div className="flex items-center gap-2 mt-2">
@@ -591,7 +546,6 @@ export default function AdminPage() {
                                         </button>
                                       </div>
                                     </div>
-
                                     {expandedEvents[event.id] && raceEvents[event.id] && (
                                       <div className="mt-6 border-t pt-6">
                                         <h4 className="text-xl font-bold mb-4">Races</h4>
@@ -642,9 +596,8 @@ export default function AdminPage() {
                       if (value > 0) setApiFrequency(value);
                     }}
                     className="w-full max-w-xs p-4 rounded-lg border border-gray-300"
-                  />
+                   c/>
                 </section>
-
                 <section className="mb-12">
                   <h2 className="text-3xl font-bold mb-4">Upload Advertisements</h2>
                   <input type="file" onChange={e => handleFileUpload(e, 'ad')} accept="image/*" multiple />
@@ -657,9 +610,11 @@ export default function AdminPage() {
               </>
             )}
 
-            <button onClick={handleSaveChanges} className="mt-12 bg-gemini-blue text-white px-10 py-5 rounded-xl hover:bg-gemini-blue/90 font-bold text-xl">
-              Save All Changes
-            </button>
+            <div className="text-center mt-12">
+              <button onClick={handleSaveChanges} className="bg-gemini-blue text-white px-10 py-5 rounded-xl hover:bg-gemini-blue/90 font-bold text-xl">
+                Save All Changes
+              </button>
+            </div>
           </>
         )}
       </div>

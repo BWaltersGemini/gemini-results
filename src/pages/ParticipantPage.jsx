@@ -1,8 +1,9 @@
-// src/pages/ParticipantPage.jsx (FINAL — Proper time formatting + only show relevant races)
+// src/pages/ParticipantPage.jsx (FINAL — Safe localStorage + proper time formatting)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { supabase } from '../supabaseClient';
+import { useLocalStorage } from '../utils/useLocalStorage';
 
 export default function ParticipantPage() {
   const location = useLocation();
@@ -18,8 +19,8 @@ export default function ParticipantPage() {
     loading: contextLoading,
   } = useContext(RaceContext);
 
-  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
+  const [masterGroups] = useLocalStorage('masterGroups', {});
+  const [editedEvents] = useLocalStorage('editedEvents', {});
 
   const initialState = location.state || {};
   const [participant, setParticipant] = useState(initialState.participant);
@@ -29,16 +30,13 @@ export default function ParticipantPage() {
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
 
-  // Time formatting function
   const formatTime = (timeStr) => {
     if (!timeStr || timeStr.trim() === '') return '—';
-
     const trim = timeStr.trim();
     const parts = trim.split(':');
     let hours = 0;
     let minutes = '0';
     let seconds = '00.0';
-
     if (parts.length === 3) {
       hours = parseInt(parts[0], 10);
       minutes = parts[1];
@@ -49,10 +47,8 @@ export default function ParticipantPage() {
     } else if (parts.length === 1) {
       seconds = parts[0];
     }
-
     const [secs, tenths = '0'] = seconds.split('.');
     const formattedSeconds = `${secs.padStart(2, '0')}.${tenths.padStart(1, '0')}`;
-
     if (hours > 0) {
       return `${hours}:${minutes.padStart(2, '0')}:${formattedSeconds}`;
     } else {
@@ -86,7 +82,6 @@ export default function ParticipantPage() {
     });
   };
 
-  // Fetch missing data
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (!participant || !selectedEvent || results.length === 0) {

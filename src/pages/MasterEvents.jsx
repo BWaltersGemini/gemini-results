@@ -1,19 +1,23 @@
-// src/pages/MasterEvents.jsx (FIXED — Correct ID comparison for linking)
+// src/pages/MasterEvents.jsx (UPDATED — Safe localStorage with useLocalStorage hook)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.cjs';
+import { useLocalStorage } from '../utils/useLocalStorage';
 
 export default function MasterEvents() {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('adminLoggedIn') === 'true');
+
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
-  const [masterGroups, setMasterGroups] = useState(JSON.parse(localStorage.getItem('masterGroups')) || {});
-  const [editedEvents, setEditedEvents] = useState(JSON.parse(localStorage.getItem('editedEvents')) || {});
-  const [hiddenMasters, setHiddenMasters] = useState(JSON.parse(localStorage.getItem('hiddenMasters')) || []);
-  const [showAdsPerMaster, setShowAdsPerMaster] = useState(JSON.parse(localStorage.getItem('showAdsPerMaster')) || {});
-  const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
+
+  const [masterGroups, setMasterGroups] = useLocalStorage('masterGroups', {});
+  const [editedEvents, setEditedEvents] = useLocalStorage('editedEvents', {});
+  const [hiddenMasters, setHiddenMasters] = useLocalStorage('hiddenMasters', []);
+  const [showAdsPerMaster, setShowAdsPerMaster] = useLocalStorage('showAdsPerMaster', {});
+  const [eventLogos, setEventLogos] = useLocalStorage('eventLogos', {});
+
   const [chronoEvents, setChronoEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,6 +44,12 @@ export default function MasterEvents() {
     if (isNaN(year) || isNaN(month) || isNaN(day)) return new Date(NaN);
     return new Date(year, month - 1, day);
   };
+
+  // Check login status on mount
+  useEffect(() => {
+    const loggedIn = typeof window !== 'undefined' && localStorage.getItem('adminLoggedIn') === 'true';
+    setIsLoggedIn(loggedIn);
+  }, []);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -112,10 +122,7 @@ export default function MasterEvents() {
   };
 
   const handleSaveChanges = () => {
-    localStorage.setItem('editedEvents', JSON.stringify(editedEvents));
-    localStorage.setItem('hiddenMasters', JSON.stringify(hiddenMasters));
-    localStorage.setItem('showAdsPerMaster', JSON.stringify(showAdsPerMaster));
-    localStorage.setItem('eventLogos', JSON.stringify(eventLogos));
+    // All state is already synced via useLocalStorage
     alert('Changes saved!');
   };
 
@@ -174,7 +181,6 @@ export default function MasterEvents() {
                         placeholder="Master Event Display Name"
                       />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                       <div>
                         <label className="block font-medium mb-2">Upload Logo</label>
@@ -183,7 +189,6 @@ export default function MasterEvents() {
                           <img src={eventLogos[masterKey]} alt="Master Logo" className="mt-4 max-h-32 rounded-lg shadow-md" />
                         )}
                       </div>
-
                       <div className="flex flex-col justify-center space-y-4">
                         <label className="flex items-center">
                           <input
@@ -205,14 +210,13 @@ export default function MasterEvents() {
                         </label>
                       </div>
                     </div>
-
                     <div>
                       <h3 className="text-2xl font-bold mb-4 text-gemini-dark-gray">Linked Event Years ({linkedEvents.length})</h3>
                       {linkedEvents.length > 0 ? (
                         <ul className="space-y-3">
                           {linkedEvents.map(event => (
                             <li key={event.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                              <span className="font-medium">{formatDate(event.date)}</span> — 
+                              <span className="font-medium">{formatDate(event.date)}</span> —
                               <span className="ml-2">{editedEvents[event.id]?.name || event.name}</span>
                             </li>
                           ))}
@@ -224,11 +228,9 @@ export default function MasterEvents() {
                   </div>
                 );
               })}
-
               {Object.keys(masterGroups).length === 0 && (
                 <p className="text-center text-gray-600 text-xl">No master events created yet. Create them in the main Admin page.</p>
               )}
-
               <div className="text-center mt-12">
                 <button onClick={handleSaveChanges} className="bg-gemini-blue text-white px-12 py-4 rounded-full text-xl font-bold hover:bg-gemini-blue/90 shadow-lg">
                   Save All Changes

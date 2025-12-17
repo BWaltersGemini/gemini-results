@@ -1,7 +1,8 @@
-// src/context/RaceContext.jsx (FINAL — Fixed results loading + better logging + debug helper)
+// src/context/RaceContext.jsx (UPDATED — Safe localStorage)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
+import { useLocalStorage } from '../utils/useLocalStorage';
 
 export const RaceContext = createContext();
 
@@ -14,15 +15,15 @@ export function RaceProvider({ children }) {
   const [loadingResults, setLoadingResults] = useState(false);
   const [error, setError] = useState(null);
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
-  const [eventLogos, setEventLogos] = useState(JSON.parse(localStorage.getItem('eventLogos')) || {});
-  const [ads, setAds] = useState(JSON.parse(localStorage.getItem('ads')) || {});
-  const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Global stats — updated reliably
+  // Safe localStorage for eventLogos and ads
+  const [eventLogos, setEventLogos] = useLocalStorage('eventLogos', {});
+  const [ads, setAds] = useLocalStorage('ads', {});
+
+  const [isLiveRace, setIsLiveRace] = useState(false);
   const [totalAthletesTimed, setTotalAthletesTimed] = useState(0);
   const [totalRacesTimed, setTotalRacesTimed] = useState(0);
 
-  // Helper: Update total athletes count from Supabase
   const updateAthleteCount = async () => {
     try {
       const { count, error } = await supabase
@@ -35,7 +36,6 @@ export function RaceProvider({ children }) {
     }
   };
 
-  // Debug helper — easy console search
   const findEvents = (searchTerm) => {
     if (!searchTerm) return events;
     const lower = searchTerm.toLowerCase();
@@ -49,7 +49,6 @@ export function RaceProvider({ children }) {
     }));
   };
 
-  // Load events
   useEffect(() => {
     console.log('[RaceContext] Provider mounted — fetching events');
     const loadEvents = async () => {
@@ -61,11 +60,9 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents.length, 'total events');
         setEvents(fetchedEvents);
 
-        // Update races timed (completed events)
         const completedEvents = fetchedEvents.filter(e => new Date(e.date) <= new Date());
         setTotalRacesTimed(completedEvents.length);
 
-        // Update athletes timed
         await updateAthleteCount();
 
         const savedEventId = localStorage.getItem('selectedEventId');
@@ -89,11 +86,9 @@ export function RaceProvider({ children }) {
       }
     };
     loadEvents();
-
     return () => console.log('[RaceContext] Provider cleanup');
   }, []);
 
-  // Persist selectedEvent
   useEffect(() => {
     if (selectedEvent) {
       localStorage.setItem('selectedEventId', selectedEvent.id);
@@ -102,7 +97,6 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load races
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
@@ -122,7 +116,6 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results — fixed + improved logging
   useEffect(() => {
     if (!selectedEvent) {
       console.log('[Results] No selected event — clearing results');
@@ -133,15 +126,14 @@ export function RaceProvider({ children }) {
     }
 
     console.log(`[Results] Loading results for event ${selectedEvent.id} — "${selectedEvent.name}" (${selectedEvent.date})`);
-
     let interval;
+
     const loadResults = async (forceFresh = false) => {
       try {
         setLoadingResults(true);
         setError(null);
         let allResults = [];
 
-        // Load from Supabase cache
         let allCached = [];
         let page = 0;
         const pageSize = 1000;
@@ -153,13 +145,11 @@ export function RaceProvider({ children }) {
             .eq('event_id', selectedEvent.id.toString())
             .order('place', { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
-
           if (error) {
             console.error('[Supabase] Cache error:', error);
             break;
           }
           if (!data || data.length === 0) break;
-
           allCached = [...allCached, ...data];
           if (data.length < pageSize) break;
           page++;
@@ -245,7 +235,7 @@ export function RaceProvider({ children }) {
       }
     };
 
-    loadResults(); // Always run on mount/change
+    loadResults();
 
     const todayStr = new Date().toISOString().split('T')[0];
     if (selectedEvent.date === todayStr) {
@@ -273,7 +263,9 @@ export function RaceProvider({ children }) {
       error,
       uniqueDivisions,
       eventLogos,
+      setEventLogos,  // Expose setter if needed elsewhere
       ads,
+      setAds,         // Expose setter for ads upload
       isLiveRace,
       totalAthletesTimed,
       totalRacesTimed,
