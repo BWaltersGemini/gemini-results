@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Full pagination for ALL events with size=500 and format=json)
+// src/api/chronotrackapi.cjs (FINAL — Robust bracket leaderboard handling)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -46,14 +46,11 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
-// UPDATED: Fetch ALL events with full pagination, size=500, format=json
 export const fetchEvents = async () => {
   const authHeader = await getAuthHeader();
-
   let allEvents = [];
   let page = 1;
-  const perPage = 500; // Higher page size as per docs
-
+  const perPage = 500;
   console.log('[ChronoTrack] Starting to fetch ALL events (paginated, size=500)...');
 
   while (true) {
@@ -63,35 +60,27 @@ export const fetchEvents = async () => {
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
           page,
-          size: perPage,  // Changed to 'size' as per docs
-          format: 'json', // Added as per example
-          include_test_events: 'true', // Optional: include test events
+          size: perPage,
+          format: 'json',
+          include_test_events: 'true',
         },
       });
 
       const events = response.data.event || [];
-
-      if (events.length === 0) {
-        console.log('[ChronoTrack] No more events found — pagination complete.');
-        break;
-      }
+      if (events.length === 0) break;
 
       allEvents = [...allEvents, ...events];
       console.log(`[ChronoTrack] Fetched page ${page}: ${events.length} events → Total: ${allEvents.length}`);
 
-      if (events.length < perPage) {
-        break;
-      }
-
+      if (events.length < perPage) break;
       page++;
     } catch (err) {
       console.error('[ChronoTrack] Error fetching events page', page, ':', err.response?.data || err.message);
-      break; // Stop on error
+      break;
     }
   }
 
   console.log(`[ChronoTrack] Successfully fetched ALL ${allEvents.length} events`);
-
   return allEvents.map(event => ({
     id: event.event_id,
     name: event.event_name,
@@ -119,7 +108,6 @@ export const fetchResultsForEvent = async (eventId) => {
   let allResults = [];
   let page = 1;
   const perPage = 50;
-  let fetched = [];
 
   console.log(`[ChronoTrack] Fetching overall results for event ${eventId}`);
 
@@ -133,7 +121,7 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
 
-    fetched = response.data.event_results || [];
+    const fetched = response.data.event_results || [];
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
@@ -154,10 +142,19 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Fetch bracket results for age group place (using entry_id)
+  // Fetch bracket results for age group place — ROBUST CHECK
   const bracketPlaces = {}; // entry_id → age_group_place
   for (const bracket of brackets) {
-    if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') continue;
+    // More forgiving check for leaderboard enabled
+    const wantsLeaderboard = bracket.bracket_wants_leaderboard;
+    const isEnabled = wantsLeaderboard === '1' ||
+                      wantsLeaderboard === 1 ||
+                      wantsLeaderboard === 'Y' ||
+                      wantsLeaderboard === 'yes' ||
+                      wantsLeaderboard === true ||
+                      wantsLeaderboard === 'true';
+
+    if (!isEnabled) continue;
     if (bracket.bracket_type !== 'AGE') continue;
 
     try {
@@ -174,11 +171,11 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed bracket ${bracket.bracket_id}`, err);
+      console.warn(`[ChronoTrack] Failed to fetch results for bracket ${bracket.bracket_id}`, err);
     }
   }
 
-  // Map results — gender_place will be calculated in RaceContext
+  // Map results
   return allResults.map(r => {
     const entryId = r.results_entry_id;
     const ageGroupPlace = entryId ? bracketPlaces[entryId] : null;
@@ -200,7 +197,7 @@ export const fetchResultsForEvent = async (eventId) => {
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: null, // Calculated in RaceContext
+      gender_place: null, // Now calculated per-race in ResultsPage
       age_group_name: r.results_primary_bracket_name || '',
       age_group_place: ageGroupPlace,
       pace: r.results_pace || '',
