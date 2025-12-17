@@ -1,24 +1,27 @@
-// src/utils/useLocalStorage.js
+// src/utils/useLocalStorage.js (FINAL — With loading state)
 import { useState, useEffect } from 'react';
 
 export function useLocalStorage(key, initialValue) {
   const [storedValue, setStoredValue] = useState(initialValue);
+  const [loading, setLoading] = useState(true);  // ← NEW: Track loading state
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
 
     try {
       const item = window.localStorage.getItem(key);
       if (item !== null) {
         setStoredValue(JSON.parse(item));
-      } else {
-        setStoredValue(initialValue);
       }
     } catch (error) {
       console.warn(`Error reading localStorage key "${key}":`, error);
-      setStoredValue(initialValue);
+    } finally {
+      setLoading(false);  // ← Ensure loading ends even on error
     }
-  }, [key, initialValue]);
+  }, [key]);
 
   const setValue = (value) => {
     if (typeof window === 'undefined') return;
@@ -32,5 +35,5 @@ export function useLocalStorage(key, initialValue) {
     }
   };
 
-  return [storedValue, setValue];
+  return [storedValue, setValue, loading];  // ← Return loading flag
 }
