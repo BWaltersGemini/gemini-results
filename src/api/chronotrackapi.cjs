@@ -1,3 +1,20 @@
+/**
+ * CHRONOTRACK API INTEGRATION — FINAL WORKING VERSION (Dec 2025)
+ *
+ * CRITICAL NOTES:
+ * - Age group places ONLY exist for races that have AGE brackets defined in ChronoTrack.
+ * - Not all races in an event have age groups (e.g., Kids Runs, Fun Walks → overall only).
+ * - We MUST fetch /event/{id}/bracket with size=500 to get ALL brackets.
+ * - We MUST fetch /bracket/{id}/results for each AGE bracket to get division places.
+ * - The main /results endpoint does NOT include age_group_place for secondary races.
+ * - Do NOT remove the bracket fetching loop — it is required for correct division places.
+ *
+ * This version fixes:
+ * - Pagination scoping bug
+ * - Missing brackets due to no size param
+ * - Incomplete age group places on non-primary races
+ */
+
 // src/api/chronotrackapi.jsx (FINAL — Fixed pagination bug + size=500 on brackets + full logging)
 
 import axios from 'axios';
