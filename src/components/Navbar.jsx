@@ -1,7 +1,8 @@
-// src/components/Navbar.jsx (FINAL — Master Events dropdown, robust slug matching)
+// src/components/Navbar.jsx (COMPLETE FINAL — Safe localStorage + Master Events dropdown on mobile)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
+import { useLocalStorage } from '../utils/useLocalStorage';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -13,12 +14,12 @@ export default function Navbar() {
     loading = true,
   } = useContext(RaceContext);
 
+  const [masterGroups, , isMasterGroupsLoading] = useLocalStorage('masterGroups', {});
+  const [editedEvents] = useLocalStorage('editedEvents', {});
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isListOpen, setIsListOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -29,9 +30,6 @@ export default function Navbar() {
       .replace(/^-+|-+$/g, '');
   };
 
-  // Normalize for lookup
-  const normalizeKey = (key) => key.toLowerCase().replace(/ /g, '-');
-
   useEffect(() => {
     if (selectedEvent) {
       setSearchTerm(selectedEvent.name || '');
@@ -41,15 +39,12 @@ export default function Navbar() {
   // Build master event list with robust matching
   const masterEventList = Object.keys(masterGroups).map(storedKey => {
     const displayName = editedEvents[storedKey]?.name || storedKey;
-    const eventIds = masterGroups[storedKey];
-    const masterEvents = events.filter(e => eventIds.includes(e.id));
-
+    const eventIds = masterGroups[storedKey] || [];
+    const masterEvents = events.filter(e => eventIds.includes(String(e.id)));
     if (masterEvents.length === 0) return null;
-
     const latestEvent = masterEvents.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-    const masterSlug = slugify(storedKey); // Use stored key for consistent slug
+    const masterSlug = slugify(storedKey);
     const year = latestEvent.date.split('-')[0];
-
     return {
       storedKey,
       displayName,
@@ -60,7 +55,7 @@ export default function Navbar() {
   }).filter(Boolean);
 
   const filteredMasters = searchTerm
-    ? masterEventList.filter(m => 
+    ? masterEventList.filter(m =>
         m.displayName.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : masterEventList;
@@ -158,9 +153,10 @@ export default function Navbar() {
         </div>
       </div>
 
+      {/* Dropdown List */}
       {isListOpen && (
         <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
-          {loading ? (
+          {loading || isMasterGroupsLoading ? (
             <div className="p-8 text-center">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gemini-blue"></div>
               <p className="mt-4 text-gray-600">Loading events...</p>
@@ -175,7 +171,7 @@ export default function Navbar() {
                 key={master.storedKey}
                 onClick={() => handleMasterSelect(master)}
                 className={`p-4 cursor-pointer border-b border-gray-100 last:border-0 transition hover:bg-gemini-light-gray
-                  ${selectedEvent && masterGroups[master.storedKey]?.includes(selectedEvent.id)
+                  ${selectedEvent && masterGroups[master.storedKey]?.includes(String(selectedEvent.id))
                     ? 'bg-gemini-blue/10 font-bold text-gemini-blue border-l-4 border-gemini-blue'
                     : 'text-gray-900'
                   }`}
@@ -194,6 +190,7 @@ export default function Navbar() {
         </div>
       )}
 
+      {/* Mobile Menu */}
       {isMobileMenuOpen && (
         <>
           <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
@@ -221,8 +218,12 @@ export default function Navbar() {
                   <Link to="/admin" onClick={() => setIsMobileMenuOpen(false)} className="block text-base text-gray-600 hover:text-gemini-blue py-2">
                     Admin Login
                   </Link>
-                  <a href="https://youkeepmoving.com/race-directors" target="_blank" rel="noopener noreferrer"
-                    className="block text-base text-gray-600 hover:text-gemini-blue py-2">
+                  <a
+                    href="https://youkeepmoving.com/race-directors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-base text-gray-600 hover:text-gemini-blue py-2"
+                  >
                     Race Directors Hub
                   </a>
                 </div>
