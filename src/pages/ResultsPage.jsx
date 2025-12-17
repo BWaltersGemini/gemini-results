@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Safe localStorage + finishers + time formatting)
+// src/pages/ResultsPage.jsx (COMPLETE FINAL — Mobile-safe + finishers only + time formatting)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -21,7 +21,7 @@ export default function ResultsPage() {
     setSelectedEvent,
   } = useContext(RaceContext);
 
-  const [masterGroups] = useLocalStorage('masterGroups', {});
+  const [masterGroups, , isMasterGroupsLoading] = useLocalStorage('masterGroups', {});
   const [editedEvents] = useLocalStorage('editedEvents', {});
 
   const [pageSize] = useState(10);
@@ -29,6 +29,7 @@ export default function ResultsPage() {
   const [raceFilters, setRaceFilters] = useState({});
   const raceRefs = useRef({});
 
+  // Time formatting: hh:mm:ss.s → no leading zero on hours, always show tenths
   const formatTime = (timeStr) => {
     if (!timeStr || timeStr.trim() === '') return '—';
     const trim = timeStr.trim();
@@ -67,6 +68,7 @@ export default function ResultsPage() {
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
+  // Robust master/year selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0) return;
     const normalizedUrlKey = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
@@ -89,6 +91,7 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
+  // Auto-apply division filter from participant page
   useEffect(() => {
     if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent && races.length > 0) {
       const { autoFilterDivision, autoFilterRaceId } = location.state;
@@ -109,6 +112,7 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, races, navigate]);
 
+  // Filter races with at least one finisher
   const racesWithFinishers = races.filter(race => {
     return results.some(r => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '');
   });
@@ -147,7 +151,20 @@ export default function ResultsPage() {
     });
   };
 
+  // ——— LANDING PAGE: Master Event Selection ———
   if (!selectedEvent) {
+    // Show loading while masterGroups is being read from localStorage
+    if (isMasterGroupsLoading) {
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-gemini-blue mb-8"></div>
+            <p className="text-2xl text-gray-700">Loading race series...</p>
+          </div>
+        </div>
+      );
+    }
+
     const masterEventTiles = Object.keys(masterGroups).map(storedKey => {
       const displayName = editedEvents[storedKey]?.name || storedKey;
       const eventIds = masterGroups[storedKey];
@@ -207,6 +224,7 @@ export default function ResultsPage() {
     );
   }
 
+  // Get available years for year selector
   let availableYears = [];
   if (masterKey) {
     const normalizedUrlKey = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
@@ -227,6 +245,7 @@ export default function ResultsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
       <div className="max-w-7xl mx-auto px-6">
+        {/* Event Header */}
         <div className="text-center mb-16">
           {eventLogos[selectedEvent?.id] ? (
             <img
@@ -239,6 +258,8 @@ export default function ResultsPage() {
             {selectedEvent.name}
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.date)}</p>
+
+          {/* Year Selector */}
           {availableYears.length > 1 && (
             <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
               <span className="text-2xl font-bold text-gemini-dark-gray">
@@ -263,6 +284,7 @@ export default function ResultsPage() {
           )}
         </div>
 
+        {/* Race Tiles — Only races with finishers */}
         {displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
             {displayedRaces.map((race) => {
@@ -299,6 +321,7 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* Loading / No Results */}
         {loadingResults ? (
           <div className="text-center py-32">
             <div className="inline-block animate-spin rounded-full h-20 w-20 border-t-4 border-gemini-blue"></div>
@@ -311,6 +334,7 @@ export default function ResultsPage() {
           </div>
         ) : (
           <>
+            {/* Race Sections */}
             {displayedRaces.map((race) => {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const searchLower = (filters.search || '').toLowerCase();
@@ -341,6 +365,8 @@ export default function ResultsPage() {
                       {race.race_name}
                     </h3>
                   </div>
+
+                  {/* Filters */}
                   <div className="p-8 border-b border-gray-200">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <input
@@ -391,6 +417,8 @@ export default function ResultsPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Results Table */}
                   <div className="overflow-x-auto">
                     <div className="md:hidden">
                       <ResultsTable data={display} onNameClick={handleNameClick} isMobile={true} formatTime={formatTime} />
@@ -399,6 +427,8 @@ export default function ResultsPage() {
                       <ResultsTable data={display} onNameClick={handleNameClick} isMobile={false} formatTime={formatTime} />
                     </div>
                   </div>
+
+                  {/* Pagination */}
                   {sorted.length > pageSize && (
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mt-12 p-8 bg-gray-50">
                       <button
@@ -430,6 +460,7 @@ export default function ResultsPage() {
               );
             })}
 
+            {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20">
                 <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">
