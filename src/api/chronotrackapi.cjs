@@ -108,7 +108,7 @@ export const fetchResultsForEvent = async (eventId) => {
   // Fetch main results (paginated)
   let allResults = [];
   let page = 1;
-  const perPage = 50;
+  const perPage = 500;
   let fetched = [];
 
   console.log(`[ChronoTrack] Fetching overall results for event ${eventId}`);
