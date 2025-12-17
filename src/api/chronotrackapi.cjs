@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs (FINAL — Robust bracket leaderboard handling)
+// src/api/chronotrackapi.cjs (FINAL — Full pagination + robust bracket leaderboard + fixed fetched scope)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -104,10 +104,11 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // Fetch main results
+  // Fetch main results (paginated)
   let allResults = [];
   let page = 1;
   const perPage = 50;
+  let fetched = []; // Declared outside the loop to fix scope error
 
   console.log(`[ChronoTrack] Fetching overall results for event ${eventId}`);
 
@@ -121,7 +122,7 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
 
-    const fetched = response.data.event_results || [];
+    fetched = response.data.event_results || [];
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
@@ -142,10 +143,10 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Fetch bracket results for age group place — ROBUST CHECK
+  // Fetch age group places from bracket results — ROBUST CHECK
   const bracketPlaces = {}; // entry_id → age_group_place
   for (const bracket of brackets) {
-    // More forgiving check for leaderboard enabled
+    // Accept various formats for leaderboard enabled
     const wantsLeaderboard = bracket.bracket_wants_leaderboard;
     const isEnabled = wantsLeaderboard === '1' ||
                       wantsLeaderboard === 1 ||
@@ -154,8 +155,7 @@ export const fetchResultsForEvent = async (eventId) => {
                       wantsLeaderboard === true ||
                       wantsLeaderboard === 'true';
 
-    if (!isEnabled) continue;
-    if (bracket.bracket_type !== 'AGE') continue;
+    if (!isEnabled || bracket.bracket_type !== 'AGE') continue;
 
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
@@ -197,7 +197,7 @@ export const fetchResultsForEvent = async (eventId) => {
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: null, // Now calculated per-race in ResultsPage
+      gender_place: null, // Calculated per-race in ResultsPage
       age_group_name: r.results_primary_bracket_name || '',
       age_group_place: ageGroupPlace,
       pace: r.results_pace || '',
