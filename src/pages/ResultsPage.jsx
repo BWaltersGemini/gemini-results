@@ -29,7 +29,6 @@ export default function ResultsPage() {
   const [raceFilters, setRaceFilters] = useState({});
   const raceRefs = useRef({});
 
-  // Time formatting: hh:mm:ss.s → no leading zero on hours, always show tenths
   const formatTime = (timeStr) => {
     if (!timeStr || timeStr.trim() === '') return '—';
     const trim = timeStr.trim();
@@ -68,7 +67,6 @@ export default function ResultsPage() {
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Robust master/year selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0) return;
     const normalizedUrlKey = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
@@ -91,7 +89,6 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Auto-apply division filter from participant page
   useEffect(() => {
     if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent && races.length > 0) {
       const { autoFilterDivision, autoFilterRaceId } = location.state;
@@ -112,7 +109,6 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, races, navigate]);
 
-  // Filter races with at least one finisher
   const racesWithFinishers = races.filter(race => {
     return results.some(r => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '');
   });
@@ -151,9 +147,8 @@ export default function ResultsPage() {
     });
   };
 
-  // ——— LANDING PAGE: Master Event Selection ———
+  // ——— LANDING: Master Event Selection ———
   if (!selectedEvent) {
-    // Show loading while masterGroups is being read from localStorage
     if (isMasterGroupsLoading) {
       return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20 flex items-center justify-center">
@@ -224,7 +219,7 @@ export default function ResultsPage() {
     );
   }
 
-  // Get available years for year selector
+  // Available years for selector
   let availableYears = [];
   if (masterKey) {
     const normalizedUrlKey = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
@@ -284,7 +279,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Race Tiles — Only races with finishers */}
+        {/* Race Tiles */}
         {displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
             {displayedRaces.map((race) => {
@@ -334,7 +329,6 @@ export default function ResultsPage() {
           </div>
         ) : (
           <>
-            {/* Race Sections */}
             {displayedRaces.map((race) => {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const searchLower = (filters.search || '').toLowerCase();
