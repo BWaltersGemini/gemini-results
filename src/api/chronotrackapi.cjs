@@ -1,4 +1,5 @@
-// src/api/chronotrackapi.cjs (FINAL — Fetch FULL bracket results for age group places)
+// src/api/chronotrackapi.cjs (UPDATED — Logs race_id with bracket processing)
+
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -143,21 +144,21 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // Fetch FULL bracket results for age group places (all participants, not just top 10)
+  // Fetch bracket results for ALL AGE brackets (removed leaderboard requirement)
   const bracketPlaces = {}; // entry_id → age_group_place
+
   for (const bracket of brackets) {
-    // Robust leaderboard check
-    const wantsLeaderboard = bracket.bracket_wants_leaderboard;
-    const isEnabled = wantsLeaderboard === '1' ||
-                      wantsLeaderboard === 1 ||
-                      wantsLeaderboard === 'Y' ||
-                      wantsLeaderboard === 'yes' ||
-                      wantsLeaderboard === true ||
-                      wantsLeaderboard === 'true';
+    if (bracket.bracket_type !== 'AGE') continue;
 
-    if (!isEnabled || bracket.bracket_type !== 'AGE') continue;
+    const raceId = bracket.race_id || bracket.bracket_race_id || 'unknown';
+    const bracketName = bracket.bracket_name || 'Unnamed';
 
-    // Fetch ALL results for this bracket (no page limit — ChronoTrack returns all)
+    console.log(
+      `[ChronoTrack] Processing AGE bracket ${bracket.bracket_id} ` +
+      `(race_id: ${raceId}) - "${bracketName}" ` +
+      `(leaderboard flag: ${bracket.bracket_wants_leaderboard ?? 'unset'})`
+    );
+
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
@@ -165,7 +166,7 @@ export const fetchResultsForEvent = async (eventId) => {
       });
 
       const bracketResults = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] Full bracket ${bracket.bracket_id}: ${bracketResults.length} ranked results`);
+      console.log(`[ChronoTrack] Bracket ${bracket.bracket_id} (race_id: ${raceId}): ${bracketResults.length} ranked results`);
 
       bracketResults.forEach(r => {
         const entryId = r.results_entry_id;
@@ -174,7 +175,7 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed to fetch full results for bracket ${bracket.bracket_id}`, err);
+      console.warn(`[ChronoTrack] Failed to fetch results for bracket ${bracket.bracket_id} (race_id: ${raceId})`, err.response?.data || err.message);
     }
   }
 
