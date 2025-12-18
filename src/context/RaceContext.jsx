@@ -104,12 +104,12 @@ export function RaceProvider({ children }) {
           console.log(`[Results] Loaded ${cached.length} results from Supabase cache`);
         }
 
-        // 2. Check if we need fresh data
+        // 2. Determine if we need fresh data
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        const shouldFetchFresh = forceFresh || isRaceDay || cached?.length === 0;
+        const shouldFetchFresh = forceFresh || isRaceDay || !cached || cached.length === 0;
 
         if (shouldFetchFresh) {
           console.log('[Results] Fetching fresh results from ChronoTrack...');
@@ -151,7 +151,7 @@ export function RaceProvider({ children }) {
               race_name: r.race_name ?? null,
             }));
 
-            // UPSERT — updates existing rows (by entry_id or bib+race_id), inserts new
+            // UPSERT — updates existing rows (by entry_id), inserts new
             const { error } = await supabase
               .from('chronotrack_results')
               .upsert(toUpsert, { onConflict: 'event_id,entry_id' });

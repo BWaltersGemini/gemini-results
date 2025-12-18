@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Complete and working)
+// src/api/chronotrackapi.jsx (FINAL — Complete, working, production-ready)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -258,7 +258,7 @@ export const fetchResultsForEvent = async (eventId) => {
       state: r.results_state || r.results_state_code || '',
       country: r.results_country || r.results_country_code || '',
       splits,
-      entry_id: r.results_entry_id || null,  // ← Correctly saved
+      entry_id: r.results_entry_id || null,
     };
   });
 };
