@@ -148,9 +148,9 @@ export const fetchResultsForEvent = async (eventId) => {
     const isAge = bracket.bracket_type === 'AGE';
 
     const isGender =
-      (bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') ||
-      (/male|female|non.?binary|nb|x/i.test(bracket.bracket_name || '')) &&
-      !/overall/i.test(bracket.bracket_name || '');
+      (bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') &&
+      (bracket.race_id || bracket.bracket_race_id) && // Must have race_id
+      !/overall|challenge|hill|virtual/i.test(bracket.bracket_name || '');
 
     if (isAge) ageBrackets.push(bracket);
     else if (isGender) genderBrackets.push(bracket);

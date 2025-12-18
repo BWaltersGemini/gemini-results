@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — StrictMode-safe: no reload on "All Results" click)
+// src/context/RaceContext.jsx (FINAL — Correctly saves gender_place and age_group_place to Supabase)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
@@ -125,12 +125,9 @@ export function RaceProvider({ children }) {
       setRaces([]);
       return;
     }
-
     let aborted = false;
-
     const loadRaces = async () => {
       if (aborted) return;
-
       try {
         console.log(`[Races] Loading races for event ${selectedEvent.id}`);
         const fetchedRaces = await fetchRacesForEvent(selectedEvent.id);
@@ -145,9 +142,7 @@ export function RaceProvider({ children }) {
         }
       }
     };
-
     loadRaces();
-
     return () => {
       aborted = true;
     };
@@ -164,25 +159,20 @@ export function RaceProvider({ children }) {
       setLoadingResults(false);
       return;
     }
-
     let aborted = false;
     let interval = null;
-
     const loadResults = async (forceFresh = false) => {
       // Runtime check — prevents stale loads in StrictMode remount
       if (aborted || !selectedEvent) return;
-
       try {
         setLoadingResults(true);
         setError(null);
         let allResults = [];
-
         // Cache check
         let allCached = [];
         let page = 0;
         const pageSize = 1000;
         console.log('[Results] Checking Supabase cache...');
-
         while (true) {
           const { data, error } = await supabase
             .from('chronotrack_results')
@@ -190,18 +180,15 @@ export function RaceProvider({ children }) {
             .eq('event_id', selectedEvent.id.toString())
             .order('place', { ascending: true })
             .range(page * pageSize, (page + 1) * pageSize - 1);
-
           if (error) {
             console.error('[Supabase] Cache error:', error);
             break;
           }
           if (!data || data.length === 0) break;
-
           allCached = [...allCached, ...data];
           if (data.length < pageSize) break;
           page++;
         }
-
         if (allCached.length > 0) {
           allResults = allCached;
           console.log(`[Results] Loaded ${allCached.length} results from Supabase cache`);
@@ -209,17 +196,15 @@ export function RaceProvider({ children }) {
           console.log('[Results] No cached results — forcing fresh fetch from ChronoTrack');
           forceFresh = true;
         }
-
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
-
         if (forceFresh || isRaceDay) {
           console.log('[Results] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[Results] Received ${fresh.length} fresh results from ChronoTrack`);
-
           if (fresh.length > 0) {
+            // CRITICAL: Use the values from the API (gender_place, age_group_place, entry_id)
             const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -234,29 +219,25 @@ export function RaceProvider({ children }) {
               chip_time: r.chip_time || null,
               clock_time: r.clock_time || null,
               place: r.place ? parseInt(r.place, 10) : null,
-              gender_place: null,
+              gender_place: r.gender_place ?? null, // ← Use API value
               age_group_name: r.age_group_name || null,
-              age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
+              age_group_place: r.age_group_place ?? null, // ← Use API value
               pace: r.pace || null,
               splits: r.splits || [],
-              entry_id: r.entry_id || null,
+              entry_id: r.entry_id || null, // ← Save entry_id for future matching
             }));
-
             await supabase.from('chronotrack_results').delete().eq('event_id', selectedEvent.id.toString());
-
             const chunkSize = 500;
             for (let i = 0; i < toUpsert.length; i += chunkSize) {
               const chunk = toUpsert.slice(i, i + chunkSize);
               const { error } = await supabase.from('chronotrack_results').insert(chunk);
               if (error) console.error('[Supabase] Insert error:', error);
             }
-
             allResults = fresh;
             await updateAthleteCount();
             console.log('[Results] Fresh results saved to Supabase and athlete count updated');
           }
         }
-
         if (!aborted) {
           setResults(allResults);
           const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
@@ -274,16 +255,13 @@ export function RaceProvider({ children }) {
         }
       }
     };
-
     loadResults();
-
     // Live polling
     const todayStr = new Date().toISOString().split('T')[0];
     if (selectedEvent.date === todayStr) {
       interval = setInterval(() => loadResults(true), 120000);
       console.log('[Results] Live polling started (every 2 minutes)');
     }
-
     return () => {
       aborted = true;
       if (interval) {
