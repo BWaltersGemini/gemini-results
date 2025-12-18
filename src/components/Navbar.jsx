@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (FULLY UPDATED & FIXED — Uses start_time only, no more .date crashes)
+// src/components/Navbar.jsx (FINAL — Fully compatible with new schema: uses start_time only)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';

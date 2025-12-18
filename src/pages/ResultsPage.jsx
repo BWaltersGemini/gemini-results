@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FULLY UPDATED & FIXED — Uses start_time only, no more .date crashes, production-ready)
+// src/pages/ResultsPage.jsx (FINAL — Fully compatible with new schema: races embedded in chronotrack_events)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -12,7 +12,6 @@ export default function ResultsPage() {
   const {
     selectedEvent,
     events = [],
-    races = [],
     results = [],
     loadingResults,
     uniqueDivisions = [],
@@ -21,7 +20,7 @@ export default function ResultsPage() {
     setSelectedEvent,
   } = useContext(RaceContext);
 
-  // Load masterGroups, editedEvents, hiddenMasters from localStorage (same as before)
+  // Load config from localStorage (same as before)
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
   const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
   const hiddenMasters = JSON.parse(localStorage.getItem('hiddenMasters')) || [];
@@ -70,7 +69,7 @@ export default function ResultsPage() {
 
     const yearEvents = events
       .filter((e) => groupEventIds.includes(e.id.toString()) && getYearFromEvent(e) === year)
-      .sort((a, b) => (b.start_time || 0) - (a.start_time || 0)); // newest first
+      .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
     if (yearEvents.length > 0) {
       const targetEvent = yearEvents[0];
@@ -82,7 +81,7 @@ export default function ResultsPage() {
 
   // Auto-scroll + filter from participant page
   useEffect(() => {
-    if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent && races.length > 0) {
+    if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent) {
       const { autoFilterDivision, autoFilterRaceId } = location.state;
       setRaceFilters((prev) => ({
         ...prev,
@@ -100,10 +99,13 @@ export default function ResultsPage() {
         if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 300);
     }
-  }, [location.state, selectedEvent, races, navigate]);
+  }, [location.state, selectedEvent, navigate]);
+
+  // Races are now embedded in selectedEvent.races
+  const embeddedRaces = selectedEvent?.races || [];
 
   // Filter races that have finishers
-  const racesWithFinishers = races.filter((race) =>
+  const racesWithFinishers = embeddedRaces.filter((race) =>
     results.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
   );
 
@@ -132,7 +134,7 @@ export default function ResultsPage() {
       setSelectedEvent(targetEvent);
     }
 
-    const participantRace = races.find((r) => r.race_id === participant.race_id);
+    const participantRace = embeddedRaces.find((r) => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
 
     const masterSlug = slugify(eventMaster);

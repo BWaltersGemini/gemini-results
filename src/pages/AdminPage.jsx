@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL COMPLETE VERSION — Safe upsert with race sync, no foreign key errors, production-ready)
+// src/pages/AdminPage.jsx (FINAL — Fully compatible with new schema: races JSONB in chronotrack_events)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -23,11 +23,9 @@ export default function AdminPage() {
   const [eventLogos, setEventLogos] = useState({});
   const [ads, setAds] = useState([]);
   const [expandedEvents, setExpandedEvents] = useState({});
-  const [raceEvents, setRaceEvents] = useState({});
   const [chronotrackEnabled, setChronotrackEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [chronoEvents, setChronoEvents] = useState([]);
-  const [newMasterKeys, setNewMasterKeys] = useState({});
   const [selectedEventId, setSelectedEventId] = useState('');
   const [refreshStatus, setRefreshStatus] = useState('');
   const [activeTab, setActiveTab] = useState('event');
@@ -108,7 +106,7 @@ export default function AdminPage() {
           years.forEach(y => initialCollapsed[y] = true);
           setCollapsedYears(initialCollapsed);
 
-          // Load result counts from Supabase
+          // Load result counts
           const counts = {};
           for (const event of events) {
             try {
@@ -188,6 +186,7 @@ export default function AdminPage() {
         id: e.id,
         name: e.name,
         start_time: e.start_time ? parseInt(e.start_time, 10) : null,
+        races: [], // initialize empty races array
       }));
 
       const { error: insertError } = await adminSupabase
@@ -208,7 +207,7 @@ export default function AdminPage() {
     }
   };
 
-  // FULLY SAFE SYNC: Upserts races first, then results — no foreign key violations
+  // SAFE SYNC: Syncs races into embedded JSONB + results
   const handleSyncResults = async (eventId) => {
     if (syncingEvents.includes(eventId)) return;
     setSyncingEvents(prev => [...prev, eventId]);
@@ -220,37 +219,36 @@ export default function AdminPage() {
         return;
       }
 
-      // 2. Fetch races for this event
-      const eventRaces = await fetchRacesForEvent(eventId);
-      console.log(`[Sync] Fetched ${eventRaces.length} races for event ${eventId}`);
+      // 2. Fetch and sync races into embedded races JSONB
+      try {
+        const eventRaces = await fetchRacesForEvent(eventId);
+        const racesArray = eventRaces.map(race => ({
+          race_id: race.race_id,
+          race_name: race.race_name || 'Unknown Race',
+          race_tag: race.race_tag || null,
+          race_type: race.race_type || null,
+          race_subtype: race.race_subtype || null,
+          distance: race.race_course_distance || null,
+          distance_unit: race.race_pref_distance_unit || 'meters',
+          planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
+          actual_start_time: race.race_actual_start_time ? parseFloat(race.race_actual_start_time) : null,
+        }));
 
-      // 3. Upsert races into chronotrack_races table
-      const racesToUpsert = eventRaces.map(race => ({
-        id: race.race_id,
-        event_id: eventId.toString(),
-        name: race.race_name || 'Unknown Race',
-        tag: race.race_tag || null,
-        type: race.race_type || null,
-        subtype: race.race_subtype || null,
-        distance: race.race_course_distance || null,
-        distance_unit: race.race_pref_distance_unit || 'meters',
-        planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
-      }));
-
-      if (racesToUpsert.length > 0) {
         const { error: raceError } = await adminSupabase
-          .from('chronotrack_races')
-          .upsert(racesToUpsert, { onConflict: 'id' });
+          .from('chronotrack_events')
+          .update({ races: racesArray })
+          .eq('id', eventId);
 
         if (raceError) {
-          console.error('Failed to upsert races:', raceError);
-          alert('Warning: Could not sync races. Results will be saved without race_id.');
+          console.warn('Failed to update embedded races:', raceError);
         } else {
-          console.log(`[Sync] Successfully upserted ${racesToUpsert.length} races`);
+          console.log(`[Admin Sync] Updated embedded races for event ${eventId}`);
         }
+      } catch (raceErr) {
+        console.warn('[Admin Sync] Race sync failed (continuing with results):', raceErr);
       }
 
-      // 4. Deduplicate results
+      // 3. Deduplicate results
       const seen = new Map();
       freshResults.forEach(r => {
         const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
@@ -259,9 +257,8 @@ export default function AdminPage() {
         }
       });
       const deduped = Array.from(seen.values());
-      console.log(`[Sync] Deduplicated results: ${freshResults.length} → ${deduped.length}`);
 
-      // 5. Prepare results for upsert
+      // 4. Upsert results
       const resultsToUpsert = deduped.map(r => ({
         event_id: eventId.toString(),
         race_id: r.race_id || null,
@@ -285,7 +282,6 @@ export default function AdminPage() {
         race_name: r.race_name ?? null,
       }));
 
-      // 6. Chunked upsert for results
       const chunkSize = 500;
       for (let i = 0; i < resultsToUpsert.length; i += chunkSize) {
         const chunk = resultsToUpsert.slice(i, i + chunkSize);
@@ -297,10 +293,10 @@ export default function AdminPage() {
       }
 
       setEventResultsCount(prev => ({ ...prev, [eventId]: deduped.length }));
-      alert(`Successfully synced ${deduped.length} results and ${eventRaces.length} races!`);
+      alert(`Successfully synced ${deduped.length} results!`);
     } catch (err) {
       console.error('Sync failed:', err);
-      alert('Failed to sync: ' + (err.message || 'Database error'));
+      alert('Failed to sync: ' + (err.message || 'Unknown error'));
     } finally {
       setSyncingEvents(prev => prev.filter(id => id !== eventId));
     }
@@ -308,18 +304,6 @@ export default function AdminPage() {
 
   const toggleExpandEvent = (eventId) => {
     setExpandedEvents(prev => ({ ...prev, [eventId]: !prev[eventId] }));
-    if (!expandedEvents[eventId]) {
-      fetchRacesForEventId(eventId);
-    }
-  };
-
-  const fetchRacesForEventId = async (eventId) => {
-    try {
-      const races = await fetchRacesForEvent(eventId);
-      setRaceEvents(prev => ({ ...prev, [eventId]: races }));
-    } catch (err) {
-      console.error('Failed to load races:', err);
-    }
   };
 
   const handleEditName = (id, value) => {
@@ -329,33 +313,11 @@ export default function AdminPage() {
     }));
   };
 
-  const handleEditRaceName = (eventId, raceId, value) => {
-    setEditedEvents(prev => ({
-      ...prev,
-      [eventId]: {
-        ...prev[eventId],
-        races: { ...(prev[eventId]?.races || {}), [raceId]: value },
-      },
-    }));
-  };
-
   const toggleEventVisibility = (eventId) => {
     setHiddenEvents(prev => prev.includes(eventId)
       ? prev.filter(id => id !== eventId)
       : [...prev, eventId]
     );
-  };
-
-  const toggleRaceVisibility = (eventId, raceId) => {
-    setHiddenRaces(prev => {
-      const races = prev[eventId] || [];
-      return {
-        ...prev,
-        [eventId]: races.includes(raceId)
-          ? races.filter(id => id !== raceId)
-          : [...races, raceId],
-      };
-    });
   };
 
   const assignToMaster = async (eventId, masterKey) => {
@@ -701,28 +663,18 @@ export default function AdminPage() {
                                 </div>
                               </div>
 
-                              {expandedEvents[event.id] && raceEvents[event.id] && (
+                              {/* Embedded races preview */}
+                              {event.races && event.races.length > 0 && expandedEvents[event.id] && (
                                 <div className="mt-6 border-t pt-6">
-                                  <h4 className="text-xl font-bold mb-4">Races</h4>
-                                  {raceEvents[event.id].map(race => (
-                                    <div key={race.race_id} className="flex items-center mb-3 ml-4">
-                                      <input
-                                        type="checkbox"
-                                        checked={!(hiddenRaces[event.id] || []).includes(race.race_id)}
-                                        onChange={() => toggleRaceVisibility(event.id, race.race_id)}
-                                        className="mr-3"
-                                      />
-                                      <div className="flex flex-col space-y-1 flex-1">
-                                        <span className="text-sm text-gray-500">Original: {race.race_name}</span>
-                                        <input
-                                          type="text"
-                                          value={editedEvents[event.id]?.races?.[race.race_id] || race.race_name}
-                                          onChange={e => handleEditRaceName(event.id, race.race_id, e.target.value)}
-                                          className="w-full p-1 border border-gray-300 rounded"
-                                        />
-                                      </div>
-                                    </div>
-                                  ))}
+                                  <h4 className="text-xl font-bold mb-4">Races ({event.races.length})</h4>
+                                  <ul className="space-y-2">
+                                    {event.races.map((race, i) => (
+                                      <li key={i} className="bg-gray-50 p-3 rounded border border-gray-200">
+                                        <span className="font-medium">{race.race_name}</span>
+                                        {race.distance && <span className="text-gray-600 ml-2">({race.distance} {race.distance_unit})</span>}
+                                      </li>
+                                    ))}
+                                  </ul>
                                 </div>
                               )}
                             </div>

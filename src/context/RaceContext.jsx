@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL COMPLETE VERSION — Safe race upsert + deduplication + start_time only)
+// src/context/RaceContext.jsx (FINAL — Works perfectly with new schema: races JSONB in chronotrack_events)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -60,28 +60,27 @@ export function RaceProvider({ children }) {
     loadEvents();
   }, []);
 
-  // Load races when an event is selected
+  // Load races from the embedded races JSONB when event selected
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
       return;
     }
 
-    const loadRaces = async () => {
-      try {
-        const fetched = await fetchRacesForEvent(selectedEvent.id);
-        setRaces(fetched);
-        console.log('[RaceContext] Races loaded for event', selectedEvent.id, ':', fetched.length);
-      } catch (err) {
-        console.error('[RaceContext] Failed to load races:', err);
-        setRaces([]);
-      }
-    };
+    // Races are now stored directly in the event row as JSONB array
+    const embeddedRaces = selectedEvent.races || [];
 
-    loadRaces();
+    const formattedRaces = embeddedRaces.map(race => ({
+      race_id: race.race_id,
+      race_name: race.race_name || 'Unknown Race',
+      // Add any other fields you need for display/filtering
+    }));
+
+    setRaces(formattedRaces);
+    console.log('[RaceContext] Loaded embedded races for event', selectedEvent.id, ':', formattedRaces.length);
   }, [selectedEvent]);
 
-  // Load results — cache first, fresh on race day or force
+  // Load results — cache first, fresh sync on race day or force
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -101,7 +100,7 @@ export function RaceProvider({ children }) {
         setError(null);
         let allResults = [];
 
-        // 1. Load from Supabase cache (fast)
+        // 1. Load from Supabase cache
         const { data: cached, error: cacheError } = await supabase
           .from('chronotrack_results')
           .select('*')
@@ -117,7 +116,7 @@ export function RaceProvider({ children }) {
           console.log(`[RaceContext] Loaded ${cached.length} results from cache`);
         }
 
-        // 2. Determine if this is race day using start_time
+        // 2. Determine if this is race day
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
 
@@ -126,10 +125,9 @@ export function RaceProvider({ children }) {
           : null;
 
         const isRaceDay = eventDateStr === todayStr;
-
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        // 3. Fetch fresh if race day, forced, or no cache
+        // 3. Fetch fresh if needed
         const shouldFetchFresh = forceFresh || isRaceDay || !cached || cached.length === 0;
 
         if (shouldFetchFresh) {
@@ -137,34 +135,35 @@ export function RaceProvider({ children }) {
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // === SYNC RACES FIRST (to avoid foreign key errors) ===
+            // === SYNC EMBEDDED RACES INTO chronotrack_events ===
             try {
               const eventRaces = await fetchRacesForEvent(selectedEvent.id);
-              const racesToUpsert = eventRaces.map(race => ({
-                id: race.race_id,
-                event_id: selectedEvent.id.toString(),
-                name: race.race_name || 'Unknown Race',
-                tag: race.race_tag || null,
-                type: race.race_type || null,
-                subtype: race.race_subtype || null,
+              const racesArray = eventRaces.map(race => ({
+                race_id: race.race_id,
+                race_name: race.race_name || 'Unknown Race',
+                race_tag: race.race_tag || null,
+                race_type: race.race_type || null,
+                race_subtype: race.race_subtype || null,
                 distance: race.race_course_distance || null,
                 distance_unit: race.race_pref_distance_unit || 'meters',
                 planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
+                actual_start_time: race.race_actual_start_time ? parseFloat(race.race_actual_start_time) : null,
               }));
 
-              if (racesToUpsert.length > 0) {
-                const { error: raceError } = await supabase
-                  .from('chronotrack_races')
-                  .upsert(racesToUpsert, { onConflict: 'id' });
+              const { error: raceUpdateError } = await supabase
+                .from('chronotrack_events')
+                .update({ races: racesArray })
+                .eq('id', selectedEvent.id);
 
-                if (raceError) {
-                  console.warn('[RaceContext] Failed to sync races (non-critical):', raceError);
-                } else {
-                  console.log(`[RaceContext] Synced ${racesToUpsert.length} races`);
-                }
+              if (raceUpdateError) {
+                console.warn('[RaceContext] Failed to update embedded races:', raceUpdateError);
+              } else {
+                console.log('[RaceContext] Updated embedded races in chronotrack_events');
+                // Update local selectedEvent with fresh races
+                setSelectedEvent(prev => ({ ...prev, races: racesArray }));
               }
             } catch (raceErr) {
-              console.warn('[RaceContext] Race sync failed (continuing anyway):', raceErr);
+              console.warn('[RaceContext] Race sync failed (non-critical):', raceErr);
             }
 
             // === DEDUPLICATE RESULTS ===
@@ -181,7 +180,7 @@ export function RaceProvider({ children }) {
             // === UPSERT RESULTS ===
             const toUpsert = deduped.map(r => ({
               event_id: selectedEvent.id,
-              race_id: r.race_id || null, // now safe because races were synced
+              race_id: r.race_id || null,
               bib: r.bib || null,
               first_name: r.first_name || null,
               last_name: r.last_name || null,
@@ -209,7 +208,7 @@ export function RaceProvider({ children }) {
             if (upsertError) {
               console.error('[RaceContext] Upsert error:', upsertError);
             } else {
-              console.log('[RaceContext] Fresh results upserted to Supabase');
+              console.log('[RaceContext] Fresh results upserted');
               if (!aborted) {
                 allResults = deduped;
                 const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
@@ -232,15 +231,15 @@ export function RaceProvider({ children }) {
       }
     };
 
-    loadResults(); // Initial load
+    loadResults();
 
-    // Live polling only on race day
+    // Live polling on race day
     if (selectedEvent.start_time) {
       const eventDateStr = new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0];
       const todayStr = new Date().toISOString().split('T')[0];
 
       if (eventDateStr === todayStr) {
-        pollInterval = setInterval(() => loadResults(true), 120000); // Every 2 minutes
+        pollInterval = setInterval(() => loadResults(true), 120000);
         console.log('[RaceContext] Live polling started (every 2 minutes)');
       }
     }

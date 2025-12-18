@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FULLY UPDATED & FIXED — Uses start_time only, safe date handling)
+// src/pages/ParticipantPage.jsx (FINAL — Fully compatible with new schema: races embedded in chronotrack_events)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -13,7 +13,6 @@ export default function ParticipantPage() {
 
   const {
     events,
-    races = [],
     results: contextResults,
     eventLogos,
     ads,
@@ -75,7 +74,7 @@ export default function ParticipantPage() {
       .replace(/^-+|-+$/g, '');
   };
 
-  // FIXED: Format date from Unix epoch (start_time in seconds)
+  // Format date from Unix epoch (seconds)
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
     const date = new Date(epoch * 1000);
@@ -201,6 +200,10 @@ export default function ParticipantPage() {
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
 
+  // Find race name from embedded races
+  const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
+  const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
@@ -221,6 +224,9 @@ export default function ParticipantPage() {
           <p className="text-lg text-gray-600 italic">
             {selectedEvent.start_time ? formatDate(selectedEvent.start_time) : 'Date TBD'}
           </p>
+          {raceDisplayName !== 'Overall' && (
+            <p className="text-xl text-gemini-blue font-semibold mt-4">{raceDisplayName}</p>
+          )}
         </div>
 
         {/* Participant Name */}
