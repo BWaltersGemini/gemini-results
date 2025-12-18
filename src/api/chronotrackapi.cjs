@@ -4,10 +4,11 @@
  * LATEST FIXES:
  * - Gender place now correctly tied to the athlete's specific race
  *   (prevents overwrite from other races' Female/Male brackets)
- * - Full ranks fetched with size=50000 (no 50-cap)
- * - Excludes "Overall" mixed brackets from gender place calculation
- * - Fully supports Male, Female, Non-Binary, X, and custom genders
- * - Accurate age group and gender places matching official results
+ * - Uses 'max' parameter (official ChronoTrack alias for unlimited rows)
+ *   to bypass 50/1000 caps on bracket results where possible
+ * - Prioritizes race-specific gender brackets and avoids overwrites
+ * - Excludes "Overall" mixed brackets from gender place
+ * - Full support for Male, Female, Non-Binary, X, custom genders
  */
 
 import axios from 'axios';
@@ -145,7 +146,6 @@ export const fetchResultsForEvent = async (eventId) => {
 
     const isAge = bracket.bracket_type === 'AGE';
 
-    // Gender brackets: exclude plain "Overall" (mixed), include Male/Female/Non-Binary/etc.
     const isGender =
       (bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') ||
       (/male|female|non.?binary|nb|x/i.test(bracket.bracket_name || '')) &&
@@ -157,7 +157,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} GENDER brackets`);
 
-  // 4. Fetch AGE group places (full ranks)
+  // 4. Fetch AGE group places — use 'max' for unlimited
   const ageGroupPlaces = {};
 
   for (const bracket of ageBrackets) {
@@ -167,7 +167,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 50000,
+          max: 50000, // Official alias for unlimited rows
         },
       });
 
@@ -185,33 +185,42 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 5. Fetch GENDER places — now race-specific to prevent overwrites
+  // 5. Fetch GENDER places — race-specific + prioritize primary + use 'max'
   const genderPlaces = {};
+
+  // Prioritize race-specific brackets (those with race_id)
+  genderBrackets.sort((a, b) => {
+    const aHasRace = !!(a.race_id || a.bracket_race_id);
+    const bHasRace = !!(b.race_id || b.bracket_race_id);
+    return bHasRace - aHasRace; // race-specific first
+  });
 
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
-    const bracketRaceId = bracket.race_id || bracket.bracket_race_id || null; // Some brackets have race_id
+    const bracketRaceId = bracket.race_id || bracket.bracket_race_id || null;
 
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 50000,
+          max: 50000, // Use 'max' to request all rows (bypasses default 50 or 1000 caps where possible)
         },
       });
 
       const results = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] GENDER "${name}" (${bracket.bracket_id}) race ${bracketRaceId || 'unknown'}: ${results.length} ranked`);
+      console.log(`[ChronoTrack] GENDER "${name}" (${bracket.bracket_id}) race ${bracketRaceId || 'event-wide'}: ${results.length} ranked`);
 
       results.forEach(r => {
         const entryId = r.results_entry_id;
         const athleteRaceId = r.results_race_id;
 
         if (entryId && r.results_rank) {
-          // Only apply if bracket is event-wide (no race_id) OR matches athlete's race
-          if (!bracketRaceId || athleteRaceId === bracketRaceId) {
-            genderPlaces[entryId] = parseInt(r.results_rank, 10);
+          // Only set if not already set (prioritizes first/race-specific bracket)
+          if (!genderPlaces[entryId]) {
+            if (!bracketRaceId || athleteRaceId === bracketRaceId) {
+              genderPlaces[entryId] = parseInt(r.results_rank, 10);
+            }
           }
         }
       });
