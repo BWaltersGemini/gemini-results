@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Trusts official gender_place from ChronoTrack, no client-side override)
+// src/pages/ResultsPage.jsx (FULLY UPDATED & FIXED — Uses start_time only, no more .date crashes, production-ready)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -8,6 +8,7 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { masterKey, year, raceSlug } = useParams();
+
   const {
     selectedEvent,
     events = [],
@@ -17,42 +18,60 @@ export default function ResultsPage() {
     uniqueDivisions = [],
     eventLogos = {},
     ads = [],
-    masterGroups = {},
-    editedEvents = {},
-    hiddenMasters = [],
     setSelectedEvent,
   } = useContext(RaceContext);
+
+  // Load masterGroups, editedEvents, hiddenMasters from localStorage (same as before)
+  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
+  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
+  const hiddenMasters = JSON.parse(localStorage.getItem('hiddenMasters')) || [];
 
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const raceRefs = useRef({});
 
+  // Slugify helper
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'Date TBD';
-    const [y, m, d] = dateStr.split('-');
-    const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  // Format date from Unix epoch (seconds)
+  const formatDate = (epoch) => {
+    if (!epoch || isNaN(epoch)) return 'Date TBD';
+    const date = new Date(epoch * 1000);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
-  // Master/year event selection
+  // Extract year from start_time
+  const getYearFromEvent = (event) => {
+    if (!event?.start_time) return null;
+    return new Date(event.start_time * 1000).getFullYear().toString();
+  };
+
+  // Master/year event selection based on URL params
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
+
     const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
-    const storedMasterKey = Object.keys(masterGroups).find(key =>
-      key.toLowerCase() === normalizedUrlKey ||
-      slugify(key) === masterKey.toLowerCase()
+    const storedMasterKey = Object.keys(masterGroups).find(
+      (key) => key.toLowerCase() === normalizedUrlKey || slugify(key) === masterKey.toLowerCase()
     );
+
     if (!storedMasterKey) return;
+
     const groupEventIds = masterGroups[storedMasterKey] || [];
+
     const yearEvents = events
-      .filter(e => groupEventIds.includes(e.id.toString()) && e.date.startsWith(year))
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+      .filter((e) => groupEventIds.includes(e.id.toString()) && getYearFromEvent(e) === year)
+      .sort((a, b) => (b.start_time || 0) - (a.start_time || 0)); // newest first
+
     if (yearEvents.length > 0) {
       const targetEvent = yearEvents[0];
       if (targetEvent.id !== selectedEvent?.id) {
@@ -65,7 +84,7 @@ export default function ResultsPage() {
   useEffect(() => {
     if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent && races.length > 0) {
       const { autoFilterDivision, autoFilterRaceId } = location.state;
-      setRaceFilters(prev => ({
+      setRaceFilters((prev) => ({
         ...prev,
         [autoFilterRaceId]: {
           ...prev[autoFilterRaceId],
@@ -75,6 +94,7 @@ export default function ResultsPage() {
         },
       }));
       navigate(location.pathname, { replace: true, state: {} });
+
       setTimeout(() => {
         const section = raceRefs.current[autoFilterRaceId];
         if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -82,43 +102,49 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, races, navigate]);
 
-  // Filter races with finishers
-  const racesWithFinishers = races.filter(race => {
-    return results.some(r => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '');
-  });
+  // Filter races that have finishers
+  const racesWithFinishers = races.filter((race) =>
+    results.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
+  );
 
   let displayedRaces = racesWithFinishers;
   if (raceSlug) {
-    displayedRaces = racesWithFinishers.filter(race => slugify(race.race_name) === raceSlug);
+    displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
   }
 
   const handleNameClick = (participant) => {
     let targetEvent = selectedEvent;
     let eventMaster = masterKey;
     let eventYear = year;
+
     if (!targetEvent || !eventMaster || !eventYear) {
       const participantEventId = participant.event_id || selectedEvent?.id;
-      targetEvent = events.find(e => e.id === participantEventId);
+      targetEvent = events.find((e) => e.id === participantEventId);
       if (!targetEvent) {
         alert('Could not determine the race for this participant.');
         return;
       }
-      eventMaster = Object.entries(masterGroups)
-        .find(([_, ids]) => ids.includes(targetEvent.id.toString()))?.[0] || targetEvent.name;
-      eventYear = targetEvent.date.split('-')[0];
+
+      eventMaster =
+        Object.entries(masterGroups).find(([_, ids]) => ids.includes(targetEvent.id.toString()))?.[0] ||
+        targetEvent.name;
+      eventYear = getYearFromEvent(targetEvent);
       setSelectedEvent(targetEvent);
     }
-    const participantRace = races.find(r => r.race_id === participant.race_id);
+
+    const participantRace = races.find((r) => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
+
     const masterSlug = slugify(eventMaster);
     const raceSlugPart = slugify(raceName);
+
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
       replace: true,
     });
   };
 
-  // MASTER LANDING PAGE
+  // MASTER LANDING PAGE (no event selected)
   if (!selectedEvent) {
     if (Object.keys(masterGroups).length === 0) {
       return (
@@ -130,31 +156,37 @@ export default function ResultsPage() {
         </div>
       );
     }
-    const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
-    const masterEventTiles = visibleMasters.map(storedKey => {
-      const displayName = editedEvents[storedKey]?.name || storedKey;
-      const eventIds = masterGroups[storedKey] || [];
-      const masterEvents = events.filter(e => eventIds.includes(e.id.toString()));
-      if (masterEvents.length === 0) return null;
-      const latestEvent = masterEvents.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-      const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
-      const masterSlug = slugify(storedKey);
-      const latestYear = latestEvent.date.split('-')[0];
-      return { storedKey, displayName, logo, date: latestEvent.date, masterSlug, latestYear };
-    }).filter(Boolean);
+
+    const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
+
+    const masterEventTiles = visibleMasters
+      .map((storedKey) => {
+        const displayName = editedEvents[storedKey]?.name || storedKey;
+        const eventIds = masterGroups[storedKey] || [];
+        const masterEvents = events.filter((e) => eventIds.includes(e.id.toString()));
+
+        if (masterEvents.length === 0) return null;
+
+        const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
+        const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
+        const masterSlug = slugify(storedKey);
+        const latestYear = getYearFromEvent(latestEvent);
+
+        return { storedKey, displayName, logo, dateEpoch: latestEvent.start_time, masterSlug, latestYear };
+      })
+      .filter(Boolean);
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">
-              Race Results
-            </h1>
+            <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">Race Results</h1>
             <p className="text-xl text-gray-600">Select a race series to view results</p>
           </div>
+
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-              {masterEventTiles.map(master => (
+              {masterEventTiles.map((master) => (
                 <Link
                   key={master.storedKey}
                   to={`/results/${master.masterSlug}/${master.latestYear}`}
@@ -171,41 +203,32 @@ export default function ResultsPage() {
                     <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
                       {master.displayName}
                     </h3>
-                    <p className="text-lg text-gray-600 mb-6">
-                      Latest: {formatDate(master.date)}
-                    </p>
-                    <span className="text-gemini-blue font-bold group-hover:underline">
-                      View Results →
-                    </span>
+                    <p className="text-lg text-gray-600 mb-6">Latest: {formatDate(master.dateEpoch)}</p>
+                    <span className="text-gemini-blue font-bold group-hover:underline">View Results →</span>
                   </div>
                 </Link>
               ))}
             </div>
           ) : (
-            <p className="text-center text-gray-600 text-xl mt-20">
-              No race series configured yet.
-            </p>
+            <p className="text-center text-gray-600 text-xl mt-20">No race series configured yet.</p>
           )}
         </div>
       </div>
     );
   }
 
-  // Year selector
+  // Year selector for current master
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
-    const storedMasterKey = Object.keys(masterGroups).find(key =>
-      key.toLowerCase() === normalizedUrlKey ||
-      slugify(key) === masterKey.toLowerCase()
+    const storedMasterKey = Object.keys(masterGroups).find(
+      (key) => key.toLowerCase() === normalizedUrlKey || slugify(key) === masterKey.toLowerCase()
     );
+
     if (storedMasterKey) {
       const ids = masterGroups[storedMasterKey] || [];
-      const masterEvents = ids
-        .map(id => events.find(e => e.id.toString() === id))
-        .filter(Boolean);
-      availableYears = [...new Set(masterEvents.map(e => e.date.split('-')[0]))]
-        .sort((a, b) => b - a);
+      const masterEvents = ids.map((id) => events.find((e) => e.id.toString() === id)).filter(Boolean);
+      availableYears = [...new Set(masterEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
     }
   }
 
@@ -221,18 +244,15 @@ export default function ResultsPage() {
               className="mx-auto max-h-40 mb-8 rounded-2xl shadow-2xl bg-white p-6"
             />
           ) : null}
-          <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-4">
-            {selectedEvent.name}
-          </h1>
-          <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.date)}</p>
+          <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-4">{selectedEvent.name}</h1>
+          <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
+
           {/* Year Selector */}
           {availableYears.length > 1 && (
             <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
-              <span className="text-2xl font-bold text-gemini-dark-gray">
-                Select Year
-              </span>
+              <span className="text-2xl font-bold text-gemini-dark-gray">Select Year</span>
               <div className="flex flex-wrap justify-center gap-4">
-                {availableYears.map(y => (
+                {availableYears.map((y) => (
                   <button
                     key={y}
                     onClick={() => navigate(`/results/${masterKey}/${y}`)}
@@ -254,9 +274,10 @@ export default function ResultsPage() {
         {displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
             {displayedRaces.map((race) => {
-              const raceResults = results.filter(r => r.race_id === race.race_id);
+              const raceResults = results.filter((r) => r.race_id === race.race_id);
               const starters = raceResults.length;
-              const finishers = raceResults.filter(r => r.chip_time && r.chip_time.trim() !== '').length;
+              const finishers = raceResults.filter((r) => r.chip_time && r.chip_time.trim() !== '').length;
+
               return (
                 <button
                   key={race.race_id}
@@ -277,9 +298,7 @@ export default function ResultsPage() {
                     </div>
                   </div>
                   <div className="py-5 text-center bg-gray-50">
-                    <span className="text-gemini-blue font-semibold group-hover:underline">
-                      View Results →
-                    </span>
+                    <span className="text-gemini-blue font-semibold group-hover:underline">View Results →</span>
                   </div>
                 </button>
               );
@@ -304,11 +323,9 @@ export default function ResultsPage() {
               const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
               const searchLower = (filters.search || '').toLowerCase();
 
-              // All results for this specific race
-              const raceResults = results.filter(r => r.race_id === race.race_id);
+              const raceResults = results.filter((r) => r.race_id === race.race_id);
 
-              // Apply search/gender/division filters
-              const filtered = raceResults.filter(r => {
+              const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
                 const bibStr = r.bib ? r.bib.toString() : '';
                 const matchesSearch = nameLower.includes(searchLower) || bibStr.includes(searchLower);
@@ -317,7 +334,6 @@ export default function ResultsPage() {
                 return matchesSearch && matchesGender && matchesDivision;
               });
 
-              // Sort by overall place (official from ChronoTrack)
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
               const page = currentPages[race.race_id] || 1;
@@ -328,13 +344,11 @@ export default function ResultsPage() {
               return (
                 <section
                   key={race.race_id}
-                  ref={el => (raceRefs.current[race.race_id] = el)}
+                  ref={(el) => (raceRefs.current[race.race_id] = el)}
                   className="mb-32 bg-white rounded-3xl shadow-2xl overflow-hidden border border-gemini-blue/30"
                 >
                   <div className="bg-gradient-to-r from-gemini-blue to-gemini-blue/70 py-8 px-10">
-                    <h3 className="text-3xl md:text-4xl font-bold text-white text-center">
-                      {race.race_name}
-                    </h3>
+                    <h3 className="text-3xl md:text-4xl font-bold text-white text-center">{race.race_name}</h3>
                   </div>
 
                   {/* Filters */}
@@ -344,18 +358,22 @@ export default function ResultsPage() {
                         type="text"
                         placeholder="Search by name or bib..."
                         value={filters.search}
-                        onChange={e => setRaceFilters(p => ({
-                          ...p,
-                          [race.race_id]: { ...p[race.race_id], search: e.target.value }
-                        }))}
+                        onChange={(e) =>
+                          setRaceFilters((p) => ({
+                            ...p,
+                            [race.race_id]: { ...p[race.race_id], search: e.target.value },
+                          }))
+                        }
                         className="px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue transition"
                       />
                       <select
                         value={filters.gender}
-                        onChange={e => setRaceFilters(p => ({
-                          ...p,
-                          [race.race_id]: { ...p[race.race_id], gender: e.target.value }
-                        }))}
+                        onChange={(e) =>
+                          setRaceFilters((p) => ({
+                            ...p,
+                            [race.race_id]: { ...p[race.race_id], gender: e.target.value },
+                          }))
+                        }
                         className="px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue transition"
                       >
                         <option value="">All Genders</option>
@@ -364,23 +382,31 @@ export default function ResultsPage() {
                       </select>
                       <select
                         value={filters.division}
-                        onChange={e => setRaceFilters(p => ({
-                          ...p,
-                          [race.race_id]: { ...p[race.race_id], division: e.target.value }
-                        }))}
+                        onChange={(e) =>
+                          setRaceFilters((p) => ({
+                            ...p,
+                            [race.race_id]: { ...p[race.race_id], division: e.target.value },
+                          }))
+                        }
                         className="px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue transition"
                       >
                         <option value="">All Divisions</option>
-                        {uniqueDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                        {uniqueDivisions.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     {(filters.search || filters.gender || filters.division) && (
                       <div className="text-center mt-8">
                         <button
-                          onClick={() => setRaceFilters(p => ({
-                            ...p,
-                            [race.race_id]: { search: '', gender: '', division: '' }
-                          }))}
+                          onClick={() =>
+                            setRaceFilters((p) => ({
+                              ...p,
+                              [race.race_id]: { search: '', gender: '', division: '' },
+                            }))
+                          }
                           className="text-gemini-blue hover:underline font-medium"
                         >
                           Clear all filters
@@ -403,10 +429,12 @@ export default function ResultsPage() {
                   {sorted.length > pageSize && (
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mt-12 p-8 bg-gray-50">
                       <button
-                        onClick={() => setCurrentPages(p => ({
-                          ...p,
-                          [race.race_id]: Math.max(1, (p[race.race_id] || 1) - 1)
-                        }))}
+                        onClick={() =>
+                          setCurrentPages((p) => ({
+                            ...p,
+                            [race.race_id]: Math.max(1, (p[race.race_id] || 1) - 1),
+                          }))
+                        }
                         disabled={page === 1}
                         className="px-10 py-4 bg-gemini-blue text-white rounded-full font-bold disabled:opacity-50 hover:bg-gemini-blue/90 transition shadow-lg"
                       >
@@ -416,10 +444,12 @@ export default function ResultsPage() {
                         Page {page} of {totalPages} ({sorted.length} results)
                       </span>
                       <button
-                        onClick={() => setCurrentPages(p => ({
-                          ...p,
-                          [race.race_id]: page + 1
-                        }))}
+                        onClick={() =>
+                          setCurrentPages((p) => ({
+                            ...p,
+                            [race.race_id]: page + 1,
+                          }))
+                        }
                         disabled={page >= totalPages}
                         className="px-10 py-4 bg-gemini-blue text-white rounded-full font-bold disabled:opacity-50 hover:bg-gemini-blue/90 transition shadow-lg"
                       >
@@ -434,12 +464,13 @@ export default function ResultsPage() {
             {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20">
-                <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">
-                  Our Sponsors
-                </h3>
+                <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">Our Sponsors</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
                   {ads.map((ad, i) => (
-                    <div key={i} className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gemini-blue/20 hover:shadow-2xl transition">
+                    <div
+                      key={i}
+                      className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gemini-blue/20 hover:shadow-2xl transition"
+                    >
                       <img src={ad} alt="Sponsor" className="w-full h-auto" />
                     </div>
                   ))}
