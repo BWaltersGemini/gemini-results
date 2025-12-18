@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Fixed infinite main results loop)
+// src/api/chronotrackapi.jsx (FINAL — Stops main loop at first <50 page, full gender places)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -76,7 +76,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main results — SAFE loop (stops on empty response)
+  // 1. Fetch main results — stop at first page with <50 results
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -95,16 +95,23 @@ export const fetchResultsForEvent = async (eventId) => {
 
     const fetched = response.data.event_results || [];
     if (fetched.length === 0) {
-      console.log(`[ChronoTrack] No more results at page ${page} — stopping`);
+      console.log(`[ChronoTrack] Empty response at page ${page} — stopping`);
       break;
     }
 
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
+
+    // Stop at the first page with fewer than 50 results — this is the real end
+    if (fetched.length < perPage) {
+      console.log(`[ChronoTrack] Last real page detected (${fetched.length} < ${perPage}) — finished with ${allResults.length} results`);
+      break;
+    }
+
     page++;
   }
 
-  console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
+  console.log(`[ChronoTrack] Finished — ${allResults.length} total real finishers`);
 
   // 2. Fetch brackets
   let brackets = [];
@@ -141,7 +148,7 @@ export const fetchResultsForEvent = async (eventId) => {
   // Helper: get key for matching (entry_id preferred, bib fallback)
   const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
 
-  // 4. Fetch AGE places — simple
+  // 4. Fetch AGE places — simple single request
   const ageGroupPlaces = {};
   for (const bracket of ageBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -177,7 +184,7 @@ export const fetchResultsForEvent = async (eventId) => {
     let allBracketResults = [];
     let page = 1;
     const pageSize = 250;
-    const maxPages = 40;
+    const maxPages = 40; // 10,000 max
 
     try {
       while (page <= maxPages) {
