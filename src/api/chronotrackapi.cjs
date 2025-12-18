@@ -55,7 +55,7 @@ const getAuthHeader = async () => {
 export const fetchEvents = async () => {
   const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
   const userId = import.meta.env.VITE_CHRONOTRACK_USER;
-  const userPass = import.meta.env.VITE_CHRONOTRACK_PASS_HASH; // hashed password from your working URL
+  const userPass = import.meta.env.VITE_CHRONOTRACK_PASS;
 
   if (!clientId || !userId || !userPass) {
     throw new Error('Missing ChronoTrack direct API credentials');
