@@ -189,7 +189,6 @@ export default function AdminPage() {
         id: e.id,
         name: e.name,
         start_time: e.start_time ? parseInt(e.start_time, 10) : null,
-        // Add more fields if you have them in the API response
       }));
 
       const { error: insertError } = await adminSupabase
@@ -509,6 +508,28 @@ export default function AdminPage() {
               </div>
             )}
 
+            <div className="flex items-center justify-end mb-6">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAssignedEvents}
+                  onChange={e => setShowAssignedEvents(e.target.checked)}
+                  className="mr-3"
+                />
+                <span className="text-gray-700 font-medium">Show already assigned events</span>
+              </label>
+            </div>
+
+            <div className="flex items-center mb-8">
+              <input
+                type="checkbox"
+                checked={chronotrackEnabled}
+                onChange={e => setChronotrackEnabled(e.target.checked)}
+                className="mr-2"
+              />
+              <span>Enable ChronoTrack Integration</span>
+            </div>
+
             {/* Sync single event */}
             <section className="mb-12">
               <h2 className="text-3xl font-bold mb-6">Refresh Event Results</h2>
@@ -575,7 +596,7 @@ export default function AdminPage() {
                                 <span className="ml-2 text-xl text-gray-600">({formatDate(event.start_time)})</span>
                                 <span>{expandedEvents[event.id] ? '▲' : '▼'}</span>
                               </div>
-                              <div className="flex items-center mt-2">
+                              <div className="flex items-center mt-4">
                                 <input
                                   type="checkbox"
                                   checked={!hiddenEvents.includes(event.id)}
@@ -584,9 +605,36 @@ export default function AdminPage() {
                                 />
                                 <span>Visible in App</span>
                               </div>
+                              <div className="mt-4 flex items-center gap-4">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleSyncResults(event.id); }}
+                                  disabled={syncingEvents.includes(event.id)}
+                                  className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  {syncingEvents.includes(event.id) ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
+                                      Syncing...
+                                    </>
+                                  ) : (
+                                    '↻ Sync Results'
+                                  )}
+                                </button>
+                                <span className="text-sm text-gray-600">
+                                  {resultsCount > 0 ? `${resultsCount} finishers cached` : 'No results cached'}
+                                </span>
+                              </div>
                               <div className="mt-4">
-                                <p className="font-bold">Current Master: {currentMaster}</p>
-                                <div className="flex items-center gap-2">
+                                <p className="font-bold">Current Master: <span className="text-gemini-blue">{currentMaster}</span></p>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={autoSyncOnAssign[event.id] || false}
+                                    onChange={e => setAutoSyncOnAssign(prev => ({ ...prev, [event.id]: e.target.checked }))}
+                                  />
+                                  <span className="text-sm text-gray-700">Sync results after assigning</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
                                   <input
                                     list="master-keys"
                                     placeholder="Enter or select Master Key"
@@ -608,15 +656,15 @@ export default function AdminPage() {
                                 </div>
                               </div>
                               {expandedEvents[event.id] && raceEvents[event.id] && (
-                                <div className="mt-4">
-                                  <h3 className="text-xl font-bold mb-2">Races</h3>
+                                <div className="mt-6 border-t pt-6">
+                                  <h4 className="text-xl font-bold mb-4">Races</h4>
                                   {raceEvents[event.id].map(race => (
-                                    <div key={race.race_id} className="flex items-center mb-1 ml-4">
+                                    <div key={race.race_id} className="flex items-center mb-3 ml-4">
                                       <input
                                         type="checkbox"
                                         checked={!(hiddenRaces[event.id] || []).includes(race.race_id)}
                                         onChange={() => toggleRaceVisibility(event.id, race.race_id)}
-                                        className="mr-2"
+                                        className="mr-3"
                                       />
                                       <div className="flex flex-col space-y-1 flex-1">
                                         <span className="text-sm text-gray-500">Original: {race.race_name}</span>

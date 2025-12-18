@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Complete, working, production-ready)
+// src/api/chronotrackapi.jsx (FINAL — Complete, production-ready, no more errors)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -56,7 +56,7 @@ export const fetchEvents = async () => {
   return (response.data.event || []).map(event => ({
     id: event.event_id,
     name: event.event_name,
-    date: new Date(event.event_start_time * 1000).toISOString().split('T')[0],
+    start_time: event.event_start_time ? parseInt(event.event_start_time, 10) : null,
   }));
 };
 
