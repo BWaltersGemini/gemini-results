@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Robust entry_id + bib fallback for all brackets)
+// src/api/chronotrackapi.jsx (FINAL — Exact match to ChronoTrack API fields)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -76,7 +76,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main results
+  // 1. Fetch main results — paginated
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -114,7 +114,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // 3. Classify
+  // 3. Classify brackets
   const ageBrackets = [];
   const genderBrackets = [];
 
@@ -133,10 +133,10 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
 
-  // Helper to get lookup key (entry_id preferred, bib fallback)
+  // Helper to get lookup key: entry_id first, then bib
   const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
 
-  // 4. Fetch AGE places — simple
+  // 4. Fetch AGE places — simple single request
   const ageGroupPlaces = {};
   for (const bracket of ageBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -163,7 +163,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 5. Fetch GENDER places — paginated
+  // 5. Fetch GENDER places — paginated with bracket=SEX
   const genderPlaces = {};
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -172,7 +172,7 @@ export const fetchResultsForEvent = async (eventId) => {
     let allBracketResults = [];
     let page = 1;
     const pageSize = 250;
-    const maxPages = 40;
+    const maxPages = 40; // 10,000 max
 
     try {
       while (page <= maxPages) {
@@ -188,7 +188,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
         const results = res.data.bracket_results || [];
         if (!results || results.length === 0) {
-          console.log(`[ChronoTrack] GENDER "${name}" — no more at page ${page}`);
+          console.log(`[ChronoTrack] GENDER "${name}" — no more results at page ${page}`);
           break;
         }
 
@@ -213,9 +213,9 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 6. Final mapping
+  // 6. Map results — using exact API field names
   return allResults.map(r => {
-    const entryId = r.results_entry_id || null; // Save actual entry_id if present
+    const entryId = r.results_entry_id || null;
     const bib = r.results_bib || null;
     const lookupKey = getLookupKey(r);
 
@@ -245,11 +245,11 @@ export const fetchResultsForEvent = async (eventId) => {
       bib: r.results_bib || '',
       race_id: r.results_race_id || null,
       race_name: r.results_race_name || '',
-      city: r.results_city || '',
-      state: r.results_state || '',
-      country: r.results_country || r.country || '',
+      city: r.results_city || r.results_hometown?.split(',')[0]?.trim() || '',
+      state: r.results_state || r.results_state_code || '',
+      country: r.results_country || r.results_country_code || '',
       splits,
-      entry_id: entryId, // Keep the real entry_id for debugging
+      entry_id: entryId,
     };
   });
 };
