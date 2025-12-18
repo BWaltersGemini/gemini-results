@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Race day optimized: Supabase first, background ChronoTrack sync)
+// src/context/RaceContext.jsx (FINAL — Race day optimized + upsert on entry_id + deduplication)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -16,16 +16,35 @@ export function RaceProvider({ children }) {
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Load events (from ChronoTrack once, then cache in memory)
+  // Persist selected event
+  useEffect(() => {
+    const savedEventId = typeof window !== 'undefined' ? localStorage.getItem('selectedEventId') : null;
+    if (savedEventId && events.length > 0) {
+      const restored = events.find(e => e.id === savedEventId);
+      if (restored) setSelectedEvent(restored);
+      else localStorage.removeItem('selectedEventId');
+    }
+  }, [events]);
+
+  useEffect(() => {
+    if (selectedEvent && typeof window !== 'undefined') {
+      localStorage.setItem('selectedEventId', selectedEvent.id);
+    } else if (typeof window !== 'undefined') {
+      localStorage.removeItem('selectedEventId');
+    }
+  }, [selectedEvent]);
+
+  // Load events from ChronoTrack (once)
   useEffect(() => {
     const loadEvents = async () => {
       try {
         setLoading(true);
+        setError(null);
         const fetched = await fetchEvents();
         setEvents(fetched);
       } catch (err) {
+        console.error('[RaceContext] Failed to load events:', err);
         setError('Failed to load events');
-        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -44,14 +63,14 @@ export function RaceProvider({ children }) {
         const fetched = await fetchRacesForEvent(selectedEvent.id);
         setRaces(fetched);
       } catch (err) {
-        console.error('Failed to load races', err);
+        console.error('[RaceContext] Failed to load races:', err);
         setRaces([]);
       }
     };
     loadRaces();
   }, [selectedEvent]);
 
-  // Main results loader — Supabase first, background ChronoTrack sync
+  // Results loader — Supabase cache first, background ChronoTrack sync
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -60,16 +79,18 @@ export function RaceProvider({ children }) {
       return;
     }
 
-    let pollInterval = null;
     let aborted = false;
+    let pollInterval = null;
 
-    const loadResults = async (forceChrono = false) => {
+    const loadResults = async (forceFresh = false) => {
       if (aborted) return;
 
       try {
         setLoadingResults(true);
+        setError(null);
+        let allResults = [];
 
-        // 1. Always try Supabase cache first (instant)
+        // 1. Load from Supabase cache first (instant)
         const { data: cached, error: cacheError } = await supabase
           .from('chronotrack_results')
           .select('*')
@@ -77,32 +98,36 @@ export function RaceProvider({ children }) {
           .order('place', { ascending: true });
 
         if (!aborted && cached && cached.length > 0) {
-          setResults(cached);
+          allResults = cached;
           const divisions = [...new Set(cached.map(r => r.age_group_name).filter(Boolean))].sort();
           setUniqueDivisions(divisions);
-          console.log(`[Results] Loaded ${cached.length} from Supabase cache`);
+          console.log(`[Results] Loaded ${cached.length} results from Supabase cache`);
         }
 
-        // 2. Determine if we should fetch fresh from ChronoTrack
+        // 2. Check if we need fresh data
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
-        setIsLiveRace(isRaceDay);
+        if (!aborted) setIsLiveRace(isRaceDay);
 
-        const shouldFetchFresh = forceChrono || isRaceDay || !cached || cached.length === 0;
+        const shouldFetchFresh = forceFresh || isRaceDay || cached?.length === 0;
 
         if (shouldFetchFresh) {
-          console.log('[Results] Fetching fresh from ChronoTrack...');
+          console.log('[Results] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // Deduplicate by bib + race_id
+            // Deduplicate by entry_id (preferred) or bib + race_id
             const seen = new Map();
             fresh.forEach(r => {
-              const key = `${r.bib || ''}-${r.race_id || ''}`;
-              if (!seen.has(key)) seen.set(key, r);
+              const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
+              if (!seen.has(key)) {
+                seen.set(key, r);
+              }
             });
             const deduped = Array.from(seen.values());
+            console.log(`[Results] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
+            // Prepare for upsert
             const toUpsert = deduped.map(r => ({
               event_id: selectedEvent.id,
               race_id: r.race_id || null,
@@ -126,30 +151,30 @@ export function RaceProvider({ children }) {
               race_name: r.race_name ?? null,
             }));
 
-            // Replace all for this event
-            await supabase
+            // UPSERT — updates existing rows (by entry_id or bib+race_id), inserts new
+            const { error } = await supabase
               .from('chronotrack_results')
-              .delete()
-              .eq('event_id', selectedEvent.id);
+              .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
 
-            const chunkSize = 500;
-            for (let i = 0; i < toUpsert.length; i += chunkSize) {
-              const chunk = toUpsert.slice(i, i + chunkSize);
-              const { error } = await supabase.from('chronotrack_results').insert(chunk);
-              if (error) console.error('[Supabase] Insert error:', error);
-            }
-
-            if (!aborted) {
-              setResults(deduped);
-              const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
-              setUniqueDivisions(divisions);
-              console.log('[Results] Updated from ChronoTrack and saved to Supabase');
+            if (error) {
+              console.error('[Supabase] Upsert error:', error);
+            } else {
+              console.log('[Results] Successfully upserted fresh results to Supabase');
+              if (!aborted) {
+                allResults = deduped;
+                const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
+                setUniqueDivisions(divisions);
+              }
             }
           }
         }
+
+        if (!aborted) {
+          setResults(allResults);
+        }
       } catch (err) {
         if (!aborted) {
-          console.error('[Results] Error:', err);
+          console.error('[Results] Load error:', err);
           setError('Failed to load results');
         }
       } finally {
@@ -159,10 +184,10 @@ export function RaceProvider({ children }) {
 
     loadResults(); // Initial load
 
-    // Background polling on race day
+    // Live polling on race day
     if (selectedEvent.date === new Date().toISOString().split('T')[0]) {
       pollInterval = setInterval(() => loadResults(true), 120000); // Every 2 minutes
-      console.log('[Results] Live race day polling started');
+      console.log('[Results] Live polling started (every 2 minutes)');
     }
 
     return () => {
