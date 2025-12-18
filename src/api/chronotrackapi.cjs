@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Correctly fetches gender_place from SEX brackets + hometown parsing)
+// src/api/chronotrackapi.jsx (FINAL — Unified divisions: AGE + OTHER/special in same column + hometown parsing)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -125,18 +125,19 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // 3. Identify brackets we care about
-  const ageBrackets = [];
-  const genderBrackets = []; // Overall Male/Female (type SEX)
+  // 3. Identify division brackets (AGE + OTHER/special) and gender brackets
+  const divisionBrackets = [];   // Unified: AGE and OTHER (Youth, Military, etc.)
+  const genderBrackets = [];     // Overall Male/Female (SEX type)
 
   brackets.forEach(bracket => {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') return;
 
-    if (bracket.bracket_type === 'AGE') {
-      ageBrackets.push(bracket);
+    // Unified divisions: standard age groups + special/other divisions
+    if (bracket.bracket_type === 'AGE' || bracket.bracket_type === 'OTHER') {
+      divisionBrackets.push(bracket);
     }
 
-    // Primary overall gender brackets — type 'SEX' and name 'Male' or 'Female'
+    // Overall gender brackets
     if (
       bracket.bracket_type === 'SEX' &&
       /^(Male|Female)$/i.test(bracket.bracket_name?.trim())
@@ -145,13 +146,16 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   });
 
-  console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} GENDER (SEX) brackets`);
+  console.log(`[ChronoTrack] ${divisionBrackets.length} DIVISION brackets (AGE + OTHER) | ${genderBrackets.length} GENDER brackets`);
 
   const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
 
-  // 4. Fetch AGE group places
-  const ageGroupPlaces = {};
-  for (const bracket of ageBrackets) {
+  // Unified division places: { entryKey: { name: string, place: number } }
+  const divisionPlaces = {};
+
+  // 4. Fetch places from all division brackets
+  for (const bracket of divisionBrackets) {
+    const divName = bracket.bracket_name?.trim() || 'Unknown Division';
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
@@ -161,22 +165,29 @@ export const fetchResultsForEvent = async (eventId) => {
         },
       });
       const results = res.data.bracket_results || [];
+      console.log(`[ChronoTrack] DIVISION "${divName}": ${results.length} ranked`);
+
       results.forEach(r => {
         const key = getLookupKey(r);
         if (key && r.results_rank) {
-          ageGroupPlaces[key] = parseInt(r.results_rank, 10);
+          // Only set if not already set (first match wins)
+          if (!divisionPlaces[key]) {
+            divisionPlaces[key] = {
+              name: divName,
+              place: parseInt(r.results_rank, 10),
+            };
+          }
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed AGE bracket ${bracket.bracket_id}`, err);
+      console.warn(`[ChronoTrack] Failed DIVISION bracket ${bracket.bracket_id}`, err);
     }
   }
 
-  // 5. Fetch OVERALL GENDER places from SEX brackets (Male/Female)
+  // 5. Fetch overall gender places
   const genderPlaces = {};
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name?.trim() || 'Unnamed';
-    const bracketRaceId = bracket.race_id || bracket.bracket_race_id || null;
     let allBracketResults = [];
     let bPage = 1;
     const pageSize = 250;
@@ -193,12 +204,9 @@ export const fetchResultsForEvent = async (eventId) => {
           },
         });
         const results = res.data.bracket_results || [];
-        if (results.length === 0) {
-          console.log(`[ChronoTrack] GENDER "${name}" — no more results at page ${bPage}`);
-          break;
-        }
+        if (results.length === 0) break;
         allBracketResults = [...allBracketResults, ...results];
-        console.log(`[ChronoTrack] GENDER "${name}" page ${bPage}: ${results.length} → Total: ${allBracketResults.length}`);
+        if (results.length < pageSize) break;
         bPage++;
       }
       console.log(`[ChronoTrack] GENDER "${name}" FINAL: ${allBracketResults.length} ranked`);
@@ -206,10 +214,7 @@ export const fetchResultsForEvent = async (eventId) => {
       allBracketResults.forEach(r => {
         const key = getLookupKey(r);
         if (key && r.results_rank) {
-          const athleteRaceId = r.results_race_id;
-          if (!bracketRaceId || athleteRaceId === bracketRaceId) {
-            genderPlaces[key] = parseInt(r.results_rank, 10);
-          }
+          genderPlaces[key] = parseInt(r.results_rank, 10);
         }
       });
     } catch (err) {
@@ -220,8 +225,9 @@ export const fetchResultsForEvent = async (eventId) => {
   // 6. Final mapping with hometown parsing
   return allResults.map(r => {
     const lookupKey = getLookupKey(r);
+    const divInfo = lookupKey ? divisionPlaces[lookupKey] : null;
 
-    // Parse hometown if available
+    // Parse hometown
     let city = r.results_city || null;
     let state = r.results_state || r.results_state_code || null;
     let country = r.results_country || r.results_country_code || null;
@@ -250,8 +256,9 @@ export const fetchResultsForEvent = async (eventId) => {
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
       gender_place: lookupKey ? genderPlaces[lookupKey] || null : null,
-      age_group_name: r.results_primary_bracket_name || '',
-      age_group_place: lookupKey ? ageGroupPlaces[lookupKey] || null : null,
+      // Unified division: AGE or OTHER/special (e.g., Youth)
+      age_group_name: divInfo ? divInfo.name : r.results_primary_bracket_name || '',
+      age_group_place: divInfo ? divInfo.place : null,
       pace: r.results_pace || '',
       age: r.results_age ? parseInt(r.results_age, 10) : null,
       gender: r.results_sex || '',
