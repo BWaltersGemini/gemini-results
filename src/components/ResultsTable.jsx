@@ -1,94 +1,79 @@
-// src/components/ResultsTable.jsx (FINAL — Uses formatTime, tenths only, mobile/desktop)
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  flexRender,
-} from '@tanstack/react-table';
+// src/components/ResultsTable.jsx (FINAL — Complete, unified division + gender place display)
+import { useNavigate } from 'react-router-dom';
 
-export default function ResultsTable({ data = [], onNameClick, isMobile = false, formatTime }) {
-  const safeData = Array.isArray(data) ? data : [];
+export default function ResultsTable({ data = [], onNameClick, isMobile }) {
+  const navigate = useNavigate();
 
-  // Fallback formatTime if not provided (should always be passed from parent)
-  const safeFormatTime = formatTime || ((time) => time || '—');
+  const formatTime = (timeStr) => {
+    if (!timeStr || timeStr.trim() === '') return '—';
+    return timeStr.trim();
+  };
 
-  const desktopColumns = [
-    {
-      accessorFn: row => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
-      id: 'name',
-      header: 'Name',
-      cell: info => (
-        <span
-          className="font-semibold text-gemini-blue cursor-pointer hover:underline"
-          onClick={() => onNameClick(info.row.original)}
-        >
-          {info.getValue() || '—'}
-        </span>
-      ),
-    },
-    { accessorKey: 'bib', header: 'Bib', cell: info => info.getValue() || '—' },
-    {
-      accessorKey: 'chip_time',
-      header: 'Chip Time',
-      cell: info => safeFormatTime(info.getValue()),
-    },
-    {
-      accessorKey: 'clock_time',
-      header: 'Gun Time',
-      cell: info => safeFormatTime(info.getValue()),
-    },
-    { accessorKey: 'place', header: 'Overall', cell: info => info.getValue() || '—' },
-    { accessorKey: 'gender_place', header: 'Gen Place', cell: info => info.getValue() || '—' },
-    { accessorKey: 'age_group_name', header: 'Division', cell: info => info.getValue() || '—' },
-    { accessorKey: 'age_group_place', header: 'Div Place', cell: info => info.getValue() || '—' },
-    { accessorKey: 'pace', header: 'Pace', cell: info => info.getValue() || '—' },
-    { accessorKey: 'age', header: 'Age', cell: info => info.getValue() || '—' },
-    { accessorKey: 'gender', header: 'Gender', cell: info => info.getValue() || '—' },
-    { accessorKey: 'country', header: 'Country', cell: info => info.getValue() || '—' },
-  ];
+  const formatPlace = (place) => {
+    if (!place) return '—';
+    if (place === 1) return `${place}st`;
+    if (place === 2) return `${place}nd`;
+    if (place === 3) return `${place}rd`;
+    return `${place}th`;
+  };
 
-  const table = useReactTable({
-    data: safeData,
-    columns: desktopColumns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
-  // Mobile: Vertical cards
-  if (isMobile) {
-    if (safeData.length === 0) {
-      return (
-        <div className="text-center py-12 text-gray-500 text-lg">
-          No participants match current filters.
-        </div>
-      );
+  const handleRowClick = (participant) => {
+    if (onNameClick) {
+      onNameClick(participant);
     }
+  };
 
+  if (data.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <p className="text-xl">No results match your filters.</p>
+      </div>
+    );
+  }
+
+  if (isMobile) {
     return (
       <div className="space-y-4">
-        {safeData.map((row, index) => (
+        {data.map((r, i) => (
           <div
-            key={row.id || index}
-            className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition"
+            key={i}
+            className="bg-white rounded-xl shadow-md p-6 border border-gray-200 cursor-pointer hover:shadow-lg transition"
+            onClick={() => handleRowClick(r)}
           >
-            <div
-              className="font-bold text-xl text-gemini-blue cursor-pointer hover:underline mb-2"
-              onClick={() => onNameClick(row)}
-            >
-              {row.first_name || ''} {row.last_name || ''}
+            <div className="flex justify-between items-start mb-3">
+              <div className="text-2xl font-bold text-gemini-blue">#{r.place || '—'}</div>
+              <div className="text-right">
+                <div className="text-lg font-bold">{r.bib || '—'}</div>
+                <div className="text-sm text-gray-500">Bib</div>
+              </div>
             </div>
-            <div className="flex justify-between items-baseline mb-3">
-              <span className="text-2xl font-bold text-gemini-dark-gray">
-                #{row.place || '—'}
-              </span>
-              <span className="text-xl font-semibold text-gemini-dark-gray">
-                {safeFormatTime(row.chip_time)}
-              </span>
+
+            <div className="mb-4">
+              <div className="text-xl font-bold text-gemini-dark-gray">
+                {r.first_name} {r.last_name}
+              </div>
+              <div className="text-sm text-gray-600">
+                {r.city && `${r.city}, `}{r.state} {r.country}
+              </div>
             </div>
-            <div className="text-sm text-gray-600 flex gap-4 flex-wrap">
-              <span>Bib: <span className="font-medium">{row.bib || '—'}</span></span>
-              <span>Age: <span className="font-medium">{row.age || '—'}</span></span>
-              <span>Sex: <span className="font-medium">{row.gender || '—'}</span></span>
+
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div>
+                <div className="text-lg font-bold text-gemini-blue">{formatTime(r.chip_time)}</div>
+                <div className="text-xs text-gray-500">Chip Time</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold">{formatPlace(r.gender_place)}</div>
+                <div className="text-xs text-gray-500">Gender</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold">{formatPlace(r.age_group_place)}</div>
+                <div className="text-xs text-gray-500">{r.age_group_name || 'Division'}</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold">{r.pace || '—'}</div>
+                <div className="text-xs text-gray-500">Pace</div>
+              </div>
             </div>
           </div>
         ))}
@@ -96,61 +81,59 @@ export default function ResultsTable({ data = [], onNameClick, isMobile = false,
     );
   }
 
-  // Desktop: Centered full table
+  // Desktop table
   return (
-    <div className="w-full max-w-7xl mx-auto px-4">
-      <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead className="bg-gemini-blue text-white sticky top-0 z-10">
-              {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map(header => (
-                    <th
-                      key={header.id}
-                      className="px-4 py-4 text-left text-sm font-semibold uppercase tracking-wider cursor-pointer hover:bg-gemini-blue/90 transition"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      <div className="flex items-center gap-2">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getIsSorted() && (
-                          <span className="text-lg">
-                            {header.column.getIsSorted() === 'asc' ? '↑' : '↓'}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {table.getRowModel().rows.length === 0 ? (
-                <tr>
-                  <td colSpan={desktopColumns.length} className="text-center py-16 text-gray-500 text-lg">
-                    No participants match current filters.
-                  </td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map((row, index) => (
-                  <tr
-                    key={row.id}
-                    className={`hover:bg-gemini-light-gray/50 transition ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                    }`}
-                  >
-                    {row.getVisibleCells().map(cell => (
-                      <td key={cell.id} className="px-4 py-5 text-sm text-gray-800">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext()) || '—'}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead className="bg-gemini-blue/10 text-gemini-dark-gray font-bold uppercase text-sm">
+          <tr>
+            <th className="px-6 py-4">Place</th>
+            <th className="px-6 py-4">Bib</th>
+            <th className="px-6 py-4">Name</th>
+            <th className="px-6 py-4">Gender Place</th>
+            <th className="px-6 py-4">Division Place</th>
+            <th className="px-6 py-4">Chip Time</th>
+            <th className="px-6 py-4">Pace</th>
+            <th className="px-6 py-4">Age</th>
+            <th className="px-6 py-4">Location</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {data.map((r, i) => (
+            <tr
+              key={i}
+              className="hover:bg-gemini-blue/5 cursor-pointer transition"
+              onClick={() => handleRowClick(r)}
+            >
+              <td className="px-6 py-4 font-bold text-lg text-gemini-blue">
+                {r.place ? formatPlace(r.place) : '—'}
+              </td>
+              <td className="px-6 py-4 font-medium">{r.bib || '—'}</td>
+              <td className="px-6 py-4 font-medium text-gemini-dark-gray">
+                {r.first_name} {r.last_name}
+              </td>
+              <td className="px-6 py-4">
+                {r.gender_place ? formatPlace(r.gender_place) : '—'}
+              </td>
+              <td className="px-6 py-4">
+                {r.age_group_place ? (
+                  <span>
+                    {formatPlace(r.age_group_place)} {r.age_group_name}
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </td>
+              <td className="px-6 py-4 font-medium">{formatTime(r.chip_time)}</td>
+              <td className="px-6 py-4">{r.pace || '—'}</td>
+              <td className="px-6 py-4">{r.age || '—'}</td>
+              <td className="px-6 py-4 text-sm text-gray-600">
+                {r.city && `${r.city}, `}{r.state} {r.country}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

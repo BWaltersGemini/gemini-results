@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Fully compatible with new schema: races embedded in chronotrack_events)
+// src/pages/ResultsPage.jsx (FINAL — Updated for new schema + unified divisions + gender place)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -20,7 +20,7 @@ export default function ResultsPage() {
     setSelectedEvent,
   } = useContext(RaceContext);
 
-  // Load config from localStorage (same as before)
+  // Load config from localStorage
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
   const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
   const hiddenMasters = JSON.parse(localStorage.getItem('hiddenMasters')) || [];
@@ -101,10 +101,10 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // Races are now embedded in selectedEvent.races
+  // Races are embedded in selectedEvent.races
   const embeddedRaces = selectedEvent?.races || [];
 
-  // Filter races that have finishers
+  // Filter races with finishers
   const racesWithFinishers = embeddedRaces.filter((race) =>
     results.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
   );
@@ -146,7 +146,7 @@ export default function ResultsPage() {
     });
   };
 
-  // MASTER LANDING PAGE (no event selected)
+  // MASTER LANDING PAGE
   if (!selectedEvent) {
     if (Object.keys(masterGroups).length === 0) {
       return (
@@ -219,7 +219,7 @@ export default function ResultsPage() {
     );
   }
 
-  // Year selector for current master
+  // Year selector
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
