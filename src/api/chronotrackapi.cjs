@@ -2,10 +2,10 @@
  * CHRONOTRACK API INTEGRATION — FINAL (Dec 2025)
  *
  * FIXES:
- * - Bracket results capped at 50 → now uses size=50000 to get ALL ranks
- * - Accurate Gender Place (Male/Female/Non-Binary/etc.) from SEX brackets
- * - Accurate Age Group Place from AGE brackets
- * - Handles large events (3000+ finishers) correctly
+ * - Gender place incorrect (e.g., Megan showing 2nd instead of 1st) → excluded mixed "Overall" brackets
+ * - Bracket results capped at 50 → now size=50000 for full ranks
+ * - Supports Non-Binary/X/custom genders
+ * - Full logging
  */
 
 import axios from 'axios';
@@ -92,7 +92,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // === 1. Fetch main overall results (paginated) ===
+  // Fetch main overall results
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -118,7 +118,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  // === 2. Fetch ALL brackets (with size=500) ===
+  // Fetch all brackets
   let brackets = [];
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
@@ -134,7 +134,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // === 3. Classify brackets ===
+  // Classify brackets
   const ageBrackets = [];
   const genderBrackets = [];
 
@@ -142,10 +142,12 @@ export const fetchResultsForEvent = async (eventId) => {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') return;
 
     const isAge = bracket.bracket_type === 'AGE';
+
+    // Improved: Match gender but EXCLUDE plain "Overall" (mixed genders)
     const isGender =
-      bracket.bracket_type === 'SEX' ||
-      bracket.bracket_type === 'GENDER' ||
-      /male|female|non.?binary|nb|x|overall/i.test(bracket.bracket_name || '');
+      (bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') ||
+      /male|female|non.?binary|nb|x/i.test(bracket.bracket_name || '') &&
+      !/overall/i.test(bracket.bracket_name || '');
 
     if (isAge) ageBrackets.push(bracket);
     else if (isGender) genderBrackets.push(bracket);
@@ -153,7 +155,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} GENDER brackets`);
 
-  // === 4. Fetch AGE places (with size=50000) ===
+  // Fetch AGE places (size=50000)
   const ageGroupPlaces = {};
 
   for (const bracket of ageBrackets) {
@@ -161,10 +163,7 @@ export const fetchResultsForEvent = async (eventId) => {
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 50000, // Get ALL ranks — no cap at 50
-        },
+        params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID, size: 50000 },
       });
 
       const results = res.data.bracket_results || [];
@@ -177,11 +176,11 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed AGE bracket "${name}" (${bracket.bracket_id})`, err);
+      console.warn(`[ChronoTrack] Failed AGE "${name}" (${bracket.bracket_id})`, err);
     }
   }
 
-  // === 5. Fetch GENDER places (with size=50000) ===
+  // Fetch GENDER places (size=50000)
   const genderPlaces = {};
 
   for (const bracket of genderBrackets) {
@@ -189,10 +188,7 @@ export const fetchResultsForEvent = async (eventId) => {
     try {
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 50000, // Critical: removes 50-result cap
-        },
+        params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID, size: 50000 },
       });
 
       const results = res.data.bracket_results || [];
@@ -205,11 +201,11 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed GENDER bracket "${name}" (${bracket.bracket_id})`, err);
+      console.warn(`[ChronoTrack] Failed GENDER "${name}" (${bracket.bracket_id})`, err);
     }
   }
 
-  // === 6. Map results with full official ranks ===
+  // Map results
   return allResults.map(r => {
     const entryId = r.results_entry_id;
 
