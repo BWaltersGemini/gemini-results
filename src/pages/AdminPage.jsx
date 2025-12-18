@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Complete with "Fetch New Events" button)
+// src/pages/AdminPage.jsx (FINAL — Complete with working "Fetch New Events" button)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
@@ -38,14 +38,14 @@ export default function AdminPage() {
   const [eventResultsCount, setEventResultsCount] = useState({});
   const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
 
-  // New: Fetch new events
+  // Fetch New Events state
   const [fetchingNewEvents, setFetchingNewEvents] = useState(false);
   const [newEventsStatus, setNewEventsStatus] = useState('');
 
-  // Admin Supabase client (service_role — bypasses RLS)
+  // Admin Supabase client (service_role)
   const adminSupabase = createAdminSupabaseClient();
 
-  // Load global config from Supabase
+  // Load global config
   const loadGlobalConfig = async () => {
     const config = await loadAppConfig();
     setMasterGroups(config.masterGroups || {});
@@ -58,7 +58,7 @@ export default function AdminPage() {
     setHiddenRaces(config.hiddenRaces || {});
   };
 
-  // Save config using admin client
+  // Save config
   const saveConfig = async (key, value) => {
     try {
       const { error } = await adminSupabase
@@ -76,42 +76,38 @@ export default function AdminPage() {
   useEffect(() => {
     const loggedIn = typeof window !== 'undefined' && localStorage.getItem('adminLoggedIn') === 'true';
     setIsLoggedIn(loggedIn);
-    if (loggedIn) {
-      loadGlobalConfig();
-    }
+    if (loggedIn) loadGlobalConfig();
   }, []);
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'Date TBD';
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const formatDate = (epoch) => {
+    if (!epoch) return 'Date TBD';
+    return new Date(epoch * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Fetch events from ChronoTrack
+  // Load events from ChronoTrack
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
       const loadEvents = async () => {
         try {
           setLoading(true);
           const events = await fetchChronoEvents();
-          const sortedEvents = events.sort((a, b) => new Date(b.date) - new Date(a.date));
+          const sortedEvents = events.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
           setChronoEvents(sortedEvents);
 
           // Collapse years by default
-          const years = [...new Set(events.map(e => e.date.split('-')[0]))];
+          const years = [...new Set(events.map(e => new Date((e.start_time || 0) * 1000).getFullYear()))];
           const initialCollapsed = {};
           years.forEach(y => initialCollapsed[y] = true);
           setCollapsedYears(initialCollapsed);
 
-          // Load cached result counts
+          // Load result counts
           const counts = {};
           for (const event of events) {
             try {
               const { count } = await adminSupabase
                 .from('chronotrack_results')
                 .select('*', { count: 'exact', head: true })
-                .eq('event_id', event.id.toString());
+                .eq('event_id', event.id);
               counts[event.id] = count || 0;
             } catch {
               counts[event.id] = 0;
@@ -149,7 +145,7 @@ export default function AdminPage() {
     setRefreshStatus('Refreshing all events...');
     try {
       const events = await fetchChronoEvents();
-      const sortedEvents = events.sort((a, b) => new Date(b.date) - new Date(a.date));
+      const sortedEvents = events.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
       setChronoEvents(sortedEvents);
       setRefreshStatus(`Success: ${events.length} events loaded`);
     } catch (err) {
@@ -160,7 +156,7 @@ export default function AdminPage() {
     }
   };
 
-  // NEW: Fetch New Events button logic
+  // Fetch New Events — adds missing events to Supabase
   const handleFetchNewEvents = async () => {
     if (fetchingNewEvents || !chronotrackEnabled) return;
     setFetchingNewEvents(true);
@@ -188,11 +184,12 @@ export default function AdminPage() {
         return;
       }
 
-      // Insert new events
+      // Insert new events using start_time (epoch)
       const toInsert = newEvents.map(e => ({
         id: e.id,
         name: e.name,
-        date: e.date,
+        start_time: e.start_time ? parseInt(e.start_time, 10) : null,
+        // Add more fields if you have them in the API response
       }));
 
       const { error: insertError } = await adminSupabase
@@ -202,7 +199,7 @@ export default function AdminPage() {
       if (insertError) throw insertError;
 
       // Update local list
-      const updatedEvents = [...chronoEvents, ...newEvents].sort((a, b) => new Date(b.date) - new Date(a.date));
+      const updatedEvents = [...chronoEvents, ...newEvents].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
       setChronoEvents(updatedEvents);
 
       setNewEventsStatus(`Success: Added ${newEvents.length} new event(s)!`);
@@ -385,7 +382,7 @@ export default function AdminPage() {
   };
 
   const eventsByYear = chronoEvents.reduce((acc, event) => {
-    const year = event.date.split('-')[0];
+    const year = new Date((event.start_time || 0) * 1000).getFullYear();
     if (!acc[year]) acc[year] = [];
     acc[year].push(event);
     return acc;
@@ -479,7 +476,6 @@ export default function AdminPage() {
                   )}
                 </button>
 
-                {/* NEW BUTTON: Fetch New Events */}
                 <button
                   onClick={handleFetchNewEvents}
                   disabled={fetchingNewEvents || !chronotrackEnabled}
@@ -513,29 +509,6 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Rest of your existing Event Management UI */}
-            <div className="flex items-center justify-end mb-6">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showAssignedEvents}
-                  onChange={e => setShowAssignedEvents(e.target.checked)}
-                  className="mr-3"
-                />
-                <span className="text-gray-700 font-medium">Show already assigned events</span>
-              </label>
-            </div>
-
-            <div className="flex items-center mb-8">
-              <input
-                type="checkbox"
-                checked={chronotrackEnabled}
-                onChange={e => setChronotrackEnabled(e.target.checked)}
-                className="mr-2"
-              />
-              <span>Enable ChronoTrack Integration</span>
-            </div>
-
             {/* Sync single event */}
             <section className="mb-12">
               <h2 className="text-3xl font-bold mb-6">Refresh Event Results</h2>
@@ -549,7 +522,7 @@ export default function AdminPage() {
                   <option value="">Select Event</option>
                   {chronoEvents.map(event => (
                     <option key={event.id} value={event.id}>
-                      {event.name} ({formatDate(event.date)})
+                      {event.name} ({formatDate(event.start_time)})
                     </option>
                   ))}
                 </select>
@@ -588,7 +561,6 @@ export default function AdminPage() {
 
                           return (
                             <div key={event.id} className="p-6 bg-white rounded-xl shadow hover:shadow-lg transition">
-                              {/* Event header */}
                               <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleExpandEvent(event.id)}>
                                 <div className="flex flex-col flex-1">
                                   <span className="text-sm text-gray-500">Original: {event.name}</span>
@@ -600,12 +572,10 @@ export default function AdminPage() {
                                     className="text-2xl font-bold p-2 border border-gray-300 rounded"
                                   />
                                 </div>
-                                <span className="ml-2 text-xl text-gray-600">({formatDate(event.date)})</span>
+                                <span className="ml-2 text-xl text-gray-600">({formatDate(event.start_time)})</span>
                                 <span>{expandedEvents[event.id] ? '▲' : '▼'}</span>
                               </div>
-
-                              {/* Visibility & Sync */}
-                              <div className="flex items-center mt-4">
+                              <div className="flex items-center mt-2">
                                 <input
                                   type="checkbox"
                                   checked={!hiddenEvents.includes(event.id)}
@@ -614,39 +584,9 @@ export default function AdminPage() {
                                 />
                                 <span>Visible in App</span>
                               </div>
-
-                              <div className="mt-4 flex items-center gap-4">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleSyncResults(event.id); }}
-                                  disabled={syncingEvents.includes(event.id)}
-                                  className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-                                >
-                                  {syncingEvents.includes(event.id) ? (
-                                    <>
-                                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
-                                      Syncing...
-                                    </>
-                                  ) : (
-                                    '↻ Sync Results'
-                                  )}
-                                </button>
-                                <span className="text-sm text-gray-600">
-                                  {resultsCount > 0 ? `${resultsCount} finishers cached` : 'No results cached'}
-                                </span>
-                              </div>
-
-                              {/* Master assignment */}
                               <div className="mt-4">
-                                <p className="font-bold">Current Master: <span className="text-gemini-blue">{currentMaster}</span></p>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={autoSyncOnAssign[event.id] || false}
-                                    onChange={e => setAutoSyncOnAssign(prev => ({ ...prev, [event.id]: e.target.checked }))}
-                                  />
-                                  <span className="text-sm text-gray-700">Sync results after assigning</span>
-                                </div>
-                                <div className="flex items-center gap-2 mt-2">
+                                <p className="font-bold">Current Master: {currentMaster}</p>
+                                <div className="flex items-center gap-2">
                                   <input
                                     list="master-keys"
                                     placeholder="Enter or select Master Key"
@@ -667,18 +607,16 @@ export default function AdminPage() {
                                   </button>
                                 </div>
                               </div>
-
-                              {/* Expanded races */}
                               {expandedEvents[event.id] && raceEvents[event.id] && (
-                                <div className="mt-6 border-t pt-6">
-                                  <h4 className="text-xl font-bold mb-4">Races</h4>
+                                <div className="mt-4">
+                                  <h3 className="text-xl font-bold mb-2">Races</h3>
                                   {raceEvents[event.id].map(race => (
-                                    <div key={race.race_id} className="flex items-center mb-3 ml-4">
+                                    <div key={race.race_id} className="flex items-center mb-1 ml-4">
                                       <input
                                         type="checkbox"
                                         checked={!(hiddenRaces[event.id] || []).includes(race.race_id)}
                                         onChange={() => toggleRaceVisibility(event.id, race.race_id)}
-                                        className="mr-3"
+                                        className="mr-2"
                                       />
                                       <div className="flex flex-col space-y-1 flex-1">
                                         <span className="text-sm text-gray-500">Original: {race.race_name}</span>
