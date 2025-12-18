@@ -1,9 +1,14 @@
-// src/api/chronotrackapi.jsx (FINAL — Full pagination support + all previous features)
+// src/api/chronotrackapi.jsx (FINAL — Direct ChronoTrack API call with size=600 + all features)
 import axios from 'axios';
 
-const baseUrl = '/chrono-api';
+// Direct ChronoTrack API — no proxy needed for events
+const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
+
 let accessToken = null;
 let tokenExpiration = 0;
+
+// Legacy proxy endpoint (keep for races/results that require auth token)
+const PROXY_BASE = '/chrono-api';
 
 const fetchAccessToken = async () => {
   try {
@@ -17,7 +22,7 @@ const fetchAccessToken = async () => {
     }
 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
-    const response = await axios.get(`${baseUrl}/oauth2/token`, {
+    const response = await axios.get(`${PROXY_BASE}/oauth2/token`, {
       headers: { Authorization: `Basic ${basicAuth}` },
       params: {
         grant_type: 'password',
@@ -46,28 +51,47 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
-// Updated: Supports optional pagination parameters
-export const fetchEvents = async ({ page = 1, results_per_page = 100 } = {}) => {
-  const authHeader = await getAuthHeader();
-  const response = await axios.get(`${baseUrl}/api/event`, {
-    headers: { Authorization: authHeader },
-    params: {
-      client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-      page,
-      results_per_page,
-    },
-  });
+// NEW: Fetch ALL events in one call using direct API + size=600
+export const fetchEvents = async () => {
+  const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
+  const userId = import.meta.env.VITE_CHRONOTRACK_USER;
+  const userPass = import.meta.env.VITE_CHRONOTRACK_PASS_HASH; // hashed password from your working URL
 
-  return (response.data.event || []).map(event => ({
-    id: event.event_id,
-    name: event.event_name,
-    start_time: event.event_start_time ? parseInt(event.event_start_time, 10) : null,
-  }));
+  if (!clientId || !userId || !userPass) {
+    throw new Error('Missing ChronoTrack direct API credentials');
+  }
+
+  try {
+    const response = await axios.get(`${CHRONOTRACK_API}/event`, {
+      params: {
+        format: 'json',
+        client_id: clientId,
+        user_id: userId,
+        user_pass: userPass,
+        size: 600,                    // Fetch up to 600 events at once
+        include_test_events: true,    // Keep if you want test events
+      },
+      timeout: 30000,
+    });
+
+    const events = response.data.event || [];
+    console.log(`[ChronoTrack Direct] Fetched ${events.length} events in one call`);
+
+    return events.map(event => ({
+      id: event.event_id,
+      name: event.event_name,
+      start_time: event.event_start_time ? parseInt(event.event_start_time, 10) : null,
+    }));
+  } catch (err) {
+    console.error('[ChronoTrack Direct] Failed to fetch events:', err.response?.data || err.message);
+    throw err;
+  }
 };
 
+// Keep proxy for authenticated endpoints (races, results)
 export const fetchRacesForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
-  const response = await axios.get(`${baseUrl}/api/event/${eventId}/race`, {
+  const response = await axios.get(`${PROXY_BASE}/api/event/${eventId}/race`, {
     headers: { Authorization: authHeader },
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
@@ -88,7 +112,6 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main results with full pagination
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -96,7 +119,7 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
 
   while (true) {
-    const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
+    const response = await axios.get(`${PROXY_BASE}/api/event/${eventId}/results`, {
       headers: { Authorization: authHeader },
       params: {
         client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
@@ -117,10 +140,10 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  // 2. Fetch brackets
+  // Fetch brackets
   let brackets = [];
   try {
-    const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
+    const bracketRes = await axios.get(`${PROXY_BASE}/api/event/${eventId}/bracket`, {
       headers: { Authorization: authHeader },
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
@@ -130,19 +153,17 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // 3. Identify division brackets (AGE + OTHER/special) and gender brackets
-  const divisionBrackets = [];   // Unified: AGE and OTHER (Youth, Military, etc.)
-  const genderBrackets = [];     // Overall Male/Female (SEX type)
+  // Identify division brackets (AGE + OTHER/special) and gender brackets
+  const divisionBrackets = [];
+  const genderBrackets = [];
 
   brackets.forEach(bracket => {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') return;
 
-    // Unified divisions: standard age groups + special/other divisions
     if (bracket.bracket_type === 'AGE' || bracket.bracket_type === 'OTHER') {
       divisionBrackets.push(bracket);
     }
 
-    // Overall gender brackets
     if (
       bracket.bracket_type === 'SEX' &&
       /^(Male|Female)$/i.test(bracket.bracket_name?.trim())
@@ -151,18 +172,18 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   });
 
-  console.log(`[ChronoTrack] ${divisionBrackets.length} DIVISION brackets (AGE + OTHER) | ${genderBrackets.length} GENDER brackets`);
+  console.log(`[ChronoTrack] ${divisionBrackets.length} DIVISION brackets | ${genderBrackets.length} GENDER brackets`);
 
   const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
 
-  // Unified division places: { entryKey: { name: string, place: number } }
   const divisionPlaces = {};
+  const genderPlaces = {};
 
-  // 4. Fetch places from all division brackets
+  // Fetch division places (AGE + OTHER like Youth)
   for (const bracket of divisionBrackets) {
     const divName = bracket.bracket_name?.trim() || 'Unknown Division';
     try {
-      const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
+      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
@@ -175,7 +196,6 @@ export const fetchResultsForEvent = async (eventId) => {
       results.forEach(r => {
         const key = getLookupKey(r);
         if (key && r.results_rank) {
-          // Only set if not already set (first match wins)
           if (!divisionPlaces[key]) {
             divisionPlaces[key] = {
               name: divName,
@@ -189,8 +209,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 5. Fetch overall gender places
-  const genderPlaces = {};
+  // Fetch overall gender places
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name?.trim() || 'Unnamed';
     let allBracketResults = [];
@@ -200,7 +219,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
     try {
       while (bPage <= maxPages) {
-        const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
+        const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
           headers: { Authorization: authHeader },
           params: {
             client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
@@ -227,12 +246,11 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 6. Final mapping with hometown parsing
+  // Final mapping with hometown parsing
   return allResults.map(r => {
     const lookupKey = getLookupKey(r);
     const divInfo = lookupKey ? divisionPlaces[lookupKey] : null;
 
-    // Parse hometown
     let city = r.results_city || null;
     let state = r.results_state || r.results_state_code || null;
     let country = r.results_country || r.results_country_code || null;
@@ -261,7 +279,6 @@ export const fetchResultsForEvent = async (eventId) => {
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
       gender_place: lookupKey ? genderPlaces[lookupKey] || null : null,
-      // Unified division: AGE or OTHER/special (e.g., Youth)
       age_group_name: divInfo ? divInfo.name : r.results_primary_bracket_name || '',
       age_group_place: divInfo ? divInfo.place : null,
       pace: r.results_pace || '',
