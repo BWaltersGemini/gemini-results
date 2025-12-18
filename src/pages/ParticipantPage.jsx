@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Safe localStorage + proper time formatting)
+// src/pages/ParticipantPage.jsx (FULLY UPDATED & FIXED — Uses start_time only, safe date handling)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -10,6 +10,7 @@ export default function ParticipantPage() {
   const navigate = useNavigate();
   const params = useParams();
   const { bib, masterKey, year, raceSlug } = params;
+
   const {
     events,
     races = [],
@@ -30,6 +31,7 @@ export default function ParticipantPage() {
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
 
+  // Safe time formatting
   const formatTime = (timeStr) => {
     if (!timeStr || timeStr.trim() === '') return '—';
     const trim = timeStr.trim();
@@ -56,11 +58,13 @@ export default function ParticipantPage() {
     }
   };
 
+  // Safe name cleaning for slug comparison
   const cleanName = (text) => {
     if (!text || typeof text !== 'string') return '';
     return text.trim().replace(/['`]/g, '').toLowerCase();
   };
 
+  // Slugify helper
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text
@@ -71,15 +75,22 @@ export default function ParticipantPage() {
       .replace(/^-+|-+$/g, '');
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'Date TBD';
-    const [year, month, day] = dateStr.split('-');
-    const date = new Date(year, month - 1, day);
+  // FIXED: Format date from Unix epoch (start_time in seconds)
+  const formatDate = (epoch) => {
+    if (!epoch || isNaN(epoch)) return 'Date TBD';
+    const date = new Date(epoch * 1000);
+    if (isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric',
     });
+  };
+
+  // Extract year from start_time
+  const getYearFromEvent = (event) => {
+    if (!event?.start_time) return null;
+    return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
   useEffect(() => {
@@ -105,41 +116,32 @@ export default function ParticipantPage() {
           }
 
           const yearEvents = events
-            .filter(e => groupEventIds.includes(e.id) && e.date.startsWith(year))
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
+            .filter(e => groupEventIds.includes(e.id) && getYearFromEvent(e) === year)
+            .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
-          if (yearEvents.length === 0) throw new Error('No matching event found.');
+          if (yearEvents.length === 0) throw new Error('Event not found for this year.');
+
           const targetEvent = yearEvents[0];
           setSelectedEvent(targetEvent);
 
-          const { data: participantData, error: pError } = await supabase
-            .from('chronotrack_results')
-            .select('*')
-            .eq('event_id', targetEvent.id.toString())
-            .eq('bib', bib)
-            .single();
+          // Fetch results if not passed via state
+          if (results.length === 0 || initialState.results === undefined) {
+            const { data: fetchedResults, error: resultsError } = await supabase
+              .from('chronotrack_results')
+              .select('*')
+              .eq('event_id', targetEvent.id);
 
-          if (pError || !participantData) throw new Error('Participant not found.');
-          setParticipant(participantData);
-
-          if (results.length === 0) {
-            let allResults = [];
-            let page = 0;
-            const pageSize = 1000;
-            while (true) {
-              const { data, error } = await supabase
-                .from('chronotrack_results')
-                .select('*')
-                .eq('event_id', targetEvent.id.toString())
-                .range(page * pageSize, (page + 1) * pageSize - 1);
-              if (error) throw error;
-              if (!data || data.length === 0) break;
-              allResults = [...allResults, ...data];
-              if (data.length < pageSize) break;
-              page++;
-            }
-            setResults(allResults);
+            if (resultsError) throw resultsError;
+            setResults(fetchedResults || []);
           }
+
+          // Find participant
+          const foundParticipant = (initialState.results || contextResults || fetchedResults || []).find(
+            r => r.bib === bib
+          );
+
+          if (!foundParticipant) throw new Error('Participant not found.');
+          setParticipant(foundParticipant);
         } catch (err) {
           console.error('Fetch error:', err);
           setFetchError(err.message || 'Failed to load participant data.');
@@ -148,154 +150,144 @@ export default function ParticipantPage() {
         }
       }
     };
+
     fetchDataIfMissing();
-  }, [bib, masterKey, year, events, masterGroups, editedEvents, participant, selectedEvent, results, contextResults, contextLoading]);
+  }, [bib, masterKey, year, events, contextResults, contextLoading, initialState, masterGroups, editedEvents]);
 
   const goBackToResults = () => navigate(-1);
 
   const handleDivisionClick = () => {
-    if (!participant?.age_group_name || !selectedEvent) return;
-
-    const participantRace = races.find(r => r.race_id === participant.race_id);
-    const targetRaceSlug = participantRace ? slugify(participantRace.race_name) : (raceSlug || 'overall');
-
-    let targetMasterSlug = masterKey;
-    if (!targetMasterSlug) {
-      const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
-        ids.includes(selectedEvent.id)
-      );
-      targetMasterSlug = foundMaster ? slugify(foundMaster[0]) : slugify(selectedEvent.name);
-    }
-
-    const eventYear = selectedEvent.date.split('-')[0];
-
-    navigate(`/results/${targetMasterSlug}/${eventYear}/${targetRaceSlug}`, {
+    if (!selectedEvent || !participant) return;
+    const raceId = participant.race_id;
+    navigate(location.pathname, {
       state: {
         autoFilterDivision: participant.age_group_name,
-        autoFilterRaceId: participant.race_id,
+        autoFilterRaceId: raceId,
       },
+      replace: true,
     });
   };
 
-  if (contextLoading || loading) {
+  if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-50 to-white">
-        <p className="text-2xl text-gray-700 mb-8">Loading Participant...</p>
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-[#80ccd6]"></div>
+      <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-gemini-blue mb-8"></div>
+          <p className="text-2xl text-gray-700">Loading participant...</p>
+        </div>
       </div>
     );
   }
 
-  if (fetchError || !participant) {
+  if (fetchError || !participant || !selectedEvent) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-50 to-white px-6 text-center">
-        <p className="text-2xl text-red-600 mb-8">{fetchError || 'No participant data available.'}</p>
-        <button
-          onClick={goBackToResults}
-          className="px-10 py-4 bg-[#80ccd6] text-white font-bold rounded-full hover:bg-[#80ccd6]/90 transition shadow-lg"
-        >
-          Back to Results
-        </button>
+      <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <p className="text-3xl font-bold text-gemini-red mb-6">Participant Not Found</p>
+          <p className="text-xl text-gray-700 mb-8">{fetchError || 'Unable to load data for this bib.'}</p>
+          <button
+            onClick={goBackToResults}
+            className="px-12 py-5 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl"
+          >
+            ← Back to Results
+          </button>
+        </div>
       </div>
     );
   }
 
-  const raceResults = results.filter(r => r.race_id === participant.race_id);
-  const overallTotal = raceResults.length || 1;
-  const genderTotal = raceResults.filter(r => r.gender === participant.gender).length || 1;
-  const divisionTotal = raceResults.filter(r => r.age_group_name === participant.age_group_name).length || 1;
-  const formattedEventDate = formatDate(selectedEvent?.date);
+  // Calculate totals
+  const overallTotal = results.length;
+  const genderTotal = results.filter(r => r.gender === participant.gender).length;
+  const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-24 pb-20">
-      <div className="max-w-5xl mx-auto px-6">
-        {/* Event Header */}
-        <div className="text-center mb-16">
+    <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
+      <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
+        {/* Race Header */}
+        <div className="text-center mb-8">
           {eventLogos[selectedEvent?.id] ? (
             <img
               src={eventLogos[selectedEvent.id]}
-              alt="Event Logo"
-              className="mx-auto max-h-40 mb-8 rounded-2xl shadow-2xl bg-white p-6"
+              alt="Race Logo"
+              className="mx-auto max-h-24 mb-4 rounded-full shadow-md"
             />
-          ) : null}
-          <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-4">
-            {selectedEvent.name}
-          </h1>
-          <p className="text-xl text-gray-600">{formattedEventDate}</p>
-          <div className="w-32 h-1 bg-[#80ccd6] mx-auto mt-8 rounded-full"></div>
+          ) : (
+            <div className="mx-auto w-32 h-32 bg-gray-200 rounded-full mb-4 flex items-center justify-center">
+              <span className="text-5xl">🏁</span>
+            </div>
+          )}
+          <h2 className="text-3xl font-bold text-gemini-dark-gray">{selectedEvent.name}</h2>
+          <p className="text-lg text-gray-600 italic">
+            {selectedEvent.start_time ? formatDate(selectedEvent.start_time) : 'Date TBD'}
+          </p>
         </div>
 
-        {/* Participant Hero */}
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden mb-16 border border-[#80ccd6]/20">
-          <div className="bg-gradient-to-r from-[#80ccd6] to-[#80ccd6]/70 py-12 text-center">
-            <h2 className="text-5xl md:text-7xl font-black text-white drop-shadow-lg">
-              {participant.first_name} {participant.last_name}
-            </h2>
-            <div className="mt-8">
-              <div className="inline-block bg-white/20 backdrop-blur px-12 py-6 rounded-full shadow-xl">
-                <p className="text-4xl font-bold text-white">Bib #{participant.bib}</p>
-              </div>
+        {/* Participant Name */}
+        <h3 className="text-5xl font-extrabold mb-8 text-center text-gemini-blue drop-shadow-md">
+          {participant.first_name} {participant.last_name}
+        </h3>
+
+        {/* BIB and Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          <div className="flex justify-center">
+            <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-6 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono transform hover:scale-105 transition">
+              <p className="text-sm uppercase tracking-wider font-bold mb-2">BIB</p>
+              <p className="text-6xl font-black">{participant.bib || '—'}</p>
             </div>
           </div>
 
-          {/* Key Stats */}
-          <div className="p-10 md:p-16">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center mb-12">
-              <div>
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Chip Time</p>
-                <p className="text-3xl font-bold text-[#80ccd6]">{formatTime(participant.chip_time)}</p>
-              </div>
-              <div>
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Pace</p>
-                <p className="text-3xl font-bold text-[#80ccd6]">{participant.pace || '—'}</p>
-              </div>
-              <div>
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Overall Place</p>
-                <p className="text-3xl font-bold text-[#80ccd6]">
-                  {participant.place || '—'} <span className="text-lg text-gray-600">/ {overallTotal}</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender Place</p>
-                <p className="text-3xl font-bold text-[#80ccd6]">
-                  {participant.gender_place || '—'} <span className="text-lg text-gray-600">/ {genderTotal}</span>
-                </p>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Overall</p>
+              <p className="text-4xl font-bold text-gemini-dark-gray">
+                {participant.place || '—'} <span className="text-lg text-gray-600">of {overallTotal}</span>
+              </p>
             </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender</p>
+              <p className="text-4xl font-bold text-gemini-dark-gray">
+                {participant.gender_place || '—'} <span className="text-lg text-gray-600">of {genderTotal}</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Age</p>
+              <p className="text-2xl font-bold text-gray-800">{participant.age || '—'}</p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender</p>
+              <p className="text-2xl font-bold text-gray-800">
+                {participant.gender === 'M' ? 'Male' : participant.gender === 'F' ? 'Female' : '—'}
+              </p>
+            </div>
+            <div className="md:col-span-4 mt-8">
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Division</p>
+              <button
+                onClick={handleDivisionClick}
+                className="text-3xl font-bold text-[#80ccd6] hover:underline transition cursor-pointer"
+              >
+                {participant.age_group_name || '—'} ({participant.age_group_place || '—'} of {divisionTotal})
+              </button>
+              <p className="text-base text-gray-600 mt-3">
+                Click to view everyone in your division
+              </p>
+            </div>
+          </div>
+        </div>
 
-            {/* Location, Age, Gender, Division */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-              {(participant.city || participant.state) && (
-                <div>
-                  <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Location</p>
-                  <p className="text-2xl font-bold text-gray-800">
-                    {participant.city}{participant.city && participant.state ? ', ' : ''}{participant.state || ''}
-                  </p>
-                </div>
-              )}
-              <div>
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Age</p>
-                <p className="text-2xl font-bold text-gray-800">{participant.age || '—'}</p>
-              </div>
-              <div>
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {participant.gender === 'M' ? 'Male' : participant.gender === 'F' ? 'Female' : '—'}
-                </p>
-              </div>
-              <div className="md:col-span-3 mt-8">
-                <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Division</p>
-                <button
-                  onClick={handleDivisionClick}
-                  className="text-3xl font-bold text-[#80ccd6] hover:underline transition cursor-pointer"
-                >
-                  {participant.age_group_name || '—'} ({participant.age_group_place || '—'} of {divisionTotal})
-                </button>
-                <p className="text-base text-gray-600 mt-3">
-                  Click to view everyone in your division
-                </p>
-              </div>
-            </div>
+        {/* Times */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
+          <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
+            <p className="text-5xl font-black text-gemini-blue">{formatTime(participant.chip_time) || '—'}</p>
+          </div>
+          <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gun Time</p>
+            <p className="text-5xl font-black text-gray-800">{formatTime(participant.clock_time) || '—'}</p>
+          </div>
+          <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
+            <p className="text-5xl font-black text-green-700">{participant.pace || '—'}</p>
           </div>
         </div>
 

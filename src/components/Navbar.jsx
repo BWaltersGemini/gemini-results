@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (FINAL — Clears search on "Results" click)
+// src/components/Navbar.jsx (FULLY UPDATED & FIXED — Uses start_time only, no more .date crashes)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -7,6 +7,7 @@ import { useLocalStorage } from '../utils/useLocalStorage';
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const {
     events = [],
     selectedEvent,
@@ -16,10 +17,12 @@ export default function Navbar() {
 
   const [masterGroups, , isMasterGroupsLoading] = useLocalStorage('masterGroups', {});
   const [editedEvents] = useLocalStorage('editedEvents', {});
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isListOpen, setIsListOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Slugify helper
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text
@@ -29,22 +32,31 @@ export default function Navbar() {
       .replace(/^-+|-+$/g, '');
   };
 
+  // Extract year from start_time (Unix epoch in seconds)
+  const getYearFromEvent = (event) => {
+    if (!event?.start_time) return null;
+    return new Date(event.start_time * 1000).getFullYear().toString();
+  };
+
   useEffect(() => {
     if (selectedEvent) {
       setSearchTerm(selectedEvent.name || '');
     }
   }, [selectedEvent]);
 
-  // Build master event list
-  const masterEventList = Object.keys(masterGroups).map(storedKey => {
+  // Build master event list using start_time
+  const masterEventList = Object.keys(masterGroups).map((storedKey) => {
     const displayName = editedEvents[storedKey]?.name || storedKey;
     const eventIds = masterGroups[storedKey] || [];
-    const masterEvents = events.filter(e => eventIds.includes(String(e.id)));
+    const masterEvents = events.filter((e) => eventIds.includes(String(e.id)));
+
     if (masterEvents.length === 0) return null;
 
-    const latestEvent = masterEvents.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    // Sort by newest first using start_time
+    const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
+
     const masterSlug = slugify(storedKey);
-    const year = latestEvent.date.split('-')[0];
+    const year = getYearFromEvent(latestEvent);
 
     return {
       storedKey,
@@ -56,7 +68,7 @@ export default function Navbar() {
   }).filter(Boolean);
 
   const filteredMasters = searchTerm
-    ? masterEventList.filter(m =>
+    ? masterEventList.filter((m) =>
         m.displayName.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : masterEventList;
@@ -71,7 +83,9 @@ export default function Navbar() {
   };
 
   const handleInputFocus = () => setIsListOpen(true);
-  const toggleDropdown = () => setIsListOpen(prev => !prev);
+
+  const toggleDropdown = () => setIsListOpen((prev) => !prev);
+
   const handleToggleOpen = () => {
     if (!isListOpen) setSearchTerm('');
     toggleDropdown();
@@ -83,13 +97,12 @@ export default function Navbar() {
       e.preventDefault();
     }
 
-    // Always reset search state when going to the main results landing
     setSelectedEvent(null);
     setSearchTerm('');
     setIsListOpen(false);
 
     navigate('/results');
-    setIsMobileMenuOpen(false); // Close mobile menu if open
+    setIsMobileMenuOpen(false);
   };
 
   const handleLogoClick = () => {
@@ -170,7 +183,7 @@ export default function Navbar() {
                 {searchTerm ? 'No master events match your search' : 'No master events available'}
               </p>
             ) : (
-              filteredMasters.map(master => (
+              filteredMasters.map((master) => (
                 <div
                   key={master.storedKey}
                   onClick={() => handleMasterSelect(master)}
