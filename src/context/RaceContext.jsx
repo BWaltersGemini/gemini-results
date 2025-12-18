@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Works perfectly with new schema: races JSONB in chronotrack_events)
+// src/context/RaceContext.jsx (FINAL — Full pagination for events + all previous fixes)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -41,15 +41,33 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load events from ChronoTrack (once on mount)
+  // Load ALL events from ChronoTrack with full pagination
   useEffect(() => {
     const loadEvents = async () => {
       try {
         setLoading(true);
         setError(null);
-        const fetched = await fetchEvents();
-        setEvents(fetched);
-        console.log('[RaceContext] Events loaded:', fetched.length);
+
+        let allEvents = [];
+        let page = 1;
+        const perPage = 100; // Max safe value
+
+        while (true) {
+          const pageEvents = await fetchEvents({ page, results_per_page: perPage });
+          if (pageEvents.length === 0) {
+            console.log('[RaceContext] No more events — finished fetching');
+            break;
+          }
+
+          allEvents = [...allEvents, ...pageEvents];
+          console.log(`[RaceContext] Fetched page ${page}: ${pageEvents.length} events → Total: ${allEvents.length}`);
+
+          if (pageEvents.length < perPage) break; // Last page
+          page++;
+        }
+
+        setEvents(allEvents);
+        console.log('[RaceContext] All events loaded:', allEvents.length);
       } catch (err) {
         console.error('[RaceContext] Failed to load events:', err);
         setError('Failed to load events');
@@ -57,27 +75,25 @@ export function RaceProvider({ children }) {
         setLoading(false);
       }
     };
+
     loadEvents();
   }, []);
 
-  // Load races from the embedded races JSONB when event selected
+  // Load races from embedded JSONB when event selected
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
       return;
     }
 
-    // Races are now stored directly in the event row as JSONB array
     const embeddedRaces = selectedEvent.races || [];
-
     const formattedRaces = embeddedRaces.map(race => ({
       race_id: race.race_id,
       race_name: race.race_name || 'Unknown Race',
-      // Add any other fields you need for display/filtering
     }));
 
     setRaces(formattedRaces);
-    console.log('[RaceContext] Loaded embedded races for event', selectedEvent.id, ':', formattedRaces.length);
+    console.log('[RaceContext] Loaded embedded races:', formattedRaces.length);
   }, [selectedEvent]);
 
   // Load results — cache first, fresh sync on race day or force
@@ -135,7 +151,7 @@ export function RaceProvider({ children }) {
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // === SYNC EMBEDDED RACES INTO chronotrack_events ===
+            // === SYNC EMBEDDED RACES ===
             try {
               const eventRaces = await fetchRacesForEvent(selectedEvent.id);
               const racesArray = eventRaces.map(race => ({
@@ -158,24 +174,20 @@ export function RaceProvider({ children }) {
               if (raceUpdateError) {
                 console.warn('[RaceContext] Failed to update embedded races:', raceUpdateError);
               } else {
-                console.log('[RaceContext] Updated embedded races in chronotrack_events');
-                // Update local selectedEvent with fresh races
+                console.log('[RaceContext] Updated embedded races');
                 setSelectedEvent(prev => ({ ...prev, races: racesArray }));
               }
             } catch (raceErr) {
               console.warn('[RaceContext] Race sync failed (non-critical):', raceErr);
             }
 
-            // === DEDUPLICATE RESULTS ===
+            // === DEDUPLICATE ===
             const seen = new Map();
             fresh.forEach(r => {
               const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
-              if (!seen.has(key)) {
-                seen.set(key, r);
-              }
+              if (!seen.has(key)) seen.set(key, r);
             });
             const deduped = Array.from(seen.values());
-            console.log(`[RaceContext] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
             // === UPSERT RESULTS ===
             const toUpsert = deduped.map(r => ({
@@ -218,9 +230,7 @@ export function RaceProvider({ children }) {
           }
         }
 
-        if (!aborted) {
-          setResults(allResults);
-        }
+        if (!aborted) setResults(allResults);
       } catch (err) {
         if (!aborted) {
           console.error('[RaceContext] Results load error:', err);
