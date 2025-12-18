@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Fully fixed, no errors, complete data)
+// src/api/chronotrackapi.jsx (FINAL — Fixed infinite main results loop)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -76,7 +76,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main results — safe loop (fixed "fetched not defined")
+  // 1. Fetch main results — SAFE loop (stops on empty response)
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -94,7 +94,10 @@ export const fetchResultsForEvent = async (eventId) => {
     });
 
     const fetched = response.data.event_results || [];
-    if (fetched.length === 0) break;
+    if (fetched.length === 0) {
+      console.log(`[ChronoTrack] No more results at page ${page} — stopping`);
+      break;
+    }
 
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
@@ -138,7 +141,7 @@ export const fetchResultsForEvent = async (eventId) => {
   // Helper: get key for matching (entry_id preferred, bib fallback)
   const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
 
-  // 4. Fetch AGE places — simple single request
+  // 4. Fetch AGE places — simple
   const ageGroupPlaces = {};
   for (const bracket of ageBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -174,7 +177,7 @@ export const fetchResultsForEvent = async (eventId) => {
     let allBracketResults = [];
     let page = 1;
     const pageSize = 250;
-    const maxPages = 40; // 10,000 max
+    const maxPages = 40;
 
     try {
       while (page <= maxPages) {
@@ -215,7 +218,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 6. Final mapping — exact API fields
+  // 6. Final mapping
   return allResults.map(r => {
     const entryId = r.results_entry_id || null;
     const bib = r.results_bib || null;
