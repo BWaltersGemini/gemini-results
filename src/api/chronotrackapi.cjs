@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Age groups simple, Gender brackets fully paginated)
+// src/api/chronotrackapi.jsx (FINAL — Gender up to 10,000 results safely)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -134,7 +134,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
 
-  // 4. Fetch AGE group places — old simple way (single request, max=50000)
+  // 4. Fetch AGE group places — simple single request
   const ageGroupPlaces = {};
   for (const bracket of ageBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -161,7 +161,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 5. Fetch PRIMARY GENDER places — full pagination with size=250 and bracket=SEX
+  // 5. Fetch PRIMARY GENDER places — safe paginated fetch (up to 10,000 results)
   const genderPlaces = {};
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -170,25 +170,35 @@ export const fetchResultsForEvent = async (eventId) => {
     let allBracketResults = [];
     let page = 1;
     const pageSize = 250;
+    const maxPages = 40; // 40 × 250 = 10,000 results max (your requested backup limit)
 
     try {
-      while (true) {
+      while (page <= maxPages) {
         const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
           headers: { Authorization: authHeader },
           params: {
             client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
             page,
             size: pageSize,
-            bracket: 'SEX',  // Magic parameter to unlock full gender ranking
+            bracket: 'SEX',
           },
         });
 
         const results = res.data.bracket_results || [];
-        if (results.length === 0) break;
+
+        // Stop if no results or empty array
+        if (!results || results.length === 0) {
+          console.log(`[ChronoTrack] PRIMARY GENDER "${name}" — no more results at page ${page}, stopping`);
+          break;
+        }
 
         allBracketResults = [...allBracketResults, ...results];
         console.log(`[ChronoTrack] PRIMARY GENDER "${name}" page ${page}: ${results.length} → Total: ${allBracketResults.length}`);
         page++;
+      }
+
+      if (page > maxPages) {
+        console.warn(`[ChronoTrack] Hit backup limit (10,000 results) for "${name}" — stopping safely`);
       }
 
       console.log(`[ChronoTrack] PRIMARY GENDER "${name}" FINAL: ${allBracketResults.length} ranked`);
