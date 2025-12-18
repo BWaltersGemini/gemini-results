@@ -186,7 +186,7 @@ export default function AdminPage() {
         id: e.id,
         name: e.name,
         start_time: e.start_time ? parseInt(e.start_time, 10) : null,
-        races: [], // initialize empty races array
+        races: [], // JavaScript array → Supabase will convert to JSONB automatically
       }));
 
       const { error: insertError } = await adminSupabase
