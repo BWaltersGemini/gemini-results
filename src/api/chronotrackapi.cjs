@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Exact match to ChronoTrack API fields)
+// src/api/chronotrackapi.jsx (FINAL — Fully fixed, no errors, complete data)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -76,14 +76,14 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main results — paginated
+  // 1. Fetch main results — safe loop (fixed "fetched not defined")
   let allResults = [];
   let page = 1;
   const perPage = 50;
 
   console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
 
-  do {
+  while (true) {
     const response = await axios.get(`${baseUrl}/api/event/${eventId}/results`, {
       headers: { Authorization: authHeader },
       params: {
@@ -94,10 +94,12 @@ export const fetchResultsForEvent = async (eventId) => {
     });
 
     const fetched = response.data.event_results || [];
+    if (fetched.length === 0) break;
+
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
-  } while (fetched.length === perPage);
+  }
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
@@ -133,7 +135,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
 
-  // Helper to get lookup key: entry_id first, then bib
+  // Helper: get key for matching (entry_id preferred, bib fallback)
   const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
 
   // 4. Fetch AGE places — simple single request
@@ -163,7 +165,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 5. Fetch GENDER places — paginated with bracket=SEX
+  // 5. Fetch GENDER places — safe paginated
   const genderPlaces = {};
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -213,7 +215,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 6. Map results — using exact API field names
+  // 6. Final mapping — exact API fields
   return allResults.map(r => {
     const entryId = r.results_entry_id || null;
     const bib = r.results_bib || null;
