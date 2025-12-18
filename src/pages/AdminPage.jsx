@@ -80,10 +80,13 @@ export default function AdminPage() {
   }, []);
 
   const formatDate = (epoch) => {
-    if (!epoch) return 'Date TBD';
-    return new Date(epoch * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    if (!epoch || epoch === 0) return 'Date TBD';
+    return new Date(epoch * 1000).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
-
   // Load events from ChronoTrack
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
