@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Complete, working version)
+// src/api/chronotrackapi.jsx (FINAL — Complete and working)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -102,9 +102,8 @@ export const fetchResultsForEvent = async (eventId) => {
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
 
-    // Stop at the first page with fewer than 50 results — this is the real end
     if (fetched.length < perPage) {
-      console.log(`[ChronoTrack] Last real page (${fetched.length} < ${perPage}) — finished`);
+      console.log(`[ChronoTrack] Last real page (${fetched.length} < ${perPage}) — finished with ${allResults.length} results`);
       break;
     }
 
@@ -184,7 +183,7 @@ export const fetchResultsForEvent = async (eventId) => {
     let allBracketResults = [];
     let page = 1;
     const pageSize = 250;
-    const maxPages = 40;
+    const maxPages = 40; // 10,000 max
 
     try {
       while (page <= maxPages) {
