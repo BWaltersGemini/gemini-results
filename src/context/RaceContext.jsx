@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Division place saved to Supabase, gender place calculated in frontend)
+// src/context/RaceContext.jsx (FINAL — StrictMode-safe: no reload on "All Results" click)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
@@ -27,7 +27,7 @@ export function RaceProvider({ children }) {
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [ads, setAds] = useState([]);
 
-  // Persist last viewed event in localStorage (user preference)
+  // Persist last viewed event in localStorage
   useEffect(() => {
     const savedEventId = typeof window !== 'undefined' ? localStorage.getItem('selectedEventId') : null;
     if (savedEventId && events.length > 0) {
@@ -103,7 +103,6 @@ export function RaceProvider({ children }) {
         const fetchedEvents = await fetchEvents();
         console.log('[RaceContext] Events fetched successfully:', fetchedEvents.length, 'total events');
         setEvents(fetchedEvents);
-
         const completedEvents = fetchedEvents.filter(e => new Date(e.date) <= new Date());
         setTotalRacesTimed(completedEvents.length);
         await updateAthleteCount();
@@ -120,49 +119,70 @@ export function RaceProvider({ children }) {
     return () => console.log('[RaceContext] Provider cleanup');
   }, []);
 
-  // Load races for selected event
+  // Load races — StrictMode-safe with abort flag
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
       return;
     }
+
+    let aborted = false;
+
     const loadRaces = async () => {
+      if (aborted) return;
+
       try {
         console.log(`[Races] Loading races for event ${selectedEvent.id}`);
         const fetchedRaces = await fetchRacesForEvent(selectedEvent.id);
-        setRaces(fetchedRaces);
-        console.log(`[Races] Loaded ${fetchedRaces.length} races`);
+        if (!aborted) {
+          setRaces(fetchedRaces);
+          console.log(`[Races] Loaded ${fetchedRaces.length} races`);
+        }
       } catch (err) {
-        console.error('[Races] Failed to load races:', err);
-        setRaces([]);
+        if (!aborted) {
+          console.error('[Races] Failed to load races:', err);
+          setRaces([]);
+        }
       }
     };
+
     loadRaces();
+
+    return () => {
+      aborted = true;
+    };
   }, [selectedEvent]);
 
-  // Load results + live polling — Save age_group_place from ChronoTrack, gender_place null
+  // Load results + live polling — StrictMode-safe with abort flag
   useEffect(() => {
+    // Immediate clear when no event selected
     if (!selectedEvent) {
       console.log('[Results] No selected event — clearing results');
       setResults([]);
       setUniqueDivisions([]);
       setIsLiveRace(false);
+      setLoadingResults(false);
       return;
     }
 
-    console.log(`[Results] Loading results for event ${selectedEvent.id} — "${selectedEvent.name}" (${selectedEvent.date})`);
-    let interval;
+    let aborted = false;
+    let interval = null;
 
     const loadResults = async (forceFresh = false) => {
+      // Runtime check — prevents stale loads in StrictMode remount
+      if (aborted || !selectedEvent) return;
+
       try {
         setLoadingResults(true);
         setError(null);
         let allResults = [];
+
+        // Cache check
         let allCached = [];
         let page = 0;
         const pageSize = 1000;
-
         console.log('[Results] Checking Supabase cache...');
+
         while (true) {
           const { data, error } = await supabase
             .from('chronotrack_results')
@@ -176,6 +196,7 @@ export function RaceProvider({ children }) {
             break;
           }
           if (!data || data.length === 0) break;
+
           allCached = [...allCached, ...data];
           if (data.length < pageSize) break;
           page++;
@@ -191,7 +212,7 @@ export function RaceProvider({ children }) {
 
         const todayStr = new Date().toISOString().split('T')[0];
         const isRaceDay = selectedEvent.date === todayStr;
-        setIsLiveRace(isRaceDay);
+        if (!aborted) setIsLiveRace(isRaceDay);
 
         if (forceFresh || isRaceDay) {
           console.log('[Results] Fetching fresh results from ChronoTrack...');
@@ -213,15 +234,14 @@ export function RaceProvider({ children }) {
               chip_time: r.chip_time || null,
               clock_time: r.clock_time || null,
               place: r.place ? parseInt(r.place, 10) : null,
-              gender_place: null, // Calculated per-race in ResultsPage
+              gender_place: null,
               age_group_name: r.age_group_name || null,
-              age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null, // Saved from ChronoTrack bracket
+              age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
               pace: r.pace || null,
               splits: r.splits || [],
               entry_id: r.entry_id || null,
             }));
 
-            // Clear old and insert fresh
             await supabase.from('chronotrack_results').delete().eq('event_id', selectedEvent.id.toString());
 
             const chunkSize = 500;
@@ -237,20 +257,27 @@ export function RaceProvider({ children }) {
           }
         }
 
-        setResults(allResults);
-        const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
-        setUniqueDivisions(divisions);
-        console.log(`[Results] Final: ${allResults.length} results loaded`);
+        if (!aborted) {
+          setResults(allResults);
+          const divisions = [...new Set(allResults.map(r => r.age_group_name).filter(Boolean))].sort();
+          setUniqueDivisions(divisions);
+          console.log(`[Results] Final: ${allResults.length} results loaded`);
+        }
       } catch (err) {
-        console.error('[Results] Load error:', err);
-        setError('Failed to load results.');
+        if (!aborted) {
+          console.error('[Results] Load error:', err);
+          setError('Failed to load results.');
+        }
       } finally {
-        setLoadingResults(false);
+        if (!aborted) {
+          setLoadingResults(false);
+        }
       }
     };
 
     loadResults();
 
+    // Live polling
     const todayStr = new Date().toISOString().split('T')[0];
     if (selectedEvent.date === todayStr) {
       interval = setInterval(() => loadResults(true), 120000);
@@ -258,6 +285,7 @@ export function RaceProvider({ children }) {
     }
 
     return () => {
+      aborted = true;
       if (interval) {
         clearInterval(interval);
         console.log('[Results] Live polling stopped');

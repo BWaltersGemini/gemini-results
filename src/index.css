@@ -56,10 +56,31 @@ button:focus-visible {
     background-color: #ffffff;
   }
 }
-
 @media (prefers-color-scheme: dark) {
   :root {
     color: rgba(255, 255, 255, 0.87);
     background-color: #242424;
+  }
+}
+
+/* ============================================= */
+/* NEW: Padding for fixed navbar — CRITICAL FIX  */
+/* ============================================= */
+
+/* Add top padding to main content so it starts below the fixed navbar */
+main {
+  padding-top: 160px; /* Mobile: generous space for search bar + logo */
+}
+
+@media (min-width: 768px) {
+  main {
+    padding-top: 140px; /* Desktop: slightly less since search bar is inline */
+  }
+}
+
+/* Optional: Extra breathing room on very large screens */
+@media (min-width: 1024px) {
+  main {
+    padding-top: 130px;
   }
 }
