@@ -5,7 +5,7 @@
  * - entry_id is now correctly returned and saved to Supabase
  * - Gender place ONLY from primary race-specific "Female"/"Male" brackets
  *   (excludes challenge, overall, hill climb, virtual brackets)
- * - Uses 'max=50000' for full bracket ranks
+ * - Uses 'max=10000' for full bracket ranks
  * - Accurate, unique per-registration ranking
  */
 
