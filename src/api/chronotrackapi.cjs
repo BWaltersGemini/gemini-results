@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Unified divisions: AGE + OTHER/special in same column + hometown parsing)
+// src/api/chronotrackapi.jsx (FINAL — Full pagination support + all previous features)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -46,11 +46,16 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
-export const fetchEvents = async () => {
+// Updated: Supports optional pagination parameters
+export const fetchEvents = async ({ page = 1, results_per_page = 100 } = {}) => {
   const authHeader = await getAuthHeader();
   const response = await axios.get(`${baseUrl}/api/event`, {
     headers: { Authorization: authHeader },
-    params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+    params: {
+      client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+      page,
+      results_per_page,
+    },
   });
 
   return (response.data.event || []).map(event => ({
@@ -83,7 +88,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main results
+  // 1. Fetch main results with full pagination
   let allResults = [];
   let page = 1;
   const perPage = 50;

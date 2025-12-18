@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Fully compatible with new schema: races JSONB in chronotrack_events)
+// src/pages/AdminPage.jsx (FINAL COMPLETE — Full pagination for Fetch New Events + all previous fixes)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -162,22 +162,46 @@ export default function AdminPage() {
     }
   };
 
+  // FETCH NEW EVENTS — Now fetches ALL events with full pagination
   const handleFetchNewEvents = async () => {
     if (fetchingNewEvents || !chronotrackEnabled) return;
     setFetchingNewEvents(true);
-    setNewEventsStatus('Checking for new events...');
+    setNewEventsStatus('Fetching ALL events from ChronoTrack...');
+
     try {
-      const freshEvents = await fetchChronoEvents();
+      let allFreshEvents = [];
+      let page = 1;
+      const perPage = 100; // Safe max
+
+      while (true) {
+        const pageEvents = await fetchChronoEvents({ page, results_per_page: perPage });
+        if (pageEvents.length === 0) {
+          console.log('[Fetch New] No more events — finished');
+          break;
+        }
+
+        allFreshEvents = [...allFreshEvents, ...pageEvents];
+        console.log(`[Fetch New] Page ${page}: ${pageEvents.length} events → Total: ${allFreshEvents.length}`);
+
+        if (pageEvents.length < perPage) break;
+        page++;
+      }
+
+      console.log(`[Fetch New] Successfully fetched ${allFreshEvents.length} total events`);
+
+      // Get existing event IDs
       const { data: existing, error: fetchError } = await adminSupabase
         .from('chronotrack_events')
         .select('id');
+
       if (fetchError) throw fetchError;
+
       const existingIds = new Set(existing.map(e => e.id));
-      const newEvents = freshEvents.filter(e => !existingIds.has(e.id));
+      const newEvents = allFreshEvents.filter(e => !existingIds.has(e.id));
 
       if (newEvents.length === 0) {
-        setNewEventsStatus('No new events found');
-        setTimeout(() => setNewEventsStatus(''), 5000);
+        setNewEventsStatus(`No new events found (total in ChronoTrack: ${allFreshEvents.length})`);
+        setTimeout(() => setNewEventsStatus(''), 8000);
         setFetchingNewEvents(false);
         return;
       }
@@ -186,21 +210,23 @@ export default function AdminPage() {
         id: e.id,
         name: e.name,
         start_time: e.start_time ? parseInt(e.start_time, 10) : null,
-        races: [], // JavaScript array → Supabase will convert to JSONB automatically
+        races: [], // Initialize empty races array
       }));
 
       const { error: insertError } = await adminSupabase
         .from('chronotrack_events')
         .insert(toInsert);
+
       if (insertError) throw insertError;
 
       const updatedEvents = [...chronoEvents, ...newEvents].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
       setChronoEvents(updatedEvents);
-      setNewEventsStatus(`Success: Added ${newEvents.length} new event(s)!`);
-      setTimeout(() => setNewEventsStatus(''), 8000);
+
+      setNewEventsStatus(`Success! Added ${newEvents.length} new events (total fetched: ${allFreshEvents.length})`);
+      setTimeout(() => setNewEventsStatus(''), 10000);
     } catch (err) {
       console.error('Failed to fetch new events:', err);
-      setNewEventsStatus('Error checking for new events');
+      setNewEventsStatus('Error fetching events');
       setTimeout(() => setNewEventsStatus(''), 8000);
     } finally {
       setFetchingNewEvents(false);
@@ -487,10 +513,10 @@ export default function AdminPage() {
                   {fetchingNewEvents ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
-                      Checking...
+                      Scanning...
                     </>
                   ) : (
-                    '🔍 Fetch New Events'
+                    '🔍 Fetch ALL New Events'
                   )}
                 </button>
               </div>
@@ -505,7 +531,7 @@ export default function AdminPage() {
                   </div>
                 )}
                 {newEventsStatus && (
-                  <div className={`p-4 rounded-lg text-center font-medium ${newEventsStatus.includes('Success') || newEventsStatus.includes('No new') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                  <div className={`p-4 rounded-lg text-center font-medium ${newEventsStatus.includes('Success') ? 'bg-green-100 text-green-800' : newEventsStatus.includes('No new') ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>
                     {newEventsStatus}
                   </div>
                 )}
