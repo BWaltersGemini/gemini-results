@@ -1,14 +1,4 @@
-/**
- * CHRONOTRACK API INTEGRATION — FINAL (December 2025)
- *
- * CRITICAL FIXES:
- * - entry_id is now correctly returned and saved to Supabase
- * - Gender place ONLY from primary race-specific "Female"/"Male" brackets
- *   (excludes challenge, overall, hill climb, virtual brackets)
- * - Uses 'max=10000' for full bracket ranks
- * - Accurate, unique per-registration ranking
- */
-
+// src/api/chronotrackapi.jsx (FINAL — Full gender places via pagination + bracket=SEX)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -77,23 +67,16 @@ export const fetchRacesForEvent = async (eventId) => {
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
 
-  const races = (response.data.event_race || []).map(race => ({
+  return (response.data.event_race || []).map(race => ({
     race_id: race.race_id,
     race_name: race.race_name || `Race ${race.race_id}`,
   }));
-
-  console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races:`);
-  races.forEach(race => {
-    console.log(`[ChronoTrack] → Race ID: ${race.race_id} | Name: ${race.race_name}`);
-  });
-
-  return races;
 };
 
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main overall results
+  // 1. Fetch main overall results (paginated)
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -124,10 +107,7 @@ export const fetchResultsForEvent = async (eventId) => {
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
       headers: { Authorization: authHeader },
-      params: {
-        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-        size: 500,
-      },
+      params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
     brackets = bracketRes.data.event_bracket || [];
     console.log(`[ChronoTrack] Found ${brackets.length} total brackets`);
@@ -135,7 +115,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // 3. Classify brackets — STRICT primary gender only
+  // 3. Classify brackets
   const ageBrackets = [];
   const genderBrackets = [];
 
@@ -143,8 +123,6 @@ export const fetchResultsForEvent = async (eventId) => {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') return;
 
     const isAge = bracket.bracket_type === 'AGE';
-
-    // Primary gender: must be SEX/GENDER type, have race_id, and name exactly "Female" or "Male"
     const isPrimaryGender =
       (bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') &&
       (bracket.race_id || bracket.bracket_race_id) &&
@@ -156,22 +134,48 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
 
-  // 4. Fetch AGE group places
-  const ageGroupPlaces = {};
+  // 4. Helper: paginated fetch for any bracket
+  const fetchAllBracketResults = async (bracket) => {
+    let allResults = [];
+    let page = 1;
+    const pageSize = 250;
 
-  for (const bracket of ageBrackets) {
-    const name = bracket.bracket_name || 'Unnamed';
-    try {
+    while (true) {
+      const params = {
+        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+        page,
+        size: pageSize,
+      };
+
+      // Only add bracket=SEX for primary gender brackets
+      if ((bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') &&
+          /^(Female|Male)$/i.test(bracket.bracket_name?.trim())) {
+        params.bracket = 'SEX';
+      }
+
       const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
         headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          max: 50000,
-        },
+        params,
       });
 
       const results = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] AGE "${name}" (${bracket.bracket_id}): ${results.length} ranked`);
+      if (results.length === 0) break;
+
+      allResults = [...allResults, ...results];
+      console.log(`[ChronoTrack] Bracket "${bracket.bracket_name}" (${bracket.bracket_id}) page ${page}: ${results.length} → Total: ${allResults.length}`);
+      page++;
+    }
+
+    return allResults;
+  };
+
+  // 5. Fetch AGE group places (paginated)
+  const ageGroupPlaces = {};
+  for (const bracket of ageBrackets) {
+    const name = bracket.bracket_name || 'Unnamed';
+    try {
+      const results = await fetchAllBracketResults(bracket);
+      console.log(`[ChronoTrack] AGE "${name}" FINAL: ${results.length} ranked`);
 
       results.forEach(r => {
         const entryId = r.results_entry_id;
@@ -180,33 +184,23 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed AGE "${name}" (${bracket.bracket_id})`, err);
+      console.warn(`[ChronoTrack] Failed AGE bracket "${name}"`, err);
     }
   }
 
-  // 5. Fetch GENDER places — only primary race-specific Female/Male
+  // 6. Fetch PRIMARY GENDER places (paginated with bracket=SEX)
   const genderPlaces = {};
-
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
     const bracketRaceId = bracket.race_id || bracket.bracket_race_id || null;
 
     try {
-      const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
-        headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          max: 50000,
-        },
-      });
-
-      const results = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] PRIMARY GENDER "${name}" (${bracket.bracket_id}) race ${bracketRaceId}: ${results.length} ranked`);
+      const results = await fetchAllBracketResults(bracket);
+      console.log(`[ChronoTrack] PRIMARY GENDER "${name}" FINAL: ${results.length} ranked`);
 
       results.forEach(r => {
         const entryId = r.results_entry_id;
         const athleteRaceId = r.results_race_id;
-
         if (entryId && r.results_rank) {
           if (!bracketRaceId || athleteRaceId === bracketRaceId) {
             genderPlaces[entryId] = parseInt(r.results_rank, 10);
@@ -214,13 +208,24 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed PRIMARY GENDER "${name}" (${bracket.bracket_id})`, err);
+      console.warn(`[ChronoTrack] Failed PRIMARY GENDER "${name}"`, err);
     }
   }
 
-  // 6. Map results — ensure entry_id is included
+  // 7. Map final results
   return allResults.map(r => {
     const entryId = r.results_entry_id;
+
+    const rawSplits = r.splits || r.interval_results || r.results_splits || [];
+    const splits = Array.isArray(rawSplits)
+      ? rawSplits.map(split => ({
+          name: split.interval_name || split.split_name || 'Split',
+          distance: split.interval_distance || null,
+          time: split.interval_time || split.split_time || null,
+          pace: split.interval_pace || split.split_pace || null,
+          place: split.interval_place || split.split_place || null,
+        }))
+      : [];
 
     return {
       first_name: r.results_first_name || '',
@@ -240,7 +245,8 @@ export const fetchResultsForEvent = async (eventId) => {
       city: r.results_city || '',
       state: r.results_state || '',
       country: r.results_country || r.country || '',
-      entry_id: entryId || null, // ← Guaranteed to be saved
+      splits,
+      entry_id: entryId || null,
     };
   });
 };
