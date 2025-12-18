@@ -1,7 +1,7 @@
-// src/pages/AdminPage.jsx (FINAL — Complete with working "Fetch New Events" button + safe date handling)
+// src/pages/AdminPage.jsx (FULLY UPDATED & FIXED — Uses start_time only, no more .date crashes, production-ready)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
+import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 
@@ -37,15 +37,13 @@ export default function AdminPage() {
   const [syncingEvents, setSyncingEvents] = useState([]);
   const [eventResultsCount, setEventResultsCount] = useState({});
   const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
-
-  // Fetch New Events state
   const [fetchingNewEvents, setFetchingNewEvents] = useState(false);
   const [newEventsStatus, setNewEventsStatus] = useState('');
 
   // Admin Supabase client (service_role)
   const adminSupabase = createAdminSupabaseClient();
 
-  // Load global config
+  // Load global config from Supabase
   const loadGlobalConfig = async () => {
     const config = await loadAppConfig();
     setMasterGroups(config.masterGroups || {});
@@ -58,7 +56,7 @@ export default function AdminPage() {
     setHiddenRaces(config.hiddenRaces || {});
   };
 
-  // Save config
+  // Save single config key to Supabase
   const saveConfig = async (key, value) => {
     try {
       const { error } = await adminSupabase
@@ -79,7 +77,7 @@ export default function AdminPage() {
     if (loggedIn) loadGlobalConfig();
   }, []);
 
-  // Safe date formatting using epoch start_time
+  // Safe date formatting using epoch (seconds)
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
     const date = new Date(epoch * 1000);
@@ -110,7 +108,7 @@ export default function AdminPage() {
           years.forEach(y => initialCollapsed[y] = true);
           setCollapsedYears(initialCollapsed);
 
-          // Load result counts
+          // Load result counts from Supabase
           const counts = {};
           for (const event of events) {
             try {
@@ -166,25 +164,18 @@ export default function AdminPage() {
     }
   };
 
-  // Fetch New Events — adds missing events to Supabase using start_time
+  // Fetch new events not yet in chronotrack_events table
   const handleFetchNewEvents = async () => {
     if (fetchingNewEvents || !chronotrackEnabled) return;
     setFetchingNewEvents(true);
     setNewEventsStatus('Checking for new events...');
-
     try {
       const freshEvents = await fetchChronoEvents();
-
-      // Get existing event IDs from Supabase
       const { data: existing, error: fetchError } = await adminSupabase
         .from('chronotrack_events')
         .select('id');
-
       if (fetchError) throw fetchError;
-
       const existingIds = new Set(existing.map(e => e.id));
-
-      // Find new events
       const newEvents = freshEvents.filter(e => !existingIds.has(e.id));
 
       if (newEvents.length === 0) {
@@ -194,7 +185,6 @@ export default function AdminPage() {
         return;
       }
 
-      // Insert new events using start_time
       const toInsert = newEvents.map(e => ({
         id: e.id,
         name: e.name,
@@ -204,13 +194,10 @@ export default function AdminPage() {
       const { error: insertError } = await adminSupabase
         .from('chronotrack_events')
         .insert(toInsert);
-
       if (insertError) throw insertError;
 
-      // Update local list
       const updatedEvents = [...chronoEvents, ...newEvents].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
       setChronoEvents(updatedEvents);
-
       setNewEventsStatus(`Success: Added ${newEvents.length} new event(s)!`);
       setTimeout(() => setNewEventsStatus(''), 8000);
     } catch (err) {
@@ -337,6 +324,7 @@ export default function AdminPage() {
     setMasterGroups(newGroups);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
     await saveConfig('masterGroups', newGroups);
+
     if (autoSyncOnAssign[eventId]) {
       await handleSyncResults(eventId);
       setAutoSyncOnAssign(prev => ({ ...prev, [eventId]: false }));
@@ -390,6 +378,7 @@ export default function AdminPage() {
     alert('All changes saved to Supabase successfully!');
   };
 
+  // Group events by year
   const eventsByYear = chronoEvents.reduce((acc, event) => {
     const year = event.start_time ? new Date(event.start_time * 1000).getFullYear() : 'Unknown';
     if (!acc[year]) acc[year] = [];
@@ -398,7 +387,6 @@ export default function AdminPage() {
   }, {});
 
   const years = Object.keys(eventsByYear).sort((a, b) => b - a);
-
   const assignedEventIds = new Set(Object.values(masterGroups).flat());
 
   const toggleYearCollapse = (year) => {
@@ -468,7 +456,6 @@ export default function AdminPage() {
               >
                 Manage Master Events
               </button>
-
               <div className="flex gap-4">
                 <button
                   onClick={handleRefreshAllEvents}
@@ -484,7 +471,6 @@ export default function AdminPage() {
                     '↻ Refresh All Events'
                   )}
                 </button>
-
                 <button
                   onClick={handleFetchNewEvents}
                   disabled={fetchingNewEvents || !chronotrackEnabled}
@@ -606,6 +592,7 @@ export default function AdminPage() {
                                 <span className="ml-2 text-xl text-gray-600">({formatDate(event.start_time)})</span>
                                 <span>{expandedEvents[event.id] ? '▲' : '▼'}</span>
                               </div>
+
                               <div className="flex items-center mt-4">
                                 <input
                                   type="checkbox"
@@ -615,6 +602,7 @@ export default function AdminPage() {
                                 />
                                 <span>Visible in App</span>
                               </div>
+
                               <div className="mt-4 flex items-center gap-4">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleSyncResults(event.id); }}
@@ -634,6 +622,7 @@ export default function AdminPage() {
                                   {resultsCount > 0 ? `${resultsCount} finishers cached` : 'No results cached'}
                                 </span>
                               </div>
+
                               <div className="mt-4">
                                 <p className="font-bold">Current Master: <span className="text-gemini-blue">{currentMaster}</span></p>
                                 <div className="flex items-center gap-2 mt-2">
@@ -665,6 +654,7 @@ export default function AdminPage() {
                                   </button>
                                 </div>
                               </div>
+
                               {expandedEvents[event.id] && raceEvents[event.id] && (
                                 <div className="mt-6 border-t pt-6">
                                   <h4 className="text-xl font-bold mb-4">Races</h4>
