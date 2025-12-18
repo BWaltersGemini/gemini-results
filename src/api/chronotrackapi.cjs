@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Full gender places via pagination + bracket=SEX)
+// src/api/chronotrackapi.jsx (FINAL — Age groups simple, Gender brackets fully paginated)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -134,48 +134,21 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
 
-  // 4. Helper: paginated fetch for any bracket
-  const fetchAllBracketResults = async (bracket) => {
-    let allResults = [];
-    let page = 1;
-    const pageSize = 250;
-
-    while (true) {
-      const params = {
-        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-        page,
-        size: pageSize,
-      };
-
-      // Only add bracket=SEX for primary gender brackets
-      if ((bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') &&
-          /^(Female|Male)$/i.test(bracket.bracket_name?.trim())) {
-        params.bracket = 'SEX';
-      }
-
-      const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
-        headers: { Authorization: authHeader },
-        params,
-      });
-
-      const results = res.data.bracket_results || [];
-      if (results.length === 0) break;
-
-      allResults = [...allResults, ...results];
-      console.log(`[ChronoTrack] Bracket "${bracket.bracket_name}" (${bracket.bracket_id}) page ${page}: ${results.length} → Total: ${allResults.length}`);
-      page++;
-    }
-
-    return allResults;
-  };
-
-  // 5. Fetch AGE group places (paginated)
+  // 4. Fetch AGE group places — old simple way (single request, max=50000)
   const ageGroupPlaces = {};
   for (const bracket of ageBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
     try {
-      const results = await fetchAllBracketResults(bracket);
-      console.log(`[ChronoTrack] AGE "${name}" FINAL: ${results.length} ranked`);
+      const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
+        headers: { Authorization: authHeader },
+        params: {
+          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+          max: 50000,
+        },
+      });
+
+      const results = res.data.bracket_results || [];
+      console.log(`[ChronoTrack] AGE "${name}" (${bracket.bracket_id}): ${results.length} ranked`);
 
       results.forEach(r => {
         const entryId = r.results_entry_id;
@@ -188,17 +161,39 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 6. Fetch PRIMARY GENDER places (paginated with bracket=SEX)
+  // 5. Fetch PRIMARY GENDER places — full pagination with size=250 and bracket=SEX
   const genderPlaces = {};
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
     const bracketRaceId = bracket.race_id || bracket.bracket_race_id || null;
 
-    try {
-      const results = await fetchAllBracketResults(bracket);
-      console.log(`[ChronoTrack] PRIMARY GENDER "${name}" FINAL: ${results.length} ranked`);
+    let allBracketResults = [];
+    let page = 1;
+    const pageSize = 250;
 
-      results.forEach(r => {
+    try {
+      while (true) {
+        const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
+          headers: { Authorization: authHeader },
+          params: {
+            client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+            page,
+            size: pageSize,
+            bracket: 'SEX',  // Magic parameter to unlock full gender ranking
+          },
+        });
+
+        const results = res.data.bracket_results || [];
+        if (results.length === 0) break;
+
+        allBracketResults = [...allBracketResults, ...results];
+        console.log(`[ChronoTrack] PRIMARY GENDER "${name}" page ${page}: ${results.length} → Total: ${allBracketResults.length}`);
+        page++;
+      }
+
+      console.log(`[ChronoTrack] PRIMARY GENDER "${name}" FINAL: ${allBracketResults.length} ranked`);
+
+      allBracketResults.forEach(r => {
         const entryId = r.results_entry_id;
         const athleteRaceId = r.results_race_id;
         if (entryId && r.results_rank) {
@@ -212,7 +207,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 7. Map final results
+  // 6. Map final results
   return allResults.map(r => {
     const entryId = r.results_entry_id;
 
