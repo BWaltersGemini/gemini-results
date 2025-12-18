@@ -1,15 +1,13 @@
-// src/pages/ResultsPage.jsx (FINAL — Correct per-race gender ranking)
+// src/pages/ResultsPage.jsx (FINAL — Trusts official gender_place from ChronoTrack, no client-side override)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { parseChipTime } from '../utils/timeUtils'; // ← Import the parser
 
 export default function ResultsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { masterKey, year, raceSlug } = useParams();
-
   const {
     selectedEvent,
     events = [],
@@ -45,20 +43,16 @@ export default function ResultsPage() {
   // Master/year event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
-
     const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
     const storedMasterKey = Object.keys(masterGroups).find(key =>
       key.toLowerCase() === normalizedUrlKey ||
       slugify(key) === masterKey.toLowerCase()
     );
-
     if (!storedMasterKey) return;
-
     const groupEventIds = masterGroups[storedMasterKey] || [];
     const yearEvents = events
       .filter(e => groupEventIds.includes(e.id.toString()) && e.date.startsWith(year))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-
     if (yearEvents.length > 0) {
       const targetEvent = yearEvents[0];
       if (targetEvent.id !== selectedEvent?.id) {
@@ -102,7 +96,6 @@ export default function ResultsPage() {
     let targetEvent = selectedEvent;
     let eventMaster = masterKey;
     let eventYear = year;
-
     if (!targetEvent || !eventMaster || !eventYear) {
       const participantEventId = participant.event_id || selectedEvent?.id;
       targetEvent = events.find(e => e.id === participantEventId);
@@ -115,12 +108,10 @@ export default function ResultsPage() {
       eventYear = targetEvent.date.split('-')[0];
       setSelectedEvent(targetEvent);
     }
-
     const participantRace = races.find(r => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const masterSlug = slugify(eventMaster);
     const raceSlugPart = slugify(raceName);
-
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
       replace: true,
@@ -139,20 +130,16 @@ export default function ResultsPage() {
         </div>
       );
     }
-
     const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
-
     const masterEventTiles = visibleMasters.map(storedKey => {
       const displayName = editedEvents[storedKey]?.name || storedKey;
       const eventIds = masterGroups[storedKey] || [];
       const masterEvents = events.filter(e => eventIds.includes(e.id.toString()));
       if (masterEvents.length === 0) return null;
-
       const latestEvent = masterEvents.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
       const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
       const masterSlug = slugify(storedKey);
       const latestYear = latestEvent.date.split('-')[0];
-
       return { storedKey, displayName, logo, date: latestEvent.date, masterSlug, latestYear };
     }).filter(Boolean);
 
@@ -165,7 +152,6 @@ export default function ResultsPage() {
             </h1>
             <p className="text-xl text-gray-600">Select a race series to view results</p>
           </div>
-
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
               {masterEventTiles.map(master => (
@@ -239,7 +225,6 @@ export default function ResultsPage() {
             {selectedEvent.name}
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.date)}</p>
-
           {/* Year Selector */}
           {availableYears.length > 1 && (
             <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
@@ -322,19 +307,6 @@ export default function ResultsPage() {
               // All results for this specific race
               const raceResults = results.filter(r => r.race_id === race.race_id);
 
-              // Calculate gender place per race
-              const genderPlaceMap = {};
-              ['M', 'F'].forEach(g => {
-                const genderGroup = raceResults
-                  .filter(r => r.gender === g && r.chip_time)
-                  .sort((a, b) => parseChipTime(a.chip_time) - parseChipTime(b.chip_time));
-
-                genderGroup.forEach((r, idx) => {
-                  const key = r.entry_id || r.bib;
-                  genderPlaceMap[key] = idx + 1;
-                });
-              });
-
               // Apply search/gender/division filters
               const filtered = raceResults.filter(r => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
@@ -345,16 +317,12 @@ export default function ResultsPage() {
                 return matchesSearch && matchesGender && matchesDivision;
               });
 
-              // Sort by overall place
+              // Sort by overall place (official from ChronoTrack)
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
               const page = currentPages[race.race_id] || 1;
               const start = (page - 1) * pageSize;
-              const display = sorted.slice(start, start + pageSize).map(r => ({
-                ...r,
-                gender_place: genderPlaceMap[r.entry_id || r.bib] || null,
-              }));
-
+              const display = sorted.slice(start, start + pageSize);
               const totalPages = Math.ceil(sorted.length / pageSize);
 
               return (
