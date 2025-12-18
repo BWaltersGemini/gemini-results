@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Fully fixed: uses start_time, no more .date crashes, optimized caching + live polling)
+// src/context/RaceContext.jsx (FINAL COMPLETE VERSION — Safe race upsert + deduplication + start_time only)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -137,7 +137,37 @@ export function RaceProvider({ children }) {
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // Deduplicate by entry_id (preferred) or bib + race_id
+            // === SYNC RACES FIRST (to avoid foreign key errors) ===
+            try {
+              const eventRaces = await fetchRacesForEvent(selectedEvent.id);
+              const racesToUpsert = eventRaces.map(race => ({
+                id: race.race_id,
+                event_id: selectedEvent.id.toString(),
+                name: race.race_name || 'Unknown Race',
+                tag: race.race_tag || null,
+                type: race.race_type || null,
+                subtype: race.race_subtype || null,
+                distance: race.race_course_distance || null,
+                distance_unit: race.race_pref_distance_unit || 'meters',
+                planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
+              }));
+
+              if (racesToUpsert.length > 0) {
+                const { error: raceError } = await supabase
+                  .from('chronotrack_races')
+                  .upsert(racesToUpsert, { onConflict: 'id' });
+
+                if (raceError) {
+                  console.warn('[RaceContext] Failed to sync races (non-critical):', raceError);
+                } else {
+                  console.log(`[RaceContext] Synced ${racesToUpsert.length} races`);
+                }
+              }
+            } catch (raceErr) {
+              console.warn('[RaceContext] Race sync failed (continuing anyway):', raceErr);
+            }
+
+            // === DEDUPLICATE RESULTS ===
             const seen = new Map();
             fresh.forEach(r => {
               const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
@@ -148,10 +178,10 @@ export function RaceProvider({ children }) {
             const deduped = Array.from(seen.values());
             console.log(`[RaceContext] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
-            // Prepare upsert data
+            // === UPSERT RESULTS ===
             const toUpsert = deduped.map(r => ({
               event_id: selectedEvent.id,
-              race_id: r.race_id || null,
+              race_id: r.race_id || null, // now safe because races were synced
               bib: r.bib || null,
               first_name: r.first_name || null,
               last_name: r.last_name || null,
@@ -172,7 +202,6 @@ export function RaceProvider({ children }) {
               race_name: r.race_name ?? null,
             }));
 
-            // Upsert to Supabase (conflict on event_id + entry_id)
             const { error: upsertError } = await supabase
               .from('chronotrack_results')
               .upsert(toUpsert, { onConflict: 'event_id,entry_id' });

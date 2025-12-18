@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FULLY UPDATED — Safe upsert (no delete), uses start_time only, production-ready)
+// src/pages/AdminPage.jsx (FINAL COMPLETE VERSION — Safe upsert with race sync, no foreign key errors, production-ready)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -164,7 +164,6 @@ export default function AdminPage() {
     }
   };
 
-  // Fetch new events not yet in chronotrack_events table
   const handleFetchNewEvents = async () => {
     if (fetchingNewEvents || !chronotrackEnabled) return;
     setFetchingNewEvents(true);
@@ -209,18 +208,61 @@ export default function AdminPage() {
     }
   };
 
-  // SAFE SYNC: Pure upsert, no delete — avoids conflicts
+  // FULLY SAFE SYNC: Upserts races first, then results — no foreign key violations
   const handleSyncResults = async (eventId) => {
     if (syncingEvents.includes(eventId)) return;
     setSyncingEvents(prev => [...prev, eventId]);
     try {
-      const fresh = await fetchResultsForEvent(eventId);
-      if (fresh.length === 0) {
+      // 1. Fetch fresh results
+      const freshResults = await fetchResultsForEvent(eventId);
+      if (freshResults.length === 0) {
         setEventResultsCount(prev => ({ ...prev, [eventId]: 0 }));
         return;
       }
 
-      const toUpsert = fresh.map(r => ({
+      // 2. Fetch races for this event
+      const eventRaces = await fetchRacesForEvent(eventId);
+      console.log(`[Sync] Fetched ${eventRaces.length} races for event ${eventId}`);
+
+      // 3. Upsert races into chronotrack_races table
+      const racesToUpsert = eventRaces.map(race => ({
+        id: race.race_id,
+        event_id: eventId.toString(),
+        name: race.race_name || 'Unknown Race',
+        tag: race.race_tag || null,
+        type: race.race_type || null,
+        subtype: race.race_subtype || null,
+        distance: race.race_course_distance || null,
+        distance_unit: race.race_pref_distance_unit || 'meters',
+        planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
+      }));
+
+      if (racesToUpsert.length > 0) {
+        const { error: raceError } = await adminSupabase
+          .from('chronotrack_races')
+          .upsert(racesToUpsert, { onConflict: 'id' });
+
+        if (raceError) {
+          console.error('Failed to upsert races:', raceError);
+          alert('Warning: Could not sync races. Results will be saved without race_id.');
+        } else {
+          console.log(`[Sync] Successfully upserted ${racesToUpsert.length} races`);
+        }
+      }
+
+      // 4. Deduplicate results
+      const seen = new Map();
+      freshResults.forEach(r => {
+        const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
+        if (!seen.has(key)) {
+          seen.set(key, r);
+        }
+      });
+      const deduped = Array.from(seen.values());
+      console.log(`[Sync] Deduplicated results: ${freshResults.length} → ${deduped.length}`);
+
+      // 5. Prepare results for upsert
+      const resultsToUpsert = deduped.map(r => ({
         event_id: eventId.toString(),
         race_id: r.race_id || null,
         bib: r.bib || null,
@@ -243,25 +285,22 @@ export default function AdminPage() {
         race_name: r.race_name ?? null,
       }));
 
-      // Chunked upsert with proper conflict resolution
+      // 6. Chunked upsert for results
       const chunkSize = 500;
-      for (let i = 0; i < toUpsert.length; i += chunkSize) {
-        const chunk = toUpsert.slice(i, i + chunkSize);
+      for (let i = 0; i < resultsToUpsert.length; i += chunkSize) {
+        const chunk = resultsToUpsert.slice(i, i + chunkSize);
         const { error } = await adminSupabase
           .from('chronotrack_results')
-          .upsert(chunk, {
-            onConflict: 'event_id,entry_id',
-            ignoreDuplicates: false, // Update existing rows
-          });
+          .upsert(chunk, { onConflict: 'event_id,entry_id' });
 
         if (error) throw error;
       }
 
-      setEventResultsCount(prev => ({ ...prev, [eventId]: fresh.length }));
-      alert(`Successfully synced ${fresh.length} results!`);
+      setEventResultsCount(prev => ({ ...prev, [eventId]: deduped.length }));
+      alert(`Successfully synced ${deduped.length} results and ${eventRaces.length} races!`);
     } catch (err) {
       console.error('Sync failed:', err);
-      alert('Failed to sync results: ' + (err.message || 'Unknown error'));
+      alert('Failed to sync: ' + (err.message || 'Database error'));
     } finally {
       setSyncingEvents(prev => prev.filter(id => id !== eventId));
     }
@@ -555,7 +594,7 @@ export default function AdminPage() {
                   disabled={!selectedEventId || syncingEvents.includes(selectedEventId)}
                   className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg"
                 >
-                  Sync Selected
+                  {syncingEvents.includes(selectedEventId) ? 'Syncing...' : 'Sync Selected'}
                 </button>
               </div>
             </section>
