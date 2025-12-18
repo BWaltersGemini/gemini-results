@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FULLY UPDATED & FIXED — Uses start_time only, no more .date crashes, production-ready)
+// src/pages/AdminPage.jsx (FULLY UPDATED — Safe upsert (no delete), uses start_time only, production-ready)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -209,6 +209,7 @@ export default function AdminPage() {
     }
   };
 
+  // SAFE SYNC: Pure upsert, no delete — avoids conflicts
   const handleSyncResults = async (eventId) => {
     if (syncingEvents.includes(eventId)) return;
     setSyncingEvents(prev => [...prev, eventId]);
@@ -219,7 +220,7 @@ export default function AdminPage() {
         return;
       }
 
-      const toInsert = fresh.map(r => ({
+      const toUpsert = fresh.map(r => ({
         event_id: eventId.toString(),
         race_id: r.race_id || null,
         bib: r.bib || null,
@@ -242,19 +243,25 @@ export default function AdminPage() {
         race_name: r.race_name ?? null,
       }));
 
-      await adminSupabase.from('chronotrack_results').delete().eq('event_id', eventId.toString());
-
+      // Chunked upsert with proper conflict resolution
       const chunkSize = 500;
-      for (let i = 0; i < toInsert.length; i += chunkSize) {
-        const chunk = toInsert.slice(i, i + chunkSize);
-        const { error } = await adminSupabase.from('chronotrack_results').insert(chunk);
+      for (let i = 0; i < toUpsert.length; i += chunkSize) {
+        const chunk = toUpsert.slice(i, i + chunkSize);
+        const { error } = await adminSupabase
+          .from('chronotrack_results')
+          .upsert(chunk, {
+            onConflict: 'event_id,entry_id',
+            ignoreDuplicates: false, // Update existing rows
+          });
+
         if (error) throw error;
       }
 
       setEventResultsCount(prev => ({ ...prev, [eventId]: fresh.length }));
+      alert(`Successfully synced ${fresh.length} results!`);
     } catch (err) {
       console.error('Sync failed:', err);
-      alert('Failed to sync results');
+      alert('Failed to sync results: ' + (err.message || 'Unknown error'));
     } finally {
       setSyncingEvents(prev => prev.filter(id => id !== eventId));
     }
@@ -545,7 +552,7 @@ export default function AdminPage() {
                 </select>
                 <button
                   onClick={() => handleSyncResults(selectedEventId)}
-                  disabled={!selectedEventId}
+                  disabled={!selectedEventId || syncingEvents.includes(selectedEventId)}
                   className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg"
                 >
                   Sync Selected
