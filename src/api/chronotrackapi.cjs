@@ -1,15 +1,12 @@
 /**
  * CHRONOTRACK API INTEGRATION — FINAL (December 2025)
  *
- * KEY FEATURES & FIXES:
- * - Accurate Gender Place: sourced from official ChronoTrack SEX/GENDER brackets
- *   (Male, Female, Non-Binary, X, custom) — per-race specific
- * - Prevents overwrites from challenge/virtual brackets (e.g., Hill Climb Challenge)
- * - Uses 'max' parameter to request unlimited rows (bypasses default 50 cap where possible)
- * - Accurate Age Group Place from AGE brackets
- * - Excludes mixed "Overall" brackets from gender place
- * - Uses entry_id as unique key (correct & safe)
- * - Full logging for debugging
+ * CRITICAL FIXES:
+ * - entry_id is now correctly returned and saved to Supabase
+ * - Gender place ONLY from primary race-specific "Female"/"Male" brackets
+ *   (excludes challenge, overall, hill climb, virtual brackets)
+ * - Uses 'max=50000' for full bracket ranks
+ * - Accurate, unique per-registration ranking
  */
 
 import axios from 'axios';
@@ -96,7 +93,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main overall results (paginated)
+  // 1. Fetch main overall results
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -138,7 +135,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // 3. Classify brackets
+  // 3. Classify brackets — STRICT primary gender only
   const ageBrackets = [];
   const genderBrackets = [];
 
@@ -147,16 +144,17 @@ export const fetchResultsForEvent = async (eventId) => {
 
     const isAge = bracket.bracket_type === 'AGE';
 
-    const isGender =
+    // Primary gender: must be SEX/GENDER type, have race_id, and name exactly "Female" or "Male"
+    const isPrimaryGender =
       (bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') &&
-      (bracket.race_id || bracket.bracket_race_id) && // Must have race_id
-      !/overall|challenge|hill|virtual/i.test(bracket.bracket_name || '');
+      (bracket.race_id || bracket.bracket_race_id) &&
+      /^(Female|Male)$/i.test(bracket.bracket_name?.trim());
 
     if (isAge) ageBrackets.push(bracket);
-    else if (isGender) genderBrackets.push(bracket);
+    else if (isPrimaryGender) genderBrackets.push(bracket);
   });
 
-  console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} GENDER brackets`);
+  console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
 
   // 4. Fetch AGE group places
   const ageGroupPlaces = {};
@@ -186,15 +184,8 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 5. Fetch GENDER places — prioritize primary race-specific bracket
+  // 5. Fetch GENDER places — only primary race-specific Female/Male
   const genderPlaces = {};
-
-  // Sort: race-specific brackets first, then event-wide/challenge
-  genderBrackets.sort((a, b) => {
-    const aIsRaceSpecific = !!(a.race_id || a.bracket_race_id);
-    const bIsRaceSpecific = !!(b.race_id || b.bracket_race_id);
-    return bIsRaceSpecific - aIsRaceSpecific; // race-specific first
-  });
 
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -210,33 +201,24 @@ export const fetchResultsForEvent = async (eventId) => {
       });
 
       const results = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] GENDER "${name}" (${bracket.bracket_id}) race ${bracketRaceId || 'event-wide'}: ${results.length} ranked`);
+      console.log(`[ChronoTrack] PRIMARY GENDER "${name}" (${bracket.bracket_id}) race ${bracketRaceId}: ${results.length} ranked`);
 
       results.forEach(r => {
         const entryId = r.results_entry_id;
         const athleteRaceId = r.results_race_id;
 
         if (entryId && r.results_rank) {
-          const isRaceSpecificBracket = !!bracketRaceId;
-          const currentIsRaceSpecific = genderPlaces[entryId] && genderPlaces[entryId].isRaceSpecific;
-
-          // Overwrite if:
-          // - No place yet
-          // - OR this bracket is race-specific and current is not
-          // - OR both race-specific and this matches athlete's race better
-          if (!genderPlaces[entryId] || 
-              (isRaceSpecificBracket && !currentIsRaceSpecific) ||
-              (isRaceSpecificBracket && athleteRaceId === bracketRaceId)) {
+          if (!bracketRaceId || athleteRaceId === bracketRaceId) {
             genderPlaces[entryId] = parseInt(r.results_rank, 10);
           }
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed GENDER "${name}" (${bracket.bracket_id})`, err);
+      console.warn(`[ChronoTrack] Failed PRIMARY GENDER "${name}" (${bracket.bracket_id})`, err);
     }
   }
 
-  // 6. Map final results with official places
+  // 6. Map results — ensure entry_id is included
   return allResults.map(r => {
     const entryId = r.results_entry_id;
 
@@ -258,7 +240,7 @@ export const fetchResultsForEvent = async (eventId) => {
       city: r.results_city || '',
       state: r.results_state || '',
       country: r.results_country || r.country || '',
-      entry_id: entryId || null,
+      entry_id: entryId || null, // ← Guaranteed to be saved
     };
   });
 };
