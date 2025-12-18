@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL COMPLETE — Full pagination for Fetch New Events + all previous fixes)
+// src/pages/AdminPage.jsx (FULL COMPLETE FINAL VERSION — Direct all-events fetch + embedded races + all features)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -37,6 +37,7 @@ export default function AdminPage() {
   const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
   const [fetchingNewEvents, setFetchingNewEvents] = useState(false);
   const [newEventsStatus, setNewEventsStatus] = useState('');
+  const [newMasterKeys, setNewMasterKeys] = useState({});
 
   // Admin Supabase client (service_role)
   const adminSupabase = createAdminSupabaseClient();
@@ -162,34 +163,16 @@ export default function AdminPage() {
     }
   };
 
-  // FETCH NEW EVENTS — Now fetches ALL events with full pagination
+  // FETCH NEW EVENTS — Direct one-call fetch of ALL events
   const handleFetchNewEvents = async () => {
     if (fetchingNewEvents || !chronotrackEnabled) return;
     setFetchingNewEvents(true);
     setNewEventsStatus('Fetching ALL events from ChronoTrack...');
 
     try {
-      let allFreshEvents = [];
-      let page = 1;
-      const perPage = 100; // Safe max
+      const allFreshEvents = await fetchChronoEvents();
+      console.log(`[Fetch New] Fetched ${allFreshEvents.length} total events`);
 
-      while (true) {
-        const pageEvents = await fetchChronoEvents({ page, results_per_page: perPage });
-        if (pageEvents.length === 0) {
-          console.log('[Fetch New] No more events — finished');
-          break;
-        }
-
-        allFreshEvents = [...allFreshEvents, ...pageEvents];
-        console.log(`[Fetch New] Page ${page}: ${pageEvents.length} events → Total: ${allFreshEvents.length}`);
-
-        if (pageEvents.length < perPage) break;
-        page++;
-      }
-
-      console.log(`[Fetch New] Successfully fetched ${allFreshEvents.length} total events`);
-
-      // Get existing event IDs
       const { data: existing, error: fetchError } = await adminSupabase
         .from('chronotrack_events')
         .select('id');
@@ -200,7 +183,7 @@ export default function AdminPage() {
       const newEvents = allFreshEvents.filter(e => !existingIds.has(e.id));
 
       if (newEvents.length === 0) {
-        setNewEventsStatus(`No new events found (total in ChronoTrack: ${allFreshEvents.length})`);
+        setNewEventsStatus(`No new events found (total: ${allFreshEvents.length})`);
         setTimeout(() => setNewEventsStatus(''), 8000);
         setFetchingNewEvents(false);
         return;
@@ -222,7 +205,7 @@ export default function AdminPage() {
       const updatedEvents = [...chronoEvents, ...newEvents].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
       setChronoEvents(updatedEvents);
 
-      setNewEventsStatus(`Success! Added ${newEvents.length} new events (total fetched: ${allFreshEvents.length})`);
+      setNewEventsStatus(`Success! Added ${newEvents.length} new events (total: ${allFreshEvents.length})`);
       setTimeout(() => setNewEventsStatus(''), 10000);
     } catch (err) {
       console.error('Failed to fetch new events:', err);
@@ -238,14 +221,13 @@ export default function AdminPage() {
     if (syncingEvents.includes(eventId)) return;
     setSyncingEvents(prev => [...prev, eventId]);
     try {
-      // 1. Fetch fresh results
       const freshResults = await fetchResultsForEvent(eventId);
       if (freshResults.length === 0) {
         setEventResultsCount(prev => ({ ...prev, [eventId]: 0 }));
         return;
       }
 
-      // 2. Fetch and sync races into embedded races JSONB
+      // Sync embedded races
       try {
         const eventRaces = await fetchRacesForEvent(eventId);
         const racesArray = eventRaces.map(race => ({
@@ -271,20 +253,17 @@ export default function AdminPage() {
           console.log(`[Admin Sync] Updated embedded races for event ${eventId}`);
         }
       } catch (raceErr) {
-        console.warn('[Admin Sync] Race sync failed (continuing with results):', raceErr);
+        console.warn('[Admin Sync] Race sync failed (continuing):', raceErr);
       }
 
-      // 3. Deduplicate results
+      // Deduplicate & upsert results
       const seen = new Map();
       freshResults.forEach(r => {
         const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
-        if (!seen.has(key)) {
-          seen.set(key, r);
-        }
+        if (!seen.has(key)) seen.set(key, r);
       });
       const deduped = Array.from(seen.values());
 
-      // 4. Upsert results
       const resultsToUpsert = deduped.map(r => ({
         event_id: eventId.toString(),
         race_id: r.race_id || null,

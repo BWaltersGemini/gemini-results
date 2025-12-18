@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Full pagination for events + all previous fixes)
+// src/context/RaceContext.jsx (FINAL COMPLETE — Direct all-events fetch + embedded races + all features)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -41,31 +41,14 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load ALL events from ChronoTrack with full pagination
+  // Load ALL events from ChronoTrack in one call (direct API with size=600)
   useEffect(() => {
     const loadEvents = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        let allEvents = [];
-        let page = 1;
-        const perPage = 100; // Max safe value
-
-        while (true) {
-          const pageEvents = await fetchEvents({ page, results_per_page: perPage });
-          if (pageEvents.length === 0) {
-            console.log('[RaceContext] No more events — finished fetching');
-            break;
-          }
-
-          allEvents = [...allEvents, ...pageEvents];
-          console.log(`[RaceContext] Fetched page ${page}: ${pageEvents.length} events → Total: ${allEvents.length}`);
-
-          if (pageEvents.length < perPage) break; // Last page
-          page++;
-        }
-
+        const allEvents = await fetchEvents(); // One call → all events
         setEvents(allEvents);
         console.log('[RaceContext] All events loaded:', allEvents.length);
       } catch (err) {
@@ -181,13 +164,14 @@ export function RaceProvider({ children }) {
               console.warn('[RaceContext] Race sync failed (non-critical):', raceErr);
             }
 
-            // === DEDUPLICATE ===
+            // === DEDUPLICATE RESULTS ===
             const seen = new Map();
             fresh.forEach(r => {
               const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
               if (!seen.has(key)) seen.set(key, r);
             });
             const deduped = Array.from(seen.values());
+            console.log(`[RaceContext] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
             // === UPSERT RESULTS ===
             const toUpsert = deduped.map(r => ({
