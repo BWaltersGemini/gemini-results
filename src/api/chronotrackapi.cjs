@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Fully restored & improved gender_place fetching + hometown parsing)
+// src/api/chronotrackapi.jsx (FINAL — Correctly fetches gender_place from SEX brackets + hometown parsing)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -83,7 +83,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main results with full pagination
+  // 1. Fetch main results
   let allResults = [];
   let page = 1;
   const perPage = 50;
@@ -125,25 +125,28 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // 3. Identify AGE and PRIMARY GENDER brackets
+  // 3. Identify brackets we care about
   const ageBrackets = [];
-  const genderBrackets = [];
+  const genderBrackets = []; // Overall Male/Female (type SEX)
 
   brackets.forEach(bracket => {
     if (!bracket.bracket_wants_leaderboard || bracket.bracket_wants_leaderboard !== '1') return;
 
-    const isAge = bracket.bracket_type === 'AGE';
-    const isPrimaryGender =
-      (bracket.bracket_type === 'SEX' || bracket.bracket_type === 'GENDER') &&
-      /^(Female|Male)$/i.test(bracket.bracket_name?.trim());
+    if (bracket.bracket_type === 'AGE') {
+      ageBrackets.push(bracket);
+    }
 
-    if (isAge) ageBrackets.push(bracket);
-    if (isPrimaryGender) genderBrackets.push(bracket);
+    // Primary overall gender brackets — type 'SEX' and name 'Male' or 'Female'
+    if (
+      bracket.bracket_type === 'SEX' &&
+      /^(Male|Female)$/i.test(bracket.bracket_name?.trim())
+    ) {
+      genderBrackets.push(bracket);
+    }
   });
 
-  console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
+  console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} GENDER (SEX) brackets`);
 
-  // Helper: get unique key for matching
   const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
 
   // 4. Fetch AGE group places
@@ -165,39 +168,38 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed to fetch AGE bracket ${bracket.bracket_id}`, err);
+      console.warn(`[ChronoTrack] Failed AGE bracket ${bracket.bracket_id}`, err);
     }
   }
 
-  // 5. Fetch GENDER places — fully restored paginated version
+  // 5. Fetch OVERALL GENDER places from SEX brackets (Male/Female)
   const genderPlaces = {};
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name?.trim() || 'Unnamed';
     const bracketRaceId = bracket.race_id || bracket.bracket_race_id || null;
     let allBracketResults = [];
-    let page = 1;
+    let bPage = 1;
     const pageSize = 250;
-    const maxPages = 40; // safety limit ~10,000 results
+    const maxPages = 40;
 
     try {
-      while (page <= maxPages) {
+      while (bPage <= maxPages) {
         const res = await axios.get(`${baseUrl}/api/bracket/${bracket.bracket_id}/results`, {
           headers: { Authorization: authHeader },
           params: {
             client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-            page,
+            page: bPage,
             size: pageSize,
-            bracket: 'SEX', // some events require this param
           },
         });
         const results = res.data.bracket_results || [];
         if (results.length === 0) {
-          console.log(`[ChronoTrack] GENDER "${name}" — no more results at page ${page}`);
+          console.log(`[ChronoTrack] GENDER "${name}" — no more results at page ${bPage}`);
           break;
         }
         allBracketResults = [...allBracketResults, ...results];
-        console.log(`[ChronoTrack] GENDER "${name}" page ${page}: ${results.length} → Total: ${allBracketResults.length}`);
-        page++;
+        console.log(`[ChronoTrack] GENDER "${name}" page ${bPage}: ${results.length} → Total: ${allBracketResults.length}`);
+        bPage++;
       }
       console.log(`[ChronoTrack] GENDER "${name}" FINAL: ${allBracketResults.length} ranked`);
 
@@ -211,15 +213,15 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed to fetch GENDER bracket ${bracket.bracket_id}`, err);
+      console.warn(`[ChronoTrack] Failed GENDER bracket ${bracket.bracket_id}`, err);
     }
   }
 
-  // 6. Final result mapping with improved city/state/country from hometown
+  // 6. Final mapping with hometown parsing
   return allResults.map(r => {
     const lookupKey = getLookupKey(r);
 
-    // Parse hometown if available (e.g., "San Clemente, CA, US")
+    // Parse hometown if available
     let city = r.results_city || null;
     let state = r.results_state || r.results_state_code || null;
     let country = r.results_country || r.results_country_code || null;
