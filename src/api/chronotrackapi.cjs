@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.jsx (FINAL — Gender up to 10,000 results safely)
+// src/api/chronotrackapi.jsx (FINAL — Robust entry_id + bib fallback for all brackets)
 import axios from 'axios';
 
 const baseUrl = '/chrono-api';
@@ -76,11 +76,10 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Fetch main overall results (paginated)
+  // 1. Fetch main results
   let allResults = [];
   let page = 1;
   const perPage = 50;
-  let fetched = [];
 
   console.log(`[ChronoTrack] Fetching ALL results for event ${eventId}`);
 
@@ -94,7 +93,7 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
 
-    fetched = response.data.event_results || [];
+    const fetched = response.data.event_results || [];
     allResults = [...allResults, ...fetched];
     console.log(`[ChronoTrack] Page ${page}: ${fetched.length} results → Total: ${allResults.length}`);
     page++;
@@ -102,7 +101,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] Finished — ${allResults.length} total finishers`);
 
-  // 2. Fetch all brackets
+  // 2. Fetch brackets
   let brackets = [];
   try {
     const bracketRes = await axios.get(`${baseUrl}/api/event/${eventId}/bracket`, {
@@ -115,7 +114,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Could not fetch brackets', err);
   }
 
-  // 3. Classify brackets
+  // 3. Classify
   const ageBrackets = [];
   const genderBrackets = [];
 
@@ -134,7 +133,10 @@ export const fetchResultsForEvent = async (eventId) => {
 
   console.log(`[ChronoTrack] ${ageBrackets.length} AGE brackets | ${genderBrackets.length} PRIMARY GENDER brackets`);
 
-  // 4. Fetch AGE group places — simple single request
+  // Helper to get lookup key (entry_id preferred, bib fallback)
+  const getLookupKey = (r) => r.results_entry_id || r.results_bib || null;
+
+  // 4. Fetch AGE places — simple
   const ageGroupPlaces = {};
   for (const bracket of ageBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -148,20 +150,20 @@ export const fetchResultsForEvent = async (eventId) => {
       });
 
       const results = res.data.bracket_results || [];
-      console.log(`[ChronoTrack] AGE "${name}" (${bracket.bracket_id}): ${results.length} ranked`);
+      console.log(`[ChronoTrack] AGE "${name}": ${results.length} ranked`);
 
       results.forEach(r => {
-        const entryId = r.results_entry_id;
-        if (entryId && r.results_rank) {
-          ageGroupPlaces[entryId] = parseInt(r.results_rank, 10);
+        const key = getLookupKey(r);
+        if (key && r.results_rank) {
+          ageGroupPlaces[key] = parseInt(r.results_rank, 10);
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed AGE bracket "${name}"`, err);
+      console.warn(`[ChronoTrack] Failed AGE "${name}"`, err);
     }
   }
 
-  // 5. Fetch PRIMARY GENDER places — safe paginated fetch (up to 10,000 results)
+  // 5. Fetch GENDER places — paginated
   const genderPlaces = {};
   for (const bracket of genderBrackets) {
     const name = bracket.bracket_name || 'Unnamed';
@@ -170,7 +172,7 @@ export const fetchResultsForEvent = async (eventId) => {
     let allBracketResults = [];
     let page = 1;
     const pageSize = 250;
-    const maxPages = 40; // 40 × 250 = 10,000 results max (your requested backup limit)
+    const maxPages = 40;
 
     try {
       while (page <= maxPages) {
@@ -185,41 +187,37 @@ export const fetchResultsForEvent = async (eventId) => {
         });
 
         const results = res.data.bracket_results || [];
-
-        // Stop if no results or empty array
         if (!results || results.length === 0) {
-          console.log(`[ChronoTrack] PRIMARY GENDER "${name}" — no more results at page ${page}, stopping`);
+          console.log(`[ChronoTrack] GENDER "${name}" — no more at page ${page}`);
           break;
         }
 
         allBracketResults = [...allBracketResults, ...results];
-        console.log(`[ChronoTrack] PRIMARY GENDER "${name}" page ${page}: ${results.length} → Total: ${allBracketResults.length}`);
+        console.log(`[ChronoTrack] GENDER "${name}" page ${page}: ${results.length} → Total: ${allBracketResults.length}`);
         page++;
       }
 
-      if (page > maxPages) {
-        console.warn(`[ChronoTrack] Hit backup limit (10,000 results) for "${name}" — stopping safely`);
-      }
-
-      console.log(`[ChronoTrack] PRIMARY GENDER "${name}" FINAL: ${allBracketResults.length} ranked`);
+      console.log(`[ChronoTrack] GENDER "${name}" FINAL: ${allBracketResults.length} ranked`);
 
       allBracketResults.forEach(r => {
-        const entryId = r.results_entry_id;
-        const athleteRaceId = r.results_race_id;
-        if (entryId && r.results_rank) {
+        const key = getLookupKey(r);
+        if (key && r.results_rank) {
+          const athleteRaceId = r.results_race_id;
           if (!bracketRaceId || athleteRaceId === bracketRaceId) {
-            genderPlaces[entryId] = parseInt(r.results_rank, 10);
+            genderPlaces[key] = parseInt(r.results_rank, 10);
           }
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed PRIMARY GENDER "${name}"`, err);
+      console.warn(`[ChronoTrack] Failed GENDER "${name}"`, err);
     }
   }
 
-  // 6. Map final results
+  // 6. Final mapping
   return allResults.map(r => {
-    const entryId = r.results_entry_id;
+    const entryId = r.results_entry_id || null; // Save actual entry_id if present
+    const bib = r.results_bib || null;
+    const lookupKey = getLookupKey(r);
 
     const rawSplits = r.splits || r.interval_results || r.results_splits || [];
     const splits = Array.isArray(rawSplits)
@@ -238,9 +236,9 @@ export const fetchResultsForEvent = async (eventId) => {
       chip_time: r.results_time || '',
       clock_time: r.results_gun_time || '',
       place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-      gender_place: entryId ? genderPlaces[entryId] || null : null,
+      gender_place: lookupKey ? genderPlaces[lookupKey] || null : null,
       age_group_name: r.results_primary_bracket_name || '',
-      age_group_place: entryId ? ageGroupPlaces[entryId] || null : null,
+      age_group_place: lookupKey ? ageGroupPlaces[lookupKey] || null : null,
       pace: r.results_pace || '',
       age: r.results_age ? parseInt(r.results_age, 10) : null,
       gender: r.results_sex || '',
@@ -251,7 +249,7 @@ export const fetchResultsForEvent = async (eventId) => {
       state: r.results_state || '',
       country: r.results_country || r.country || '',
       splits,
-      entry_id: entryId || null,
+      entry_id: entryId, // Keep the real entry_id for debugging
     };
   });
 };
