@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Complete with working "Fetch New Events" button)
+// src/pages/AdminPage.jsx (FINAL — Complete with working "Fetch New Events" button + safe date handling)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
@@ -79,14 +79,18 @@ export default function AdminPage() {
     if (loggedIn) loadGlobalConfig();
   }, []);
 
+  // Safe date formatting using epoch start_time
   const formatDate = (epoch) => {
-    if (!epoch || epoch === 0) return 'Date TBD';
-    return new Date(epoch * 1000).toLocaleDateString('en-US', {
+    if (!epoch || isNaN(epoch)) return 'Date TBD';
+    const date = new Date(epoch * 1000);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric'
     });
   };
+
   // Load events from ChronoTrack
   useEffect(() => {
     if (isLoggedIn && chronotrackEnabled) {
@@ -98,7 +102,10 @@ export default function AdminPage() {
           setChronoEvents(sortedEvents);
 
           // Collapse years by default
-          const years = [...new Set(events.map(e => new Date((e.start_time || 0) * 1000).getFullYear()))];
+          const years = [...new Set(events.map(e => {
+            if (!e.start_time) return 'Unknown';
+            return new Date(e.start_time * 1000).getFullYear();
+          }))];
           const initialCollapsed = {};
           years.forEach(y => initialCollapsed[y] = true);
           setCollapsedYears(initialCollapsed);
@@ -159,7 +166,7 @@ export default function AdminPage() {
     }
   };
 
-  // Fetch New Events — adds missing events to Supabase
+  // Fetch New Events — adds missing events to Supabase using start_time
   const handleFetchNewEvents = async () => {
     if (fetchingNewEvents || !chronotrackEnabled) return;
     setFetchingNewEvents(true);
@@ -187,7 +194,7 @@ export default function AdminPage() {
         return;
       }
 
-      // Insert new events using start_time (epoch)
+      // Insert new events using start_time
       const toInsert = newEvents.map(e => ({
         id: e.id,
         name: e.name,
@@ -384,7 +391,7 @@ export default function AdminPage() {
   };
 
   const eventsByYear = chronoEvents.reduce((acc, event) => {
-    const year = new Date((event.start_time || 0) * 1000).getFullYear();
+    const year = event.start_time ? new Date(event.start_time * 1000).getFullYear() : 'Unknown';
     if (!acc[year]) acc[year] = [];
     acc[year].push(event);
     return acc;
