@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Gender place calculation removed)
+// src/pages/AdminPage.jsx (FINAL — Complete with "Fetch New Events" button)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
@@ -22,7 +22,6 @@ export default function AdminPage() {
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [eventLogos, setEventLogos] = useState({});
   const [ads, setAds] = useState([]);
-
   const [expandedEvents, setExpandedEvents] = useState({});
   const [raceEvents, setRaceEvents] = useState({});
   const [chronotrackEnabled, setChronotrackEnabled] = useState(true);
@@ -38,6 +37,10 @@ export default function AdminPage() {
   const [syncingEvents, setSyncingEvents] = useState([]);
   const [eventResultsCount, setEventResultsCount] = useState({});
   const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
+
+  // New: Fetch new events
+  const [fetchingNewEvents, setFetchingNewEvents] = useState(false);
+  const [newEventsStatus, setNewEventsStatus] = useState('');
 
   // Admin Supabase client (service_role — bypasses RLS)
   const adminSupabase = createAdminSupabaseClient();
@@ -61,7 +64,6 @@ export default function AdminPage() {
       const { error } = await adminSupabase
         .from('app_config')
         .upsert({ key, value }, { onConflict: 'key' });
-
       if (error) throw error;
       console.log(`[Admin] Saved ${key} to Supabase`);
     } catch (err) {
@@ -158,7 +160,62 @@ export default function AdminPage() {
     }
   };
 
-  // Results sync — NO gender place calculation (now done in ResultsPage per race)
+  // NEW: Fetch New Events button logic
+  const handleFetchNewEvents = async () => {
+    if (fetchingNewEvents || !chronotrackEnabled) return;
+    setFetchingNewEvents(true);
+    setNewEventsStatus('Checking for new events...');
+
+    try {
+      const freshEvents = await fetchChronoEvents();
+
+      // Get existing event IDs from Supabase
+      const { data: existing, error: fetchError } = await adminSupabase
+        .from('chronotrack_events')
+        .select('id');
+
+      if (fetchError) throw fetchError;
+
+      const existingIds = new Set(existing.map(e => e.id));
+
+      // Find new events
+      const newEvents = freshEvents.filter(e => !existingIds.has(e.id));
+
+      if (newEvents.length === 0) {
+        setNewEventsStatus('No new events found');
+        setTimeout(() => setNewEventsStatus(''), 5000);
+        setFetchingNewEvents(false);
+        return;
+      }
+
+      // Insert new events
+      const toInsert = newEvents.map(e => ({
+        id: e.id,
+        name: e.name,
+        date: e.date,
+      }));
+
+      const { error: insertError } = await adminSupabase
+        .from('chronotrack_events')
+        .insert(toInsert);
+
+      if (insertError) throw insertError;
+
+      // Update local list
+      const updatedEvents = [...chronoEvents, ...newEvents].sort((a, b) => new Date(b.date) - new Date(a.date));
+      setChronoEvents(updatedEvents);
+
+      setNewEventsStatus(`Success: Added ${newEvents.length} new event(s)!`);
+      setTimeout(() => setNewEventsStatus(''), 8000);
+    } catch (err) {
+      console.error('Failed to fetch new events:', err);
+      setNewEventsStatus('Error checking for new events');
+      setTimeout(() => setNewEventsStatus(''), 8000);
+    } finally {
+      setFetchingNewEvents(false);
+    }
+  };
+
   const handleSyncResults = async (eventId) => {
     if (syncingEvents.includes(eventId)) return;
     setSyncingEvents(prev => [...prev, eventId]);
@@ -169,7 +226,6 @@ export default function AdminPage() {
         return;
       }
 
-      // Save raw data — gender_place will be calculated on display in ResultsPage
       const toInsert = fresh.map(r => ({
         event_id: eventId.toString(),
         race_id: r.race_id || null,
@@ -184,14 +240,15 @@ export default function AdminPage() {
         chip_time: r.chip_time || null,
         clock_time: r.clock_time || null,
         place: r.place ? parseInt(r.place, 10) : null,
-        gender_place: null, // Explicitly null — calculated per-race in ResultsPage
+        gender_place: r.gender_place ?? null,
         age_group_name: r.age_group_name || null,
         age_group_place: r.age_group_place ? parseInt(r.age_group_place, 10) : null,
         pace: r.pace || null,
         splits: r.splits || [],
+        entry_id: r.entry_id ?? null,
+        race_name: r.race_name ?? null,
       }));
 
-      // Clear old and insert fresh
       await adminSupabase.from('chronotrack_results').delete().eq('event_id', eventId.toString());
 
       const chunkSize = 500;
@@ -274,7 +331,6 @@ export default function AdminPage() {
     setMasterGroups(newGroups);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
     await saveConfig('masterGroups', newGroups);
-
     if (autoSyncOnAssign[eventId]) {
       await handleSyncResults(eventId);
       setAutoSyncOnAssign(prev => ({ ...prev, [eventId]: false }));
@@ -336,6 +392,7 @@ export default function AdminPage() {
   }, {});
 
   const years = Object.keys(eventsByYear).sort((a, b) => b - a);
+
   const assignedEventIds = new Set(Object.values(masterGroups).flat());
 
   const toggleYearCollapse = (year) => {
@@ -349,9 +406,25 @@ export default function AdminPage() {
           <h2 className="text-3xl font-bold mb-6 text-center">Admin Login</h2>
           {error && <p className="text-gemini-red mb-4">{error}</p>}
           <form onSubmit={handleLogin}>
-            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" className="w-full p-4 mb-4 rounded-lg border border-gray-300" required />
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="w-full p-4 mb-6 rounded-lg border border-gray-300" required />
-            <button type="submit" className="w-full bg-gemini-blue text-white p-4 rounded-lg hover:bg-gemini-blue/90">Login</button>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Username"
+              className="w-full p-4 mb-4 rounded-lg border border-gray-300"
+              required
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Password"
+              className="w-full p-4 mb-6 rounded-lg border border-gray-300"
+              required
+            />
+            <button type="submit" className="w-full bg-gemini-blue text-white p-4 rounded-lg hover:bg-gemini-blue/90">
+              Login
+            </button>
           </form>
         </div>
       </div>
@@ -365,10 +438,16 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="flex mb-8">
-          <button onClick={() => setActiveTab('event')} className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'event' ? 'bg-white shadow' : 'bg-gray-200'}`}>
+          <button
+            onClick={() => setActiveTab('event')}
+            className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'event' ? 'bg-white shadow' : 'bg-gray-200'}`}
+          >
             Event Management
           </button>
-          <button onClick={() => setActiveTab('website')} className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'website' ? 'bg-white shadow' : 'bg-gray-200'}`}>
+          <button
+            onClick={() => setActiveTab('website')}
+            className={`flex-1 py-4 text-center font-bold rounded-t-xl ${activeTab === 'website' ? 'bg-white shadow' : 'bg-gray-200'}`}
+          >
             Website Management
           </button>
         </div>
@@ -376,37 +455,84 @@ export default function AdminPage() {
         {/* Event Management Tab */}
         {activeTab === 'event' && (
           <>
-            <div className="flex justify-between items-center mb-8">
-              <button onClick={() => navigate('/master-events')} className="bg-blue-500 text-white px-6 py-3 rounded-xl hover:bg-blue-600">
+            <div className="flex flex-wrap justify-between items-center gap-4 mb-8">
+              <button
+                onClick={() => navigate('/master-events')}
+                className="bg-blue-500 text-white px-6 py-3 rounded-xl hover:bg-blue-600"
+              >
                 Manage Master Events
               </button>
-              <button onClick={handleRefreshAllEvents} disabled={refreshingEvents || !chronotrackEnabled} className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-bold px-8 py-4 rounded-xl shadow-lg transition flex items-center gap-3">
-                {refreshingEvents ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
-                    Fetching...
-                  </>
-                ) : (
-                  '↻ Refresh All Events'
-                )}
-              </button>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={handleRefreshAllEvents}
+                  disabled={refreshingEvents || !chronotrackEnabled}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2"
+                >
+                  {refreshingEvents ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
+                      Refreshing...
+                    </>
+                  ) : (
+                    '↻ Refresh All Events'
+                  )}
+                </button>
+
+                {/* NEW BUTTON: Fetch New Events */}
+                <button
+                  onClick={handleFetchNewEvents}
+                  disabled={fetchingNewEvents || !chronotrackEnabled}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2"
+                >
+                  {fetchingNewEvents ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
+                      Checking...
+                    </>
+                  ) : (
+                    '🔍 Fetch New Events'
+                  )}
+                </button>
+              </div>
             </div>
 
-            {refreshStatus && (
-              <div className={`mb-6 p-4 rounded-lg text-center font-medium ${refreshStatus.includes('Success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                {refreshStatus}
+            {/* Status messages */}
+            {(refreshStatus || newEventsStatus) && (
+              <div className="mb-6 space-y-3">
+                {refreshStatus && (
+                  <div className={`p-4 rounded-lg text-center font-medium ${refreshStatus.includes('Success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {refreshStatus}
+                  </div>
+                )}
+                {newEventsStatus && (
+                  <div className={`p-4 rounded-lg text-center font-medium ${newEventsStatus.includes('Success') || newEventsStatus.includes('No new') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    {newEventsStatus}
+                  </div>
+                )}
               </div>
             )}
 
+            {/* Rest of your existing Event Management UI */}
             <div className="flex items-center justify-end mb-6">
               <label className="flex items-center cursor-pointer">
-                <input type="checkbox" checked={showAssignedEvents} onChange={e => setShowAssignedEvents(e.target.checked)} className="mr-3" />
+                <input
+                  type="checkbox"
+                  checked={showAssignedEvents}
+                  onChange={e => setShowAssignedEvents(e.target.checked)}
+                  className="mr-3"
+                />
                 <span className="text-gray-700 font-medium">Show already assigned events</span>
               </label>
             </div>
 
             <div className="flex items-center mb-8">
-              <input type="checkbox" checked={chronotrackEnabled} onChange={e => setChronotrackEnabled(e.target.checked)} className="mr-2" />
+              <input
+                type="checkbox"
+                checked={chronotrackEnabled}
+                onChange={e => setChronotrackEnabled(e.target.checked)}
+                className="mr-2"
+              />
               <span>Enable ChronoTrack Integration</span>
             </div>
 
@@ -414,7 +540,12 @@ export default function AdminPage() {
             <section className="mb-12">
               <h2 className="text-3xl font-bold mb-6">Refresh Event Results</h2>
               <div className="flex flex-col sm:flex-row gap-4">
-                <select value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)} className="flex-1 p-4 rounded-lg border border-gray-300" disabled={!chronotrackEnabled}>
+                <select
+                  value={selectedEventId}
+                  onChange={e => setSelectedEventId(e.target.value)}
+                  className="flex-1 p-4 rounded-lg border border-gray-300"
+                  disabled={!chronotrackEnabled}
+                >
                   <option value="">Select Event</option>
                   {chronoEvents.map(event => (
                     <option key={event.id} value={event.id}>
@@ -422,7 +553,11 @@ export default function AdminPage() {
                     </option>
                   ))}
                 </select>
-                <button onClick={() => handleSyncResults(selectedEventId)} disabled={!selectedEventId} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg">
+                <button
+                  onClick={() => handleSyncResults(selectedEventId)}
+                  disabled={!selectedEventId}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg"
+                >
                   Sync Selected
                 </button>
               </div>
@@ -438,7 +573,10 @@ export default function AdminPage() {
 
                 return (
                   <div key={year} className="mb-12">
-                    <button onClick={() => toggleYearCollapse(year)} className="flex items-center gap-3 text-2xl font-bold mb-6 w-full text-left hover:text-gemini-blue">
+                    <button
+                      onClick={() => toggleYearCollapse(year)}
+                      className="flex items-center gap-3 text-2xl font-bold mb-6 w-full text-left hover:text-gemini-blue"
+                    >
                       <span className="text-3xl">{isCollapsed ? '▶' : '▼'}</span>
                       <span>{year} ({yearEvents.length} events)</span>
                     </button>
@@ -450,6 +588,7 @@ export default function AdminPage() {
 
                           return (
                             <div key={event.id} className="p-6 bg-white rounded-xl shadow hover:shadow-lg transition">
+                              {/* Event header */}
                               <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleExpandEvent(event.id)}>
                                 <div className="flex flex-col flex-1">
                                   <span className="text-sm text-gray-500">Original: {event.name}</span>
@@ -465,13 +604,23 @@ export default function AdminPage() {
                                 <span>{expandedEvents[event.id] ? '▲' : '▼'}</span>
                               </div>
 
+                              {/* Visibility & Sync */}
                               <div className="flex items-center mt-4">
-                                <input type="checkbox" checked={!hiddenEvents.includes(event.id)} onChange={() => toggleEventVisibility(event.id)} className="mr-2" />
+                                <input
+                                  type="checkbox"
+                                  checked={!hiddenEvents.includes(event.id)}
+                                  onChange={() => toggleEventVisibility(event.id)}
+                                  className="mr-2"
+                                />
                                 <span>Visible in App</span>
                               </div>
 
                               <div className="mt-4 flex items-center gap-4">
-                                <button onClick={(e) => { e.stopPropagation(); handleSyncResults(event.id); }} disabled={syncingEvents.includes(event.id)} className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleSyncResults(event.id); }}
+                                  disabled={syncingEvents.includes(event.id)}
+                                  className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                                >
                                   {syncingEvents.includes(event.id) ? (
                                     <>
                                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
@@ -486,10 +635,15 @@ export default function AdminPage() {
                                 </span>
                               </div>
 
+                              {/* Master assignment */}
                               <div className="mt-4">
                                 <p className="font-bold">Current Master: <span className="text-gemini-blue">{currentMaster}</span></p>
                                 <div className="flex items-center gap-2 mt-2">
-                                  <input type="checkbox" checked={autoSyncOnAssign[event.id] || false} onChange={e => setAutoSyncOnAssign(prev => ({ ...prev, [event.id]: e.target.checked }))} />
+                                  <input
+                                    type="checkbox"
+                                    checked={autoSyncOnAssign[event.id] || false}
+                                    onChange={e => setAutoSyncOnAssign(prev => ({ ...prev, [event.id]: e.target.checked }))}
+                                  />
                                   <span className="text-sm text-gray-700">Sync results after assigning</span>
                                 </div>
                                 <div className="flex items-center gap-2 mt-2">
@@ -505,12 +659,16 @@ export default function AdminPage() {
                                       <option key={key} value={key} />
                                     ))}
                                   </datalist>
-                                  <button onClick={() => assignToMaster(event.id, newMasterKeys[event.id])} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
+                                  <button
+                                    onClick={() => assignToMaster(event.id, newMasterKeys[event.id])}
+                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+                                  >
                                     Assign
                                   </button>
                                 </div>
                               </div>
 
+                              {/* Expanded races */}
                               {expandedEvents[event.id] && raceEvents[event.id] && (
                                 <div className="mt-6 border-t pt-6">
                                   <h4 className="text-xl font-bold mb-4">Races</h4>
