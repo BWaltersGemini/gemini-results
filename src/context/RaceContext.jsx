@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Correctly saves gender_place and age_group_place to Supabase)
+// src/context/RaceContext.jsx (FINAL — Ensures entry_id, gender_place, age_group_place are saved to Supabase)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi.cjs';
 import { supabase } from '../supabaseClient.js';
@@ -204,7 +204,7 @@ export function RaceProvider({ children }) {
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           console.log(`[Results] Received ${fresh.length} fresh results from ChronoTrack`);
           if (fresh.length > 0) {
-            // CRITICAL: Use the values from the API (gender_place, age_group_place, entry_id)
+            // Use ALL values from the fresh API object, including entry_id, gender_place, age_group_place
             const toUpsert = fresh.map(r => ({
               event_id: selectedEvent.id.toString(),
               race_id: r.race_id || null,
@@ -212,19 +212,20 @@ export function RaceProvider({ children }) {
               first_name: r.first_name || null,
               last_name: r.last_name || null,
               gender: r.gender || null,
-              age: r.age ? parseInt(r.age, 10) : null,
+              age: r.age ?? null,
               city: r.city || null,
               state: r.state || null,
               country: r.country || null,
               chip_time: r.chip_time || null,
               clock_time: r.clock_time || null,
-              place: r.place ? parseInt(r.place, 10) : null,
-              gender_place: r.gender_place ?? null, // ← Use API value
+              place: r.place ?? null,
+              gender_place: r.gender_place ?? null,
               age_group_name: r.age_group_name || null,
-              age_group_place: r.age_group_place ?? null, // ← Use API value
+              age_group_place: r.age_group_place ?? null,
               pace: r.pace || null,
               splits: r.splits || [],
-              entry_id: r.entry_id || null, // ← Save entry_id for future matching
+              entry_id: r.entry_id || null, // ← Explicitly saved
+              race_name: r.race_name || null,
             }));
             await supabase.from('chronotrack_results').delete().eq('event_id', selectedEvent.id.toString());
             const chunkSize = 500;
