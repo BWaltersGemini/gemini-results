@@ -186,14 +186,14 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // 5. Fetch GENDER places — race-specific, no overwrites, prioritize primary race bracket
+  // 5. Fetch GENDER places — prioritize primary race-specific bracket
   const genderPlaces = {};
 
-  // Process race-specific gender brackets first
+  // Sort: race-specific brackets first, then event-wide/challenge
   genderBrackets.sort((a, b) => {
-    const aHasRace = !!(a.race_id || a.bracket_race_id);
-    const bHasRace = !!(b.race_id || b.bracket_race_id);
-    return bHasRace - aHasRace; // race-specific first
+    const aIsRaceSpecific = !!(a.race_id || a.bracket_race_id);
+    const bIsRaceSpecific = !!(b.race_id || b.bracket_race_id);
+    return bIsRaceSpecific - aIsRaceSpecific; // race-specific first
   });
 
   for (const bracket of genderBrackets) {
@@ -217,11 +217,17 @@ export const fetchResultsForEvent = async (eventId) => {
         const athleteRaceId = r.results_race_id;
 
         if (entryId && r.results_rank) {
-          // Only set gender_place if not already set (prevents challenge brackets from overwriting primary race rank)
-          if (!genderPlaces[entryId]) {
-            if (!bracketRaceId || athleteRaceId === bracketRaceId) {
-              genderPlaces[entryId] = parseInt(r.results_rank, 10);
-            }
+          const isRaceSpecificBracket = !!bracketRaceId;
+          const currentIsRaceSpecific = genderPlaces[entryId] && genderPlaces[entryId].isRaceSpecific;
+
+          // Overwrite if:
+          // - No place yet
+          // - OR this bracket is race-specific and current is not
+          // - OR both race-specific and this matches athlete's race better
+          if (!genderPlaces[entryId] || 
+              (isRaceSpecificBracket && !currentIsRaceSpecific) ||
+              (isRaceSpecificBracket && athleteRaceId === bracketRaceId)) {
+            genderPlaces[entryId] = parseInt(r.results_rank, 10);
           }
         }
       });
