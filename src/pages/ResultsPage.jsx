@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL COMPLETE — Fixed Multi-Year Dropdown + Rich UX + All Features)
+// src/pages/ResultsPage.jsx (FINAL — Fixed Year Dropdown Matching + Always Visible)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -45,13 +45,13 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Event selection logic — select the correct event for the URL year
+  // Event selection logic
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
-    const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
+    const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find(
-      (key) => key.toLowerCase() === normalizedUrlKey || slugify(key) === masterKey.toLowerCase()
+      (key) => slugify(key) === urlSlug
     );
 
     if (!storedMasterKey) return;
@@ -81,12 +81,12 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // === YEAR SELECTOR LOGIC — FIXED & ALWAYS VISIBLE ===
+  // === YEAR SELECTOR LOGIC — FIXED MATCHING & ALWAYS VISIBLE ===
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
-    const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
+    const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find(
-      (key) => key.toLowerCase() === normalizedUrlKey || slugify(key) === masterKey.toLowerCase()
+      (key) => slugify(key) === urlSlug
     );
 
     if (storedMasterKey) {
@@ -209,7 +209,7 @@ export default function ResultsPage() {
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
 
-          {/* YEAR DROPDOWN — ALWAYS VISIBLE & FIXED FOR MULTI-YEAR */}
+          {/* YEAR DROPDOWN — ALWAYS VISIBLE & FIXED */}
           {availableYears.length > 0 && (
             <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
               <span className="text-2xl font-bold text-gemini-dark-gray">Select Year</span>
