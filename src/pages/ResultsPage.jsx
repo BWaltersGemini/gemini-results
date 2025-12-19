@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Supports division filter + highlight from ParticipantPage)
+// src/pages/ResultsPage.jsx (FINAL — Division filter + auto-scroll to race + fixed back-to-top arrow)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -33,12 +33,17 @@ export default function ResultsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const prevMasterKeyRef = useRef(masterKey);
 
-  // Read division filter and highlight from navigation state
+  // Division filter & highlight from ParticipantPage
   const divisionFilterFromState = location.state?.divisionFilter;
   const highlightBibFromState = location.state?.highlightBib;
 
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
+
+  // Refs for scrolling
+  const raceRefs = useRef({});
+  const highlightedRowRef = useRef(null);
+  const targetRaceIdRef = useRef(null); // Store which race to scroll to
 
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
@@ -48,9 +53,6 @@ export default function ResultsPage() {
       prevMasterKeyRef.current = masterKey;
     }
   }, [masterKey]);
-
-  const raceRefs = useRef({});
-  const highlightedRowRef = useRef(null);
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -68,6 +70,7 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
+  // Fetch upcoming events
   useEffect(() => {
     const fetchUpcoming = async () => {
       try {
@@ -89,6 +92,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
+  // Event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -105,14 +109,36 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Auto-scroll to highlighted participant
+  // Find which race contains the highlighted participant
   useEffect(() => {
-    if (highlightedBib && highlightedRowRef.current) {
-      highlightedRowRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+    if (!highlightedBib || !results.length) return;
+
+    const participant = results.find(r => String(r.bib) === String(highlightedBib));
+    if (participant && participant.race_id) {
+      targetRaceIdRef.current = participant.race_id;
     }
+  }, [highlightedBib, results]);
+
+  // Auto-scroll: first to race section, then to highlighted row
+  useEffect(() => {
+    if (!highlightedBib || !targetRaceIdRef.current) return;
+
+    const scrollToRaceAndRow = () => {
+      const raceEl = raceRefs.current[targetRaceIdRef.current];
+      if (raceEl) {
+        raceEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // After race is in view, scroll to highlighted row
+        setTimeout(() => {
+          if (highlightedRowRef.current) {
+            highlightedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 600);
+      }
+    };
+
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(scrollToRaceAndRow, 300);
+    return () => clearTimeout(timer);
   }, [highlightedBib, results]);
 
   let availableYears = [];
@@ -189,8 +215,8 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
+  // MASTER LANDING PAGE (unchanged)
   if (!selectedEvent) {
-    // ... (master landing page unchanged - same as before)
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
       .map((storedKey) => {
@@ -290,7 +316,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20 relative">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-32 relative"> {/* pb-32 for arrow space */}
       <div className="max-w-7xl mx-auto px-6">
         {!searchQuery && (
           <div className="text-center mb-16">
@@ -428,8 +454,6 @@ export default function ResultsPage() {
                 const matchesSearch = nameLower.includes(searchLower) || bibStr.includes(searchLower);
                 const matchesGender = !filters.gender || r.gender === filters.gender;
                 const matchesDivision = !filters.division || r.age_group_name === filters.division;
-
-                // Global division filter from ParticipantPage
                 const matchesGlobalDivision = !activeDivisionFilter || r.age_group_name === activeDivisionFilter;
 
                 return matchesSearch && matchesGender && matchesDivision && matchesGlobalDivision;
@@ -607,9 +631,10 @@ export default function ResultsPage() {
         )}
       </div>
 
+      {/* FIXED: Blue Back to Top Arrow — Higher z-index, better bottom spacing */}
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        className="fixed bottom-8 right-8 bg-gemini-blue text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-3xl hover:bg-gemini-blue/90 transition z-40"
+        className="fixed bottom-32 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
         aria-label="Back to top"
       >
         ↑
