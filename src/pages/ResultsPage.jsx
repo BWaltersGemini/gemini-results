@@ -1,9 +1,8 @@
-// src/pages/ResultsPage.jsx (FINAL COMPLETE — Permanent Fresh Config Load + Fixed Year Dropdown)
+// src/pages/ResultsPage.jsx (FINAL — Master Landing Uses Context Config + Year Dropdown Fixed)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { loadAppConfig } from '../utils/appConfig';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -19,11 +18,10 @@ export default function ResultsPage() {
     eventLogos = {},
     ads = [],
     setSelectedEvent,
+    masterGroups = {}, // Fresh from context
+    editedEvents = {},
+    hiddenMasters = [],
   } = useContext(RaceContext);
-
-  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
-  const hiddenMasters = JSON.parse(localStorage.getItem('hiddenMasters')) || [];
 
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
@@ -45,24 +43,6 @@ export default function ResultsPage() {
     if (!event?.start_time) return null;
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
-
-  // === PERMANENT FIX: Force fresh config load when visiting a specific results page ===
-  useEffect(() => {
-    if (masterKey && year) {
-      // Clear potentially stale config from localStorage
-      localStorage.removeItem('masterGroups');
-      localStorage.removeItem('editedEvents');
-      localStorage.removeItem('eventLogos');
-      localStorage.removeItem('hiddenMasters');
-      localStorage.removeItem('showAdsPerMaster');
-      localStorage.removeItem('ads');
-      localStorage.removeItem('hiddenRaces');
-
-      // Trigger fresh load from Supabase
-      loadAppConfig();
-      console.log('[ResultsPage] Cleared localStorage cache and triggered fresh config load');
-    }
-  }, [masterKey, year]);
 
   // Event selection logic
   useEffect(() => {
@@ -144,7 +124,7 @@ export default function ResultsPage() {
     });
   };
 
-  // MASTER LANDING PAGE
+  // MASTER LANDING PAGE — NOW USES FRESH masterGroups FROM CONTEXT
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
