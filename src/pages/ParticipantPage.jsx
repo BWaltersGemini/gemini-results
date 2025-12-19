@@ -1,9 +1,10 @@
-// src/pages/ParticipantPage.jsx (FINAL — Crash-free + works with direct bib URLs)
+// src/pages/ParticipantPage.jsx (FINAL — Clean time display with timeUtils)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { supabase } from '../supabaseClient';
 import { useLocalStorage } from '../utils/useLocalStorage';
+import { formatChronoTime } from '../utils/timeUtils'; // ← Clean time formatter
 
 export default function ParticipantPage() {
   const location = useLocation();
@@ -39,11 +40,6 @@ export default function ParticipantPage() {
     }
   }, [contextSelectedEvent]);
 
-  const formatTime = (timeStr) => {
-    if (!timeStr || timeStr.trim() === '') return '—';
-    return timeStr.trim();
-  };
-
   const cleanName = (text) => {
     if (!text || typeof text !== 'string') return '';
     return text.trim().replace(/['`]/g, '').toLowerCase();
@@ -72,17 +68,14 @@ export default function ParticipantPage() {
 
   useEffect(() => {
     const fetchDataIfMissing = async () => {
-      if (participant && selectedEvent && results.length > 0) return; // Already have data from navigation state
+      if (participant && selectedEvent && results.length > 0) return;
 
       setLoading(true);
       setFetchError(null);
-
       try {
         if (contextLoading || events.length === 0) {
-          // Wait a tick for context to load
           await new Promise(resolve => setTimeout(resolve, 100));
         }
-
         if (events.length === 0) throw new Error('Events not loaded yet');
 
         // Find event from master/year
@@ -91,9 +84,7 @@ export default function ParticipantPage() {
           slugify(editedEvents[key]?.name || key) === (masterKey || '').toLowerCase() ||
           cleanName(editedEvents[key]?.name || key) === cleanName(decodedMaster)
         );
-
         let groupEventIds = groupEntry ? groupEntry[1] : [];
-
         if (groupEventIds.length === 0 && masterKey) {
           groupEventIds = events
             .filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey.toLowerCase())
@@ -105,7 +96,6 @@ export default function ParticipantPage() {
           .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
         if (yearEvents.length === 0) throw new Error('Event not found');
-
         const targetEvent = yearEvents[0];
         setLocalSelectedEvent(targetEvent);
         setSelectedEvent(targetEvent);
@@ -117,14 +107,12 @@ export default function ParticipantPage() {
           .eq('event_id', targetEvent.id);
 
         if (resultsError) throw resultsError;
-
         const allResults = fetchedResults || [];
         setResults(allResults);
 
         // Find participant by bib
         const found = allResults.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found with this bib');
-
         setParticipant(found);
       } catch (err) {
         console.error('Participant load error:', err);
@@ -226,7 +214,6 @@ export default function ParticipantPage() {
               <p className="text-6xl font-black">{participant.bib || '—'}</p>
             </div>
           </div>
-
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Overall</p>
@@ -265,15 +252,15 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Times */}
+        {/* Times — Now using clean formatter */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
-            <p className="text-5xl font-black text-gemini-blue">{formatTime(participant.chip_time)}</p>
+            <p className="text-5xl font-black text-gemini-blue">{formatChronoTime(participant.chip_time)}</p>
           </div>
           <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gun Time</p>
-            <p className="text-5xl font-black text-gray-800">{formatTime(participant.clock_time)}</p>
+            <p className="text-5xl font-black text-gray-800">{formatChronoTime(participant.clock_time)}</p>
           </div>
           <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
@@ -281,7 +268,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Splits */}
+        {/* Splits — Clean time formatting */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
             <button
@@ -305,7 +292,7 @@ export default function ParticipantPage() {
                     {participant.splits.map((split, i) => (
                       <tr key={i} className="hover:bg-gray-50 transition">
                         <td className="px-8 py-5 font-medium">{split.name || `Split ${i + 1}`}</td>
-                        <td className="px-8 py-5">{formatTime(split.time) || '—'}</td>
+                        <td className="px-8 py-5">{formatChronoTime(split.time) || '—'}</td>
                         <td className="px-8 py-5">{split.pace || '—'}</td>
                         <td className="px-8 py-5">{split.place || '—'}</td>
                       </tr>

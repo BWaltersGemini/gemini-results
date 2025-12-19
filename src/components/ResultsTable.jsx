@@ -1,13 +1,9 @@
-// src/components/ResultsTable.jsx (FINAL — Enhanced UX for Desktop & Mobile)
+// src/components/ResultsTable.jsx (FINAL — Clean time display + enhanced UX)
 import { useNavigate } from 'react-router-dom';
+import { formatChronoTime } from '../utils/timeUtils'; // ← Clean time formatter
 
 export default function ResultsTable({ data = [], onNameClick, isMobile }) {
   const navigate = useNavigate();
-
-  const formatTime = (timeStr) => {
-    if (!timeStr || timeStr.trim() === '') return '—';
-    return timeStr.trim();
-  };
 
   const formatPlace = (place) => {
     if (!place) return '—';
@@ -49,7 +45,6 @@ export default function ResultsTable({ data = [], onNameClick, isMobile }) {
                   <div className="text-sm text-gray-500">Bib</div>
                 </div>
               </div>
-
               <div className="mb-5">
                 <div className="text-2xl font-bold text-gemini-dark-gray truncate">
                   {r.first_name} {r.last_name}
@@ -58,10 +53,9 @@ export default function ResultsTable({ data = [], onNameClick, isMobile }) {
                   {r.city && `${r.city}, `}{r.state} {r.country}
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div className="bg-gemini-blue/5 rounded-lg py-3">
-                  <div className="text-xl font-bold text-gemini-blue">{formatTime(r.chip_time)}</div>
+                  <div className="text-xl font-bold text-gemini-blue">{formatChronoTime(r.chip_time)}</div>
                   <div className="text-sm text-gray-600">Chip Time</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg py-3">
@@ -129,7 +123,7 @@ export default function ResultsTable({ data = [], onNameClick, isMobile }) {
                   '—'
                 )}
               </td>
-              <td className="px-6 py-5 font-semibold">{formatTime(r.chip_time)}</td>
+              <td className="px-6 py-5 font-semibold">{formatChronoTime(r.chip_time)}</td>
               <td className="px-6 py-5">{r.pace || '—'}</td>
               <td className="px-6 py-5">{r.age || '—'}</td>
               <td className="px-6 py-5 text-gray-600">
