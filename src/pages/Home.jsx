@@ -1,4 +1,4 @@
-// src/pages/Home.jsx (FINAL — Only 3 recent master event tiles + scroll to top on click)
+// src/pages/Home.jsx (FINAL — Fixed for new schema: uses start_time only)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -41,11 +41,18 @@ export default function Home() {
     fetchUpcomingEvents();
   }, []);
 
-  const formatChronoDate = (dateStr) => {
-    if (!dateStr) return 'Date TBD';
-    const [year, month, day] = dateStr.split('-');
-    const date = new Date(year, month - 1, day);
+  // Format date from start_time (Unix epoch seconds)
+  const formatChronoDate = (epoch) => {
+    if (!epoch || isNaN(epoch)) return 'Date TBD';
+    const date = new Date(epoch * 1000);
+    if (isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
+  // Extract year from start_time
+  const getYearFromEvent = (event) => {
+    if (!event?.start_time) return null;
+    return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
   const formatTribeDate = (isoStr) => {
@@ -64,21 +71,22 @@ export default function Home() {
   const masterEventTiles = Object.keys(masterGroups)
     .map(storedKey => {
       const displayName = editedEvents[storedKey]?.name || storedKey;
-      const eventIds = masterGroups[storedKey];
-      const masterEvents = events.filter(e => eventIds.includes(e.id));
+      const eventIds = masterGroups[storedKey] || [];
+      const masterEvents = events.filter(e => eventIds.includes(e.id.toString()));
 
       if (masterEvents.length === 0) return null;
 
-      const latestEvent = masterEvents.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      // Sort by start_time (newest first)
+      const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
       const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
       const masterSlug = slugify(storedKey);
-      const year = latestEvent.date.split('-')[0];
+      const year = getYearFromEvent(latestEvent);
 
       return {
         storedKey,
         displayName,
         logo,
-        date: latestEvent.date,
+        dateEpoch: latestEvent.start_time,
         masterSlug,
         year,
       };
@@ -89,7 +97,7 @@ export default function Home() {
   // Handle navigation with scroll to top
   const handleMasterClick = (masterSlug, year) => {
     navigate(`/results/${masterSlug}/${year}`);
-    window.scrollTo(0, 0); // Ensures top of page
+    window.scrollTo(0, 0);
   };
 
   return (
@@ -180,7 +188,7 @@ export default function Home() {
                     {master.displayName}
                   </h3>
                   <p className="text-lg text-gray-600 mb-6">
-                    Latest: {formatChronoDate(master.date)}
+                    Latest: {formatChronoDate(master.dateEpoch)}
                   </p>
                   <span className="text-gemini-blue font-bold group-hover:underline">
                     View Results →
