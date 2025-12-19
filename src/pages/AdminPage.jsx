@@ -1,7 +1,8 @@
-// src/pages/AdminPage.jsx (OPTIMIZED — No results fetching in Events tab + Unlink + Clean UI)
+// src/pages/AdminPage.jsx (FINAL COMPLETE — Supabase cache + manual Refresh & Publish + Clean UI)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi';
+import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
+import { supabase } from '../supabaseClient';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 
@@ -16,7 +17,6 @@ export default function AdminPage() {
   // Global config state
   const [editedEvents, setEditedEvents] = useState({});
   const [masterGroups, setMasterGroups] = useState({});
-  const [hiddenEvents, setHiddenEvents] = useState([]);
   const [hiddenRaces, setHiddenRaces] = useState({});
   const [hiddenMasters, setHiddenMasters] = useState([]);
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
@@ -25,6 +25,8 @@ export default function AdminPage() {
   const [expandedEvents, setExpandedEvents] = useState({});
   const [loading, setLoading] = useState(true);
   const [chronoEvents, setChronoEvents] = useState([]);
+  const [participantCounts, setParticipantCounts] = useState({});
+  const [refreshingEvent, setRefreshingEvent] = useState(null);
   const [activeTab, setActiveTab] = useState('events');
   const [newMasterKeys, setNewMasterKeys] = useState({});
 
@@ -38,7 +40,6 @@ export default function AdminPage() {
     setHiddenMasters(config.hiddenMasters || []);
     setShowAdsPerMaster(config.showAdsPerMaster || {});
     setAds(config.ads || []);
-    setHiddenEvents(config.hiddenEvents || []);
     setHiddenRaces(config.hiddenRaces || {});
   };
 
@@ -66,12 +67,26 @@ export default function AdminPage() {
       const fetchData = async () => {
         try {
           setLoading(true);
-          const events = await fetchChronoEvents(); // Includes embedded races
+
+          // Load events from ChronoTrack (metadata + embedded races)
+          const events = await fetchChronoEvents();
           const sorted = events.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
           setChronoEvents(sorted);
+
+          // Load participant counts from Supabase cache
+          const counts = {};
+          for (const event of sorted) {
+            const { count, error } = await supabase
+              .from('chronotrack_results')
+              .select('id', { count: 'exact', head: true })
+              .eq('event_id', event.id);
+
+            counts[event.id] = error ? 0 : count || 0;
+          }
+          setParticipantCounts(counts);
         } catch (err) {
-          console.error('Failed to fetch events:', err);
-          alert('Failed to load events from ChronoTrack.');
+          console.error('Failed to load data:', err);
+          alert('Failed to load events or participant counts.');
         } finally {
           setLoading(false);
         }
@@ -88,22 +103,18 @@ export default function AdminPage() {
 
   const getCurrentMasterForEvent = (eventId) => {
     for (const [masterKey, eventIds] of Object.entries(masterGroups)) {
-      if (eventIds.includes(eventId.toString())) {
-        return masterKey;
-      }
+      if (eventIds.includes(eventId.toString())) return masterKey;
     }
     return null;
   };
 
-  const assignToMaster = async (eventId, masterKey) => {
+  const assignToMaster = (eventId, masterKey) => {
     if (!masterKey) return;
     const updated = { ...masterGroups };
-    // Remove from any existing master
     Object.keys(updated).forEach(key => {
       updated[key] = updated[key].filter(id => id !== eventId.toString());
       if (updated[key].length === 0) delete updated[key];
     });
-    // Add to selected master
     if (!updated[masterKey]) updated[masterKey] = [];
     if (!updated[masterKey].includes(eventId.toString())) {
       updated[masterKey].push(eventId.toString());
@@ -123,10 +134,7 @@ export default function AdminPage() {
         if (updated[key].length === 0) delete updated[key];
       }
     });
-    if (changed) {
-      setMasterGroups(updated);
-      console.log(`[Admin] Unlinked event ${eventId} from master`);
-    }
+    if (changed) setMasterGroups(updated);
   };
 
   const toggleEventExpansion = (eventId) => {
@@ -164,6 +172,63 @@ export default function AdminPage() {
     });
   };
 
+  const refreshAndPublishResults = async (eventId) => {
+    setRefreshingEvent(eventId);
+    try {
+      console.log(`[Admin] Refreshing results for event ${eventId}...`);
+      const fresh = await fetchResultsForEvent(eventId);
+
+      if (fresh.length === 0) {
+        alert('No results returned from ChronoTrack.');
+        return;
+      }
+
+      const seen = new Map();
+      fresh.forEach(r => {
+        const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
+        if (!seen.has(key)) seen.set(key, r);
+      });
+      const deduped = Array.from(seen.values());
+
+      const toUpsert = deduped.map(r => ({
+        event_id: eventId,
+        race_id: r.race_id || null,
+        bib: r.bib || null,
+        first_name: r.first_name || null,
+        last_name: r.last_name || null,
+        gender: r.gender || null,
+        age: r.age ?? null,
+        city: r.city || null,
+        state: r.state || null,
+        country: r.country || null,
+        chip_time: r.chip_time || null,
+        clock_time: r.clock_time || null,
+        place: r.place ?? null,
+        gender_place: r.gender_place ?? null,
+        age_group_name: r.age_group_name || null,
+        age_group_place: r.age_group_place ?? null,
+        pace: r.pace || null,
+        splits: r.splits || [],
+        entry_id: r.entry_id ?? null,
+        race_name: r.race_name ?? null,
+      }));
+
+      const { error } = await adminSupabase
+        .from('chronotrack_results')
+        .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
+
+      if (error) throw error;
+
+      setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
+      alert(`Successfully published ${deduped.length} results!`);
+    } catch (err) {
+      console.error('[Admin] Refresh failed:', err);
+      alert('Failed to refresh results. Check console.');
+    } finally {
+      setRefreshingEvent(null);
+    }
+  };
+
   const handleFileUpload = async (e, type) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -199,10 +264,9 @@ export default function AdminPage() {
       saveConfig('hiddenMasters', hiddenMasters),
       saveConfig('showAdsPerMaster', showAdsPerMaster),
       saveConfig('ads', ads),
-      saveConfig('hiddenEvents', hiddenEvents),
       saveConfig('hiddenRaces', hiddenRaces),
     ]);
-    alert('All changes saved to Supabase!');
+    alert('All configuration changes saved to Supabase!');
   };
 
   if (!isLoggedIn) {
@@ -223,7 +287,6 @@ export default function AdminPage() {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && setIsLoggedIn(username === 'admin' && password === 'gemini2025')}
             className="w-full p-4 border border-gray-300 rounded-xl mb-6"
           />
           <button
@@ -260,7 +323,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="flex space-x-1 mb-8 bg-gray-100 p-1 rounded-xl w-fit">
           <button
             onClick={() => setActiveTab('events')}
@@ -276,7 +338,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Events & Masters Tab */}
         {activeTab === 'events' && (
           <section className="space-y-6">
             <h2 className="text-3xl font-bold text-gemini-dark-gray mb-6">ChronoTrack Events</h2>
@@ -289,6 +350,7 @@ export default function AdminPage() {
               chronoEvents.map((event) => {
                 const currentMaster = getCurrentMasterForEvent(event.id);
                 const displayName = editedEvents[event.id]?.name || event.name;
+                const count = participantCounts[event.id] || 0;
 
                 return (
                   <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
@@ -301,11 +363,11 @@ export default function AdminPage() {
                           {displayName} <span className="text-lg font-normal text-gray-500">({formatDate(event.start_time)})</span>
                         </h3>
                         <p className="text-gray-600 mt-1">
-                          ID: {event.id}
+                          ID: {event.id} • <strong>{count} participants published</strong>
                         </p>
                         {currentMaster && (
                           <p className="text-sm text-gemini-blue font-medium mt-2">
-                            Master: {currentMaster} {editedEvents[currentMaster]?.name && `(${editedEvents[currentMaster].name})`}
+                            Master: {currentMaster}
                           </p>
                         )}
                       </div>
@@ -315,14 +377,13 @@ export default function AdminPage() {
                     {expandedEvents[event.id] && (
                       <div className="px-6 pb-6 border-t border-gray-200">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                          {/* Master Assignment */}
                           <div>
                             <label className="block text-lg font-semibold text-gray-700 mb-2">Master Event</label>
                             <div className="flex gap-3">
                               <input
                                 type="text"
                                 list="master-keys"
-                                placeholder="Type or select master"
+                                placeholder="Type or select"
                                 value={newMasterKeys[event.id] || ''}
                                 onChange={(e) => setNewMasterKeys(prev => ({ ...prev, [event.id]: e.target.value }))}
                                 className="flex-1 px-4 py-3 border border-gray-300 rounded-xl"
@@ -334,14 +395,14 @@ export default function AdminPage() {
                               </datalist>
                               <button
                                 onClick={() => assignToMaster(event.id, newMasterKeys[event.id] || currentMaster)}
-                                className="px-6 py-3 bg-gemini-blue text-white rounded-xl hover:bg-gemini-blue/90 transition font-medium"
+                                className="px-6 py-3 bg-gemini-blue text-white rounded-xl hover:bg-gemini-blue/90 font-medium"
                               >
                                 Assign
                               </button>
                               {currentMaster && (
                                 <button
                                   onClick={() => unlinkFromMaster(event.id)}
-                                  className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition font-medium"
+                                  className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium"
                                 >
                                   Unlink
                                 </button>
@@ -349,9 +410,8 @@ export default function AdminPage() {
                             </div>
                           </div>
 
-                          {/* Event Name Edit */}
                           <div>
-                            <label className="block text-lg font-semibold text-gray-700 mb-2">Event Display Name</label>
+                            <label className="block text-lg font-semibold text-gray-700 mb-2">Display Name</label>
                             <input
                               type="text"
                               value={displayName}
@@ -361,7 +421,16 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        {/* Embedded Races */}
+                        <div className="mt-8 flex justify-center">
+                          <button
+                            onClick={() => refreshAndPublishResults(event.id)}
+                            disabled={refreshingEvent === event.id}
+                            className="px-10 py-4 bg-green-600 text-white text-xl font-bold rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition shadow-lg"
+                          >
+                            {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
+                          </button>
+                        </div>
+
                         {event.races && event.races.length > 0 && (
                           <div className="mt-8">
                             <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">Races ({event.races.length})</h4>
@@ -384,7 +453,7 @@ export default function AdminPage() {
                                   </div>
                                   {race.distance && (
                                     <span className="text-gray-600 ml-4">
-                                      {race.distance} {race.distance_unit || 'meters'}
+                                      {race.distance} {race.distance_unit || 'm'}
                                     </span>
                                   )}
                                 </div>
@@ -394,7 +463,7 @@ export default function AdminPage() {
                         )}
 
                         {(!event.races || event.races.length === 0) && (
-                          <div className="mt-8 text-gray-500 italic">
+                          <div className="mt-8 text-gray-500 italic text-center">
                             No races embedded for this event.
                           </div>
                         )}
@@ -407,7 +476,6 @@ export default function AdminPage() {
           </section>
         )}
 
-        {/* Website Management Tab */}
         {activeTab === 'website' && (
           <section className="space-y-12">
             <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
@@ -431,7 +499,7 @@ export default function AdminPage() {
             onClick={handleSaveChanges}
             className="px-16 py-6 bg-gemini-blue text-white text-2xl font-bold rounded-full hover:bg-gemini-blue/90 shadow-2xl transition transform hover:scale-105"
           >
-            Save All Changes to Supabase
+            Save Configuration Changes
           </button>
         </div>
       </div>
