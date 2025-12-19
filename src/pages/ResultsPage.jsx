@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Division filter + auto-scroll to race + fixed back-to-top arrow)
+// src/pages/ResultsPage.jsx (FINAL — All fixes applied: Division filter + auto-scroll + working Back to Top)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -112,7 +112,6 @@ export default function ResultsPage() {
   // Find which race contains the highlighted participant
   useEffect(() => {
     if (!highlightedBib || !results.length) return;
-
     const participant = results.find(r => String(r.bib) === String(highlightedBib));
     if (participant && participant.race_id) {
       targetRaceIdRef.current = participant.race_id;
@@ -127,7 +126,6 @@ export default function ResultsPage() {
       const raceEl = raceRefs.current[targetRaceIdRef.current];
       if (raceEl) {
         raceEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        // After race is in view, scroll to highlighted row
         setTimeout(() => {
           if (highlightedRowRef.current) {
             highlightedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -136,7 +134,6 @@ export default function ResultsPage() {
       }
     };
 
-    // Small delay to ensure DOM is ready
     const timer = setTimeout(scrollToRaceAndRow, 300);
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
@@ -215,7 +212,15 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
-  // MASTER LANDING PAGE (unchanged)
+  // Helper to scroll to top of the main container
+  const scrollToTop = () => {
+    const mainElement = document.querySelector('main');
+    if (mainElement) {
+      mainElement.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // MASTER LANDING PAGE
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
@@ -316,7 +321,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-32 relative"> {/* pb-32 for arrow space */}
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-32 relative">
       <div className="max-w-7xl mx-auto px-6">
         {!searchQuery && (
           <div className="text-center mb-16">
@@ -601,7 +606,7 @@ export default function ResultsPage() {
                   {sorted.length > 30 && (
                     <div className="text-center py-8">
                       <button
-                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        onClick={scrollToTop}
                         className="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-medium"
                       >
                         ↑ Back to Top
@@ -631,10 +636,10 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* FIXED: Blue Back to Top Arrow — Higher z-index, better bottom spacing */}
+      {/* Floating Back to Top — Now correctly scrolls the <main> container */}
       <button
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        className="fixed bottom-32 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
+        onClick={scrollToTop}
+        className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
         aria-label="Back to top"
       >
         ↑

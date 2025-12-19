@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs (FINAL — Fixed bracket list pagination with size=500 + all previous fixes)
+// src/api/chronotrackapi.cjs (FINAL — Fully paginated bracket results for gender/division >1000 finishers)
 import axios from 'axios';
 
 // Direct ChronoTrack API — no proxy needed for events
@@ -51,6 +51,41 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
+// Helper to fetch ALL results from a bracket with proper pagination (max 1000 per page)
+const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
+  let allResults = [];
+  let page = 1;
+  const pageSize = 1000; // ChronoTrack max per page
+
+  while (true) {
+    try {
+      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracketId}/results`, {
+        headers: { Authorization: await getAuthHeader() },
+        params: {
+          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+          page,
+          size: pageSize,
+        },
+        timeout: 30000,
+      });
+
+      const results = res.data.bracket_results || [];
+      if (results.length === 0) break;
+
+      allResults = [...allResults, ...results];
+      console.log(`[ChronoTrack] ${bracketName} (page ${page}) → +${results.length} (total: ${allResults.length}) from ${raceName}`);
+
+      if (results.length < pageSize) break; // Last page
+      page++;
+    } catch (err) {
+      console.warn(`[ChronoTrack] Failed page ${page} for bracket "${bracketName}" in ${raceName}`, err.message || err);
+      break;
+    }
+  }
+
+  return allResults;
+};
+
 export const fetchEvents = async () => {
   const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
   const userId = import.meta.env.VITE_CHRONOTRACK_USER;
@@ -93,7 +128,6 @@ export const fetchRacesForEvent = async (eventId) => {
     headers: { Authorization: authHeader },
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
-
   return (response.data.event_race || []).map(race => ({
     race_id: race.race_id,
     race_name: race.race_name,
@@ -118,23 +152,22 @@ export const fetchResultsForEvent = async (eventId) => {
       distance: race.race_distance,
       distance_unit: race.race_distance_unit,
     }));
-
     console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races:`);
     races.forEach(race => {
-      console.log(`   - Race ID: ${race.race_id} | Name: ${race.race_name} | Distance: ${race.distance}${race.distance_unit || ''}`);
+      console.log(` - Race ID: ${race.race_id} | Name: ${race.race_name} | Distance: ${race.distance}${race.distance_unit || ''}`);
     });
   } catch (err) {
     console.warn('[ChronoTrack] Failed to fetch races for event', eventId, err);
   }
 
-  // Fetch ALL brackets — now with size=500 to avoid default 50 limit
+  // Fetch ALL brackets with size=500
   let allBrackets = [];
   try {
     const bracketsResponse = await axios.get(`${PROXY_BASE}/api/event/${eventId}/bracket`, {
       headers: { Authorization: authHeader },
       params: {
         client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-        size: 500,  // ← Critical: prevents default 50-item limit on bracket list
+        size: 500,
       },
     });
     allBrackets = bracketsResponse.data.event_bracket || [];
@@ -144,17 +177,15 @@ export const fetchResultsForEvent = async (eventId) => {
     throw err;
   }
 
-  // Reliable bracket filtering (like old working version)
+  // Bracket filtering
   const divisionBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' && ['AGE', 'OTHER'].includes(b.bracket_type)
   );
-
   const genderBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' &&
     b.bracket_type === 'SEX' &&
     /^(Male|Female)$/i.test(b.bracket_name?.trim() || '')
   );
-
   const overallBrackets = allBrackets.filter(b => {
     const name = (b.bracket_name || '').toLowerCase();
     return b.bracket_wants_leaderboard === '1' && (name.includes('overall') || name.includes('all participants'));
@@ -164,11 +195,10 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Processing ${divisionBrackets.length} division brackets`);
   console.log(`[ChronoTrack] Processing ${overallBrackets.length} overall brackets`);
 
-  // Fetch main results
+  // Fetch main overall results with pagination
   let allResults = [];
   let page = 1;
   const maxPages = 40;
-
   try {
     while (page <= maxPages) {
       const res = await axios.get(`${PROXY_BASE}/api/event/${eventId}/results`, {
@@ -179,7 +209,6 @@ export const fetchResultsForEvent = async (eventId) => {
           size: 500,
         },
       });
-
       const results = res.data.event_results || [];
       if (results.length === 0) break;
       allResults = [...allResults, ...results];
@@ -203,112 +232,68 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // GENDER PLACES
+  // GENDER PLACES — now fully paginated
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+    console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName})`);
 
-    console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName} | ID: ${raceId})`);
+    const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `GENDER "${name}"`, raceName);
 
-    let bracketResults = [];
-
-    try {
-      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
-        headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 9999,
-        },
-      });
-      bracketResults = res.data.bracket_results || [];
-
-      console.log(`[ChronoTrack] GENDER "${name}" → Loaded ${bracketResults.length} ranked participants (from ${raceName})`);
-
-      bracketResults.forEach(r => {
-        const key = getLookupKey(r);
-        if (key && r.results_rank) {
-          genderPlaces[key] = parseInt(r.results_rank, 10);
-        }
-      });
-    } catch (err) {
-      console.warn(`[ChronoTrack] Failed GENDER bracket "${name}" in ${raceName}`, err);
-    }
+    console.log(`[ChronoTrack] GENDER "${name}" FINAL: ${bracketResults.length} ranked participants`);
+    bracketResults.forEach(r => {
+      const key = getLookupKey(r);
+      if (key && r.results_rank) {
+        genderPlaces[key] = parseInt(r.results_rank, 10);
+      }
+    });
   }
 
-  // DIVISION PLACES
+  // DIVISION PLACES — fully paginated
   for (const bracket of divisionBrackets) {
     const name = (bracket.bracket_name || '').trim();
     if (!name) continue;
-
     const lowerName = name.toLowerCase();
     const isOverallLike = lowerName.includes('overall') || lowerName.includes('all participants');
     if (isOverallLike) continue;
 
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+    console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName})`);
 
-    console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName} | ID: ${raceId})`);
+    const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `DIVISION "${name}"`, raceName);
 
-    let bracketResults = [];
-
-    try {
-      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
-        headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 9999,
-        },
-      });
-      bracketResults = res.data.bracket_results || [];
-
-      console.log(`[ChronoTrack] DIVISION "${name}" → Loaded ${bracketResults.length} ranked participants (from ${raceName})`);
-
-      bracketResults.forEach(r => {
-        const key = getLookupKey(r);
-        if (key && r.results_rank) {
-          const rank = parseInt(r.results_rank, 10);
-          divisionPlaces[key] = { name, place: rank };
-        }
-      });
-    } catch (err) {
-      console.warn(`[ChronoTrack] Failed DIVISION bracket "${name}" in ${raceName}`, err);
-    }
+    console.log(`[ChronoTrack] DIVISION "${name}" FINAL: ${bracketResults.length} ranked participants`);
+    bracketResults.forEach(r => {
+      const key = getLookupKey(r);
+      if (key && r.results_rank) {
+        const rank = parseInt(r.results_rank, 10);
+        divisionPlaces[key] = { name, place: rank };
+      }
+    });
   }
 
-  // FALLBACK: Overall as division
+  // OVERALL FALLBACK — paginated
   for (const bracket of overallBrackets) {
     const name = (bracket.bracket_name || '').trim();
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
 
-    let bracketResults = [];
+    const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `OVERALL "${name}"`, raceName);
 
-    try {
-      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
-        headers: { Authorization: authHeader },
-        params: {
-          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 9999,
-        },
-      });
-      bracketResults = res.data.bracket_results || [];
-
-      bracketResults.forEach(r => {
-        const key = getLookupKey(r);
-        if (key && r.results_rank) {
-          const rank = parseInt(r.results_rank, 10);
-          if (!divisionPlaces[key]) {
-            divisionPlaces[key] = { name: 'Overall', place: rank };
-          }
+    bracketResults.forEach(r => {
+      const key = getLookupKey(r);
+      if (key && r.results_rank) {
+        const rank = parseInt(r.results_rank, 10);
+        if (!divisionPlaces[key]) {
+          divisionPlaces[key] = { name: 'Overall', place: rank };
         }
-      });
-    } catch (err) {
-      console.warn(`[ChronoTrack] Failed OVERALL fallback bracket "${name}" in ${raceName}`, err);
-    }
+      }
+    });
   }
 
-  // Final Mapping
+  // Final mapping
   const mappedResults = allResults.map(r => {
     const lookupKey = getLookupKey(r);
     const divInfo = lookupKey ? divisionPlaces[lookupKey] : null;
