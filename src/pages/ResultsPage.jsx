@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL COMPLETE — 3 Most Recent Masters + Upcoming Events)
+// src/pages/ResultsPage.jsx (FINAL — Mobile Improvements + 3 Recent Masters + Upcoming Events)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -29,6 +29,7 @@ export default function ResultsPage() {
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
+  const [showFiltersForRace, setShowFiltersForRace] = useState({}); // per-race toggle
   const raceRefs = useRef({});
 
   const slugify = (text) => {
@@ -47,13 +48,13 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Fetch upcoming events from You Keep Moving API
+  // Fetch upcoming events
   useEffect(() => {
     const fetchUpcoming = async () => {
       try {
         setLoadingUpcoming(true);
         const response = await fetch('https://youkeepmoving.com/wp-json/tribe/events/v1/events?per_page=6&status=publish');
-        if (!response.ok) throw new Error('Failed to fetch');
+        if (!response.ok) throw new Error('Failed');
         const data = await response.json();
         const futureEvents = (data.events || [])
           .filter(event => new Date(event.start_date) > new Date())
@@ -69,7 +70,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection logic
+  // Event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -90,7 +91,7 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Auto-scroll from participant page
+  // Auto-scroll from participant
   useEffect(() => {
     if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent) {
       const { autoFilterDivision, autoFilterRaceId } = location.state;
@@ -98,6 +99,7 @@ export default function ResultsPage() {
         ...prev,
         [autoFilterRaceId]: { division: autoFilterDivision, gender: '', search: '' },
       }));
+      setShowFiltersForRace((prev) => ({ ...prev, [autoFilterRaceId]: true }));
       navigate(location.pathname, { replace: true, state: {} });
       setTimeout(() => {
         raceRefs.current[autoFilterRaceId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -105,7 +107,7 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // Year selector logic
+  // Year selector
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -166,8 +168,8 @@ export default function ResultsPage() {
         return { storedKey, displayName, logo, dateEpoch: latestEvent.start_time, masterSlug, latestYear };
       })
       .filter(Boolean)
-      .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0)) // Most recent first
-      .slice(0, 3); // Only top 3
+      .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
+      .slice(0, 3);
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
@@ -179,26 +181,26 @@ export default function ResultsPage() {
 
           {/* 3 Most Recent Masters */}
           {masterEventTiles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-20">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
               {masterEventTiles.map((master) => (
                 <Link
                   key={master.storedKey}
                   to={`/results/${master.masterSlug}/${master.latestYear}`}
                   className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
                 >
-                  <div className="h-72 bg-gray-50 flex items-center justify-center p-8">
+                  <div className="h-64 bg-gray-50 flex items-center justify-center p-6">
                     {master.logo ? (
-                      <img src={master.logo} alt={master.displayName} className="max-h-56 max-w-full object-contain" />
+                      <img src={master.logo} alt={master.displayName} className="max-h-52 max-w-full object-contain" />
                     ) : (
-                      <span className="text-9xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
+                      <span className="text-8xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
                     )}
                   </div>
-                  <div className="p-10 text-center">
+                  <div className="p-8 text-center">
                     <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
                       {master.displayName}
                     </h3>
                     <p className="text-lg text-gray-600 mb-6">Latest: {formatDate(master.dateEpoch)}</p>
-                    <span className="text-gemini-blue font-bold group-hover:underline">View Results →</span>
+                    <span className="text-gemini-blue font-bold text-lg group-hover:underline">View Results →</span>
                   </div>
                 </Link>
               ))}
@@ -207,13 +209,13 @@ export default function ResultsPage() {
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
 
-          {/* Upcoming Events Section */}
+          {/* Upcoming Events */}
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
               <p className="text-center text-gray-600 text-xl">Loading upcoming events...</p>
             ) : upcomingEvents.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {upcomingEvents.map((event) => (
                   <a
                     key={event.id}
@@ -226,14 +228,14 @@ export default function ResultsPage() {
                       <img
                         src={event.image.url}
                         alt={event.title.rendered || event.title}
-                        className="w-full h-64 object-cover"
+                        className="w-full h-60 object-cover"
                       />
                     ) : (
-                      <div className="h-64 bg-gray-200 flex items-center justify-center">
+                      <div className="h-60 bg-gray-200 flex items-center justify-center">
                         <span className="text-gray-500 font-medium">No Image</span>
                       </div>
                     )}
-                    <div className="p-8">
+                    <div className="p-6">
                       <h3 className="text-xl font-bold text-gemini-dark-gray mb-2 line-clamp-2">
                         {event.title.rendered || event.title}
                       </h3>
@@ -281,17 +283,17 @@ export default function ResultsPage() {
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
 
-          {/* YEAR DROPDOWN — ALWAYS VISIBLE */}
+          {/* YEAR DROPDOWN */}
           {availableYears.length > 0 && (
             <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
               <span className="text-2xl font-bold text-gemini-dark-gray">Select Year</span>
               <select
                 value={year || availableYears[0]}
                 onChange={(e) => handleYearChange(e.target.value)}
-                className="px-12 py-5 text-2xl font-bold rounded-xl border-4 border-gemini-blue bg-white shadow-xl hover:shadow-2xl transition focus:outline-none cursor-pointer"
+                className="w-full md:w-auto px-8 py-4 text-xl font-bold rounded-xl border-4 border-gemini-blue bg-white shadow-xl hover:shadow-2xl transition focus:outline-none cursor-pointer"
               >
                 {availableYears.map((y) => (
-                  <option key={y} value={y} className="text-xl">
+                  <option key={y} value={y} className="text-lg">
                     {y}
                   </option>
                 ))}
@@ -300,9 +302,9 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Race Tiles */}
+        {/* Race Tiles — Mobile Optimized */}
         {displayedRaces.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
               const raceResults = results.filter((r) => r.race_id === race.race_id);
               const starters = raceResults.length;
@@ -312,23 +314,23 @@ export default function ResultsPage() {
                 <button
                   key={race.race_id}
                   onClick={() => raceRefs.current[race.race_id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  className="group bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl hover:border-gemini-blue transition-all duration-300"
+                  className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 border border-gray-200"
                 >
-                  <div className="bg-gradient-to-br from-gemini-blue/20 to-gemini-blue/10 p-10 text-center">
-                    <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-6 group-hover:text-gemini-blue transition">
+                  <div className="p-6 md:p-8 text-center">
+                    <h3 className="text-xl md:text-2xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
                       {race.race_name}
                     </h3>
-                    <div className="space-y-3 text-gray-700">
-                      <p className="text-lg">
-                        <span className="font-bold text-xl">{starters}</span> Starters
+                    <div className="space-y-2 text-gray-700">
+                      <p className="text-base">
+                        <span className="font-bold text-lg">{starters}</span> Starters
                       </p>
-                      <p className="text-lg">
-                        <span className="font-bold text-xl">{finishers}</span> Finishers
+                      <p className="text-base">
+                        <span className="font-bold text-lg">{finishers}</span> Finishers
                       </p>
                     </div>
                   </div>
-                  <div className="py-5 text-center bg-gray-50">
-                    <span className="text-gemini-blue font-semibold group-hover:underline">View Results →</span>
+                  <div className="py-4 bg-gemini-blue/10 rounded-b-2xl">
+                    <span className="text-gemini-blue font-bold text-lg">View Results →</span>
                   </div>
                 </button>
               );
@@ -350,95 +352,104 @@ export default function ResultsPage() {
         ) : (
           <>
             {displayedRaces.map((race) => {
-              const filters = raceFilters[race.race_id] || { search: '', gender: '', division: '' };
-              const searchLower = (filters.search || '').toLowerCase();
-              const raceResults = results.filter((r) => r.race_id === race.race_id);
+              const raceId = race.race_id;
+              const filters = raceFilters[raceId] || { search: '', gender: '', division: '' };
+              const showFilters = showFiltersForRace[raceId] || false;
+
+              const raceResults = results.filter((r) => r.race_id === raceId);
               const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
                 const bibStr = r.bib ? r.bib.toString() : '';
+                const searchLower = filters.search.toLowerCase();
                 const matchesSearch = nameLower.includes(searchLower) || bibStr.includes(searchLower);
                 const matchesGender = !filters.gender || r.gender === filters.gender;
                 const matchesDivision = !filters.division || r.age_group_name === filters.division;
                 return matchesSearch && matchesGender && matchesDivision;
               });
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-              const page = currentPages[race.race_id] || 1;
+              const page = currentPages[raceId] || 1;
               const start = (page - 1) * pageSize;
               const display = sorted.slice(start, start + pageSize);
               const totalPages = Math.ceil(sorted.length / pageSize);
 
               return (
                 <section
-                  key={race.race_id}
-                  ref={(el) => (raceRefs.current[race.race_id] = el)}
-                  className="mb-32 bg-white rounded-3xl shadow-2xl overflow-hidden border border-gemini-blue/30"
+                  key={raceId}
+                  ref={(el) => (raceRefs.current[raceId] = el)}
+                  className="mb-20 bg-white rounded-3xl shadow-2xl overflow-hidden border border-gemini-blue/30"
                 >
-                  <div className="bg-gradient-to-r from-gemini-blue to-gemini-blue/70 py-8 px-10">
-                    <h3 className="text-3xl md:text-4xl font-bold text-white text-center">
-                      {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
+                  <div className="bg-gradient-to-r from-gemini-blue to-gemini-blue/70 py-6 px-8">
+                    <h3 className="text-2xl md:text-3xl font-bold text-white text-center">
+                      {editedEvents[selectedEvent.id]?.races?.[raceId] || race.race_name}
                     </h3>
                   </div>
 
-                  {/* Filters */}
-                  <div className="p-8 border-b border-gray-200">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <input
-                        type="text"
-                        placeholder="Search by name or bib..."
-                        value={filters.search}
-                        onChange={(e) =>
-                          setRaceFilters((p) => ({
-                            ...p,
-                            [race.race_id]: { ...p[race.race_id], search: e.target.value },
-                          }))
-                        }
-                        className="px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue transition"
-                      />
-                      <select
-                        value={filters.gender}
-                        onChange={(e) =>
-                          setRaceFilters((p) => ({
-                            ...p,
-                            [race.race_id]: { ...p[race.race_id], gender: e.target.value },
-                          }))
-                        }
-                        className="px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue transition"
-                      >
-                        <option value="">All Genders</option>
-                        <option value="M">Male</option>
-                        <option value="F">Female</option>
-                      </select>
-                      <select
-                        value={filters.division}
-                        onChange={(e) =>
-                          setRaceFilters((p) => ({
-                            ...p,
-                            [race.race_id]: { ...p[race.race_id], division: e.target.value },
-                          }))
-                        }
-                        className="px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue transition"
-                      >
-                        <option value="">All Divisions</option>
-                        {uniqueDivisions.map((d) => (
-                          <option key={d} value={d}>
-                            {d}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {(filters.search || filters.gender || filters.division) && (
-                      <div className="text-center mt-8">
-                        <button
-                          onClick={() =>
+                  {/* Mobile: Collapsible Filters */}
+                  <div className="p-6 border-b border-gray-200">
+                    <button
+                      onClick={() => setShowFiltersForRace(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
+                      className="w-full text-left flex justify-between items-center py-3 text-lg font-semibold text-gemini-blue"
+                    >
+                      <span>{showFilters ? 'Hide' : 'Show'} Filters</span>
+                      <span className="text-2xl">{showFilters ? '−' : '+'}</span>
+                    </button>
+
+                    {showFilters && (
+                      <div className="mt-4 space-y-4">
+                        <input
+                          type="text"
+                          placeholder="Search by name or bib..."
+                          value={filters.search}
+                          onChange={(e) =>
                             setRaceFilters((p) => ({
                               ...p,
-                              [race.race_id]: { search: '', gender: '', division: '' },
+                              [raceId]: { ...p[raceId], search: e.target.value },
                             }))
                           }
-                          className="text-gemini-blue hover:underline font-medium"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+                        />
+                        <select
+                          value={filters.gender}
+                          onChange={(e) =>
+                            setRaceFilters((p) => ({
+                              ...p,
+                              [raceId]: { ...p[raceId], gender: e.target.value },
+                            }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
                         >
-                          Clear all filters
-                        </button>
+                          <option value="">All Genders</option>
+                          <option value="M">Male</option>
+                          <option value="F">Female</option>
+                        </select>
+                        <select
+                          value={filters.division}
+                          onChange={(e) =>
+                            setRaceFilters((p) => ({
+                              ...p,
+                              [raceId]: { ...p[raceId], division: e.target.value },
+                            }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+                        >
+                          <option value="">All Divisions</option>
+                          {uniqueDivisions.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                        {(filters.search || filters.gender || filters.division) && (
+                          <button
+                            onClick={() =>
+                              setRaceFilters((p) => ({
+                                ...p,
+                                [raceId]: { search: '', gender: '', division: '' },
+                              }))
+                            }
+                            className="w-full py-2 text-gemini-blue font-medium hover:underline"
+                          >
+                            Clear filters
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -460,7 +471,7 @@ export default function ResultsPage() {
                         onClick={() =>
                           setCurrentPages((p) => ({
                             ...p,
-                            [race.race_id]: Math.max(1, (p[race.race_id] || 1) - 1),
+                            [raceId]: Math.max(1, (p[raceId] || 1) - 1),
                           }))
                         }
                         disabled={page === 1}
@@ -475,13 +486,25 @@ export default function ResultsPage() {
                         onClick={() =>
                           setCurrentPages((p) => ({
                             ...p,
-                            [race.race_id]: page + 1,
+                            [raceId]: page + 1,
                           }))
                         }
                         disabled={page >= totalPages}
                         className="px-10 py-4 bg-gemini-blue text-white rounded-full font-bold disabled:opacity-50 hover:bg-gemini-blue/90 transition shadow-lg"
                       >
                         Next →
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Back to Top Button */}
+                  {sorted.length > 30 && (
+                    <div className="text-center py-8">
+                      <button
+                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        className="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-medium"
+                      >
+                        ↑ Back to Top
                       </button>
                     </div>
                   )}
