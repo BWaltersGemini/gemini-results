@@ -106,7 +106,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // Fetch races first (for reference)
+  // Fetch races first (for reference and logging)
   let races = [];
   try {
     const racesResponse = await axios.get(`${PROXY_BASE}/api/event/${eventId}/race`, {
@@ -119,6 +119,11 @@ export const fetchResultsForEvent = async (eventId) => {
       distance: race.race_distance,
       distance_unit: race.race_distance_unit,
     }));
+
+    console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races:`);
+    races.forEach(race => {
+      console.log(`   - Race ID: ${race.race_id} | Name: ${race.race_name} | Distance: ${race.distance}${race.distance_unit || ''}`);
+    });
   } catch (err) {
     console.warn('[ChronoTrack] Failed to fetch races for event', eventId, err);
   }
@@ -148,6 +153,10 @@ export const fetchResultsForEvent = async (eventId) => {
     const name = (b.bracket_name || '').toLowerCase();
     return name.includes('overall') || name.includes('all participants');
   });
+
+  console.log(`[ChronoTrack] Found ${genderBrackets.length} gender brackets (Male/Female overall per race)`);
+  console.log(`[ChronoTrack] Found ${divisionBrackets.length} division brackets (age/specialty per race)`);
+  console.log(`[ChronoTrack] Found ${overallBrackets.length} overall brackets`);
 
   // Fetch all overall results first
   let allResults = [];
@@ -191,7 +200,12 @@ export const fetchResultsForEvent = async (eventId) => {
 
   // === GENDER PLACES ===
   for (const bracket of genderBrackets) {
-    const name = (bracket.bracket_name || '').trim();
+    const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
+    const raceId = bracket.race_id || 'unknown';
+    const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
+    console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName} | ID: ${raceId})`);
+
     let bracketResults = [];
     let bPage = 1;
 
@@ -212,7 +226,7 @@ export const fetchResultsForEvent = async (eventId) => {
         bPage++;
       }
 
-      console.log(`[ChronoTrack] GENDER "${name}" loaded ${bracketResults.length} results`);
+      console.log(`[ChronoTrack] GENDER "${name}" → Loaded ${bracketResults.length} ranked participants (from ${raceName})`);
 
       bracketResults.forEach(r => {
         const key = getLookupKey(r);
@@ -221,7 +235,7 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed GENDER bracket "${name}" (${bracket.bracket_id})`, err);
+      console.warn(`[ChronoTrack] Failed GENDER bracket "${name}" in ${raceName}`, err);
     }
   }
 
@@ -234,6 +248,11 @@ export const fetchResultsForEvent = async (eventId) => {
     const isOverallLike = lowerName.includes('overall') || lowerName.includes('all participants');
     if (isOverallLike) continue;
 
+    const raceId = bracket.race_id || 'unknown';
+    const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
+    console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName} | ID: ${raceId})`);
+
     let bracketResults = [];
     let bPage = 1;
 
@@ -254,7 +273,7 @@ export const fetchResultsForEvent = async (eventId) => {
         bPage++;
       }
 
-      console.log(`[ChronoTrack] DIVISION "${name}" loaded ${bracketResults.length} results`);
+      console.log(`[ChronoTrack] DIVISION "${name}" → Loaded ${bracketResults.length} ranked participants (from ${raceName})`);
 
       bracketResults.forEach(r => {
         const key = getLookupKey(r);
@@ -264,13 +283,16 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed DIVISION bracket "${name}" (${bracket.bracket_id})`, err);
+      console.warn(`[ChronoTrack] Failed DIVISION bracket "${name}" in ${raceName}`, err);
     }
   }
 
   // === FALLBACK: Overall as division ===
   for (const bracket of overallBrackets) {
     const name = (bracket.bracket_name || '').trim();
+    const raceId = bracket.race_id || 'unknown';
+    const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
     let bracketResults = [];
     let bPage = 1;
 
@@ -301,7 +323,7 @@ export const fetchResultsForEvent = async (eventId) => {
         }
       });
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed OVERALL fallback bracket "${name}"`, err);
+      console.warn(`[ChronoTrack] Failed OVERALL fallback bracket "${name}" in ${raceName}`, err);
     }
   }
 
