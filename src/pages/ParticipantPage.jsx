@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Perfect Preview Fit + Larger Time/Rankings + No Overlap)
+// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Shareable Card + No Cropping)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -38,6 +38,7 @@ export default function ParticipantPage() {
   const [fetchError, setFetchError] = useState(null);
   const [timeRevealed, setTimeRevealed] = useState(false);
   const [showCardPreview, setShowCardPreview] = useState(false);
+
   const cardRef = useRef(null);
 
   useEffect(() => {
@@ -62,12 +63,14 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Fetch data
+  // Fetch participant data if not passed via navigation state
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) return;
+
       setLoading(true);
       setFetchError(null);
+
       try {
         if (contextLoading || events.length === 0) {
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -75,12 +78,14 @@ export default function ParticipantPage() {
         if (events.length === 0) throw new Error('Events not loaded yet');
 
         let targetEvent = selectedEvent || contextSelectedEvent;
+
         if (!targetEvent) {
           const resultWithBib = contextResults?.find(r => String(r.bib) === String(bib));
           if (resultWithBib) {
             targetEvent = events.find(e => e.id === resultWithBib.event_id);
           }
         }
+
         if (!targetEvent) throw new Error('Event not found');
 
         setLocalSelectedEvent(targetEvent);
@@ -92,11 +97,13 @@ export default function ParticipantPage() {
           .eq('event_id', targetEvent.id);
 
         if (resultsError) throw resultsError;
+
         const allResults = fetchedResults || [];
         setResults(allResults);
 
         const found = allResults.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found with this bib');
+
         setParticipant(found);
       } catch (err) {
         console.error('[ParticipantPage] Load error:', err);
@@ -105,10 +112,11 @@ export default function ParticipantPage() {
         setLoading(false);
       }
     };
+
     fetchDataIfMissing();
   }, [bib, events, contextResults, contextLoading, initialState]);
 
-  // Confetti
+  // Confetti on time reveal
   const handleTimeComplete = () => {
     setTimeRevealed(true);
     confetti({
@@ -119,16 +127,21 @@ export default function ParticipantPage() {
     });
   };
 
-  // Card Generation
+  // Generate and download card
   const generateResultCard = async () => {
     if (!cardRef.current) return;
+
     try {
       const canvas = await html2canvas(cardRef.current, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
         allowTaint: true,
+        backgroundColor: null,
         logging: false,
+        width: 1080,
+        height: 1080,
       });
+
       const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.download = `${participant.first_name}_${participant.last_name}_result.png`;
@@ -140,17 +153,24 @@ export default function ParticipantPage() {
     }
   };
 
+  // Share via Web Share API or fallback to download
   const shareResultCard = async () => {
     if (!cardRef.current) return;
+
     try {
       const canvas = await html2canvas(cardRef.current, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
         allowTaint: true,
+        backgroundColor: null,
+        width: 1080,
+        height: 1080,
       });
+
       canvas.toBlob(async (blob) => {
         const file = new File([blob], 'result-card.png', { type: 'image/png' });
-        if (navigator.share) {
+
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
             title: 'My Race Result!',
@@ -165,11 +185,13 @@ export default function ParticipantPage() {
     }
   };
 
+  // Navigation helpers
   const goBackToResults = () => {
     if (!selectedEvent) {
       navigate('/results');
       return;
     }
+
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
@@ -178,6 +200,7 @@ export default function ParticipantPage() {
     if (foundMaster) {
       masterSlug = slugify(foundMaster[0]);
     }
+
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
@@ -187,6 +210,7 @@ export default function ParticipantPage() {
       goBackToResults();
       return;
     }
+
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
@@ -195,6 +219,7 @@ export default function ParticipantPage() {
     if (foundMaster) {
       masterSlug = slugify(foundMaster[0]);
     }
+
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`, {
       state: {
@@ -235,11 +260,13 @@ export default function ParticipantPage() {
   const overallTotal = results.length;
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
+
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
+
   const chipTimeSeconds = parseChipTime(participant.chip_time);
 
-  // Master logo priority
+  // Master series logo priority
   const currentMasterKey = Object.keys(masterGroups).find(key =>
     masterGroups[key]?.includes(selectedEvent?.id?.toString())
   );
@@ -248,6 +275,7 @@ export default function ParticipantPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
+
         {/* Header */}
         <div className="text-center mb-8">
           {eventLogos[selectedEvent.id] ? (
@@ -319,7 +347,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Animated Chip Time */}
+        {/* Animated Times */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
@@ -343,12 +371,10 @@ export default function ParticipantPage() {
               )}
             </p>
           </div>
-
           <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gun Time</p>
             <p className="text-5xl font-black text-gray-800">{formatChronoTime(participant.clock_time)}</p>
           </div>
-
           <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
             <p className="text-5xl font-black text-green-700">
@@ -393,7 +419,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Result Card Generator Button */}
+        {/* Create Card Button */}
         <div className="text-center my-16">
           <button
             onClick={() => setShowCardPreview(true)}
@@ -403,82 +429,82 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden Card for Generation (High Resolution) */}
+        {/* Hidden High-Res Card for Generation */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
-            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-center text-center px-16 py-24"
+            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-10 pt-12 pb-10"
             style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
-            {/* White Logo Section */}
-            <div className="w-full bg-white rounded-3xl shadow-2xl p-12 mb-16 flex items-center justify-center">
+            {/* Logo Section */}
+            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl p-10 mb-10 flex items-center justify-center">
               {masterLogo ? (
-                <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-80 object-contain" crossOrigin="anonymous" />
+                <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-64 object-contain" crossOrigin="anonymous" />
               ) : eventLogos[selectedEvent.id] ? (
-                <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-72 object-contain" crossOrigin="anonymous" />
+                <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-60 object-contain" crossOrigin="anonymous" />
               ) : (
-                <h2 className="text-7xl font-black text-gemini-dark-gray">
+                <h2 className="text-6xl font-black text-gemini-dark-gray leading-tight">
                   {selectedEvent.name}
                 </h2>
               )}
             </div>
 
             {/* Race Name */}
-            <p className="text-7xl font-black text-[#80ccd6] mb-8 drop-shadow-2xl">
+            <p className="text-5xl font-black text-[#80ccd6] mb-6 drop-shadow-lg">
               {raceDisplayName}
             </p>
 
             {/* Date */}
-            <p className="text-5xl text-gray-300 mb-20">
+            <p className="text-4xl text-gray-300 mb-12">
               {formatDate(selectedEvent.start_time)}
             </p>
 
             {/* Runner Name */}
-            <h1 className="text-8xl font-black text-white mb-20 drop-shadow-2xl leading-tight">
+            <h1 className="text-7xl font-black text-white mb-12 drop-shadow-2xl leading-none px-8">
               {participant.first_name}<br />{participant.last_name}
             </h1>
 
-            {/* Finish Time - MASSIVE */}
-            <div className="mb-24">
-              <p className="text-6xl text-gray-400 uppercase tracking-widest mb-8">Finish Time</p>
-              <p className="text-14xl font-black text-[#ffd700] drop-shadow-2xl">
+            {/* Finish Time */}
+            <div className="mb-16">
+              <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
+              <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
                 {formatChronoTime(participant.chip_time)}
               </p>
             </div>
 
-            {/* Rankings - Larger */}
-            <div className="grid grid-cols-3 gap-20 text-white">
+            {/* Rankings */}
+            <div className="grid grid-cols-3 gap-12 text-white w-full max-w-5xl">
               <div>
-                <p className="text-5xl text-gray-400 uppercase mb-6">Overall</p>
-                <p className="text-10xl font-bold text-[#ffd700]">
+                <p className="text-3xl text-gray-400 uppercase mb-4">Overall</p>
+                <p className="text-7xl font-bold text-[#ffd700] leading-none">
                   {participant.place || '—'}
                 </p>
-                <p className="text-5xl text-gray-400 mt-6">of {overallTotal}</p>
+                <p className="text-3xl text-gray-400 mt-4">of {overallTotal}</p>
               </div>
               <div>
-                <p className="text-5xl text-gray-400 uppercase mb-6">Gender</p>
-                <p className="text-10xl font-bold text-[#ffd700]">
+                <p className="text-3xl text-gray-400 uppercase mb-4">Gender</p>
+                <p className="text-7xl font-bold text-[#ffd700] leading-none">
                   {participant.gender_place || '—'}
                 </p>
-                <p className="text-5xl text-gray-400 mt-6">of {genderTotal}</p>
+                <p className="text-3xl text-gray-400 mt-4">of {genderTotal}</p>
               </div>
               <div>
-                <p className="text-5xl text-gray-400 uppercase mb-6">Division</p>
-                <p className="text-10xl font-bold text-[#ffd700]">
+                <p className="text-3xl text-gray-400 uppercase mb-4">Division</p>
+                <p className="text-7xl font-bold text-[#ffd700] leading-none">
                   {participant.age_group_place || '—'}
                 </p>
-                <p className="text-5xl text-gray-400 mt-6">of {divisionTotal}</p>
+                <p className="text-3xl text-gray-400 mt-4">of {divisionTotal}</p>
               </div>
             </div>
 
-            {/* Branding - Lower to avoid overlap */}
-            <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-4xl text-gray-500">
+            {/* Footer Branding */}
+            <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
               Timed by Gemini Timing • www.geminitiming.com
             </p>
           </div>
         </div>
 
-        {/* Card Preview Modal — Now Fully Visible & Zoomed Out */}
+        {/* Preview Modal */}
         {showCardPreview && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8" onClick={(e) => e.stopPropagation()}>
@@ -487,49 +513,43 @@ export default function ParticipantPage() {
                 <p className="text-xl text-gray-600 mt-4">This is exactly what will be shared!</p>
               </div>
 
-              {/* Preview — Scaled down to fit completely */}
               <div className="flex justify-center mb-10">
-                <div className="w-full max-w-md aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl scale-85 origin-center">
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center text-white">
-                    <div className="w-full bg-white rounded-2xl p-8 mb-8">
+                <div className="w-96 h-96 bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl">
+                  <div className="h-full flex flex-col items-center justify-start px-4 pt-6 pb-4 text-center text-white text-sm">
+                    <div className="w-full bg-white rounded-2xl p-5 mb-4">
                       {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-36 object-contain" />
+                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-24 object-contain" />
                       ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-32 object-contain" />
+                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-20 object-contain" />
                       ) : (
-                        <h2 className="text-4xl font-black text-gemini-dark-gray">
-                          {selectedEvent.name}
-                        </h2>
+                        <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
                       )}
                     </div>
 
-                    <p className="text-4xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
-                    <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-
-                    <h1 className="text-4xl font-black mb-8 leading-tight">
+                    <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
+                    <p className="text-lg text-gray-300 mb-4">{formatDate(selectedEvent.start_time)}</p>
+                    <h1 className="text-3xl font-black mb-4 leading-none">
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
-
-                    <p className="text-2xl text-gray-400 uppercase mb-4">Finish Time</p>
-                    <p className="text-5xl font-black text-[#ffd700] mb-10">
+                    <p className="text-lg text-gray-400 uppercase mb-2">Finish Time</p>
+                    <p className="text-5xl font-black text-[#ffd700] mb-6">
                       {formatChronoTime(participant.chip_time)}
                     </p>
-
-                    <div className="grid grid-cols-3 gap-4 text-lg">
+                    <div className="grid grid-cols-3 gap-4 text-xs w-full">
                       <div>
                         <p className="text-gray-400 uppercase">Overall</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
-                        <p className="text-gray-400 text-sm">of {overallTotal}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                        <p className="text-gray-400">of {overallTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Gender</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
-                        <p className="text-gray-400 text-sm">of {genderTotal}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                        <p className="text-gray-400">of {genderTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Division</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
-                        <p className="text-gray-400 text-sm">of {divisionTotal}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                        <p className="text-gray-400">of {divisionTotal}</p>
                       </div>
                     </div>
                   </div>
