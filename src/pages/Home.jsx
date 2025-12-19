@@ -188,7 +188,7 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
             <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
               <p className="text-5xl md:text-7xl lg:text-8xl font-black text-gemini-blue mb-4 leading-tight">
-                {displayAthletes.toLocaleString()}+
+                {displayAthletes.toLocaleString()}
               </p>
               <p className="text-xl md:text-2xl font-semibold text-gemini-dark-gray">
                 Athletes Timed
@@ -196,7 +196,7 @@ export default function Home() {
             </div>
             <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
               <p className="text-5xl md:text-7xl lg:text-8xl font-black text-gemini-blue mb-4 leading-tight">
-                {displayRaces.toLocaleString()}+
+                {displayRaces.toLocaleString()}
               </p>
               <p className="text-xl md:text-2xl font-semibold text-gemini-dark-gray">
                 Races Timed
