@@ -1,8 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL COMPLETE — With Debug Logging for Year Dropdown Issue)
+// src/pages/ResultsPage.jsx (FINAL COMPLETE — Permanent Fresh Config Load + Fixed Year Dropdown)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
+import { loadAppConfig } from '../utils/appConfig';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -45,32 +46,39 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Event selection logic with debug logging
+  // === PERMANENT FIX: Force fresh config load when visiting a specific results page ===
+  useEffect(() => {
+    if (masterKey && year) {
+      // Clear potentially stale config from localStorage
+      localStorage.removeItem('masterGroups');
+      localStorage.removeItem('editedEvents');
+      localStorage.removeItem('eventLogos');
+      localStorage.removeItem('hiddenMasters');
+      localStorage.removeItem('showAdsPerMaster');
+      localStorage.removeItem('ads');
+      localStorage.removeItem('hiddenRaces');
+
+      // Trigger fresh load from Supabase
+      loadAppConfig();
+      console.log('[ResultsPage] Cleared localStorage cache and triggered fresh config load');
+    }
+  }, [masterKey, year]);
+
+  // Event selection logic
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
     const urlSlug = slugify(decodeURIComponent(masterKey));
-    console.log('[ResultsPage] URL masterKey:', masterKey);
-    console.log('[ResultsPage] Computed urlSlug:', urlSlug);
-
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
 
-    console.log('[ResultsPage] All stored master keys:', Object.keys(masterGroups));
-    console.log('[ResultsPage] Slugified stored keys:', Object.keys(masterGroups).map(slugify));
-    console.log('[ResultsPage] Matched storedMasterKey:', storedMasterKey);
-
     if (!storedMasterKey) return;
 
     const groupEventIds = masterGroups[storedMasterKey] || [];
-    console.log('[ResultsPage] Linked event IDs for matched master:', groupEventIds);
-
     const yearEvents = events
       .filter((e) => groupEventIds.includes(e.id.toString()) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
-    console.log('[ResultsPage] Found yearEvents for', year, ':', yearEvents.length);
 
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
@@ -92,36 +100,19 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // === YEAR SELECTOR LOGIC WITH EXTENSIVE DEBUG LOGGING ===
+  // === YEAR SELECTOR LOGIC — ALWAYS VISIBLE ===
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
-    console.log('[ResultsPage Year Dropdown] URL masterKey:', masterKey);
-    console.log('[ResultsPage Year Dropdown] urlSlug:', urlSlug);
-
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
 
-    console.log('[ResultsPage Year Dropdown] All stored master keys:', Object.keys(masterGroups));
-    console.log('[ResultsPage Year Dropdown] Slugified stored keys:', Object.keys(masterGroups).map(slugify));
-    console.log('[ResultsPage Year Dropdown] Matched storedMasterKey:', storedMasterKey);
-
     if (storedMasterKey) {
       const linkedEventIds = masterGroups[storedMasterKey] || [];
-      console.log('[ResultsPage Year Dropdown] Linked event IDs:', linkedEventIds);
-
       const linkedEvents = events.filter(e => linkedEventIds.includes(e.id.toString()));
-      console.log('[ResultsPage Year Dropdown] Found linked events:', linkedEvents.length);
-      console.log('[ResultsPage Year Dropdown] Linked events details:', linkedEvents.map(e => ({ id: e.id, name: e.name, year: getYearFromEvent(e) })));
-
       availableYears = [...new Set(linkedEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
-      console.log('[ResultsPage Year Dropdown] Final availableYears:', availableYears);
-    } else {
-      console.log('[ResultsPage Year Dropdown] No master key matched — dropdown will not show');
     }
-  } else {
-    console.log('[ResultsPage Year Dropdown] No masterKey or no masterGroups — dropdown hidden');
   }
 
   const handleYearChange = (newYear) => {
