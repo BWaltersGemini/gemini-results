@@ -1,8 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL — Mobile Improvements + 3 Recent Masters + Upcoming Events)
+// src/pages/ResultsPage.jsx (FINAL — Clean times + Mobile year buttons + Finishers only + Bib/Name search)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
+import { formatChronoTime } from '../utils/timeUtils'; // ← Clean time formatter
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -25,11 +26,12 @@ export default function ResultsPage() {
 
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
-
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
-  const [showFiltersForRace, setShowFiltersForRace] = useState({}); // per-race toggle
+  const [showFiltersForRace, setShowFiltersForRace] = useState({});
+  const [searchQuery, setSearchQuery] = useState(''); // NEW: Global Bib/Name search
+
   const raceRefs = useRef({});
 
   const slugify = (text) => {
@@ -70,7 +72,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection
+  // Event selection logic
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -91,7 +93,7 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Auto-scroll from participant
+  // Auto-scroll from participant page
   useEffect(() => {
     if (location.state?.autoFilterDivision && location.state?.autoFilterRaceId && selectedEvent) {
       const { autoFilterDivision, autoFilterRaceId } = location.state;
@@ -107,14 +109,13 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // Year selector
+  // Available years for current master
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
-
     if (storedMasterKey) {
       const linkedEventIds = masterGroups[storedMasterKey] || [];
       const linkedEvents = events.filter(e => linkedEventIds.includes(e.id.toString()));
@@ -123,6 +124,7 @@ export default function ResultsPage() {
   }
 
   const handleYearChange = (newYear) => {
+    if (newYear === year) return;
     navigate(`/results/${masterKey}/${newYear}${raceSlug ? '/' + raceSlug : ''}`);
   };
 
@@ -130,7 +132,6 @@ export default function ResultsPage() {
     let targetEvent = selectedEvent;
     let eventMaster = masterKey;
     let eventYear = year;
-
     if (!targetEvent || !eventMaster || !eventYear) {
       const participantEventId = participant.event_id || selectedEvent?.id;
       targetEvent = events.find((e) => e.id === participantEventId);
@@ -139,22 +140,19 @@ export default function ResultsPage() {
       eventYear = getYearFromEvent(targetEvent);
       setSelectedEvent(targetEvent);
     }
-
     const participantRace = selectedEvent.races?.find((r) => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const masterSlug = slugify(eventMaster);
     const raceSlugPart = slugify(raceName);
-
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
       replace: true,
     });
   };
 
-  // MASTER LANDING PAGE — 3 Most Recent + Upcoming Events
+  // MASTER LANDING PAGE — 3 Most Recent Masters + Upcoming Events
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
-
     const masterEventTiles = visibleMasters
       .map((storedKey) => {
         const displayName = editedEvents[storedKey]?.name || storedKey;
@@ -267,6 +265,14 @@ export default function ResultsPage() {
     displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
   }
 
+  // Global Bib/Name search across all races
+  const globalFilteredResults = searchQuery
+    ? results.filter(r =>
+        r.bib?.toString().includes(searchQuery) ||
+        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : results;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
       <div className="max-w-7xl mx-auto px-6">
@@ -283,33 +289,47 @@ export default function ResultsPage() {
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
 
-          {/* YEAR DROPDOWN */}
+          {/* Year Buttons + Search */}
           {availableYears.length > 0 && (
-            <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
-              <span className="text-2xl font-bold text-gemini-dark-gray">Select Year</span>
-              <select
-                value={year || availableYears[0]}
-                onChange={(e) => handleYearChange(e.target.value)}
-                className="w-full md:w-auto px-8 py-4 text-xl font-bold rounded-xl border-4 border-gemini-blue bg-white shadow-xl hover:shadow-2xl transition focus:outline-none cursor-pointer"
-              >
+            <div className="flex flex-col items-center gap-6 mb-12">
+              {/* Year Buttons — Mobile-friendly */}
+              <div className="flex flex-wrap justify-center gap-3">
+                <span className="text-xl font-bold text-gray-700 self-center mr-4">Year:</span>
                 {availableYears.map((y) => (
-                  <option key={y} value={y} className="text-lg">
+                  <button
+                    key={y}
+                    onClick={() => handleYearChange(y)}
+                    className={`px-6 py-3 rounded-full font-bold text-lg transition ${
+                      y === year
+                        ? 'bg-gemini-blue text-white shadow-lg'
+                        : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-gemini-blue hover:text-gemini-blue'
+                    }`}
+                  >
                     {y}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
+
+              {/* Bib/Name Search */}
+              <div className="w-full max-w-md">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by Bib or Name..."
+                  className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-gemini-blue/50 focus:border-gemini-blue shadow-inner"
+                />
+              </div>
             </div>
           )}
         </div>
 
-        {/* Race Tiles — Mobile Optimized */}
+        {/* Race Tiles */}
         {displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
-              const raceResults = results.filter((r) => r.race_id === race.race_id);
-              const starters = raceResults.length;
+              const raceResults = globalFilteredResults.filter((r) => r.race_id === race.race_id);
               const finishers = raceResults.filter((r) => r.chip_time && r.chip_time.trim() !== '').length;
-
               return (
                 <button
                   key={race.race_id}
@@ -318,16 +338,11 @@ export default function ResultsPage() {
                 >
                   <div className="p-6 md:p-8 text-center">
                     <h3 className="text-xl md:text-2xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
-                      {race.race_name}
+                      {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
                     </h3>
-                    <div className="space-y-2 text-gray-700">
-                      <p className="text-base">
-                        <span className="font-bold text-lg">{starters}</span> Starters
-                      </p>
-                      <p className="text-base">
-                        <span className="font-bold text-lg">{finishers}</span> Finishers
-                      </p>
-                    </div>
+                    <p className="text-base text-gray-700">
+                      <span className="font-bold text-lg text-gemini-blue">{finishers}</span> Finishers
+                    </p>
                   </div>
                   <div className="py-4 bg-gemini-blue/10 rounded-b-2xl">
                     <span className="text-gemini-blue font-bold text-lg">View Results →</span>
@@ -355,8 +370,7 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const filters = raceFilters[raceId] || { search: '', gender: '', division: '' };
               const showFilters = showFiltersForRace[raceId] || false;
-
-              const raceResults = results.filter((r) => r.race_id === raceId);
+              const raceResults = globalFilteredResults.filter((r) => r.race_id === raceId);
               const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
                 const bibStr = r.bib ? r.bib.toString() : '';
@@ -384,7 +398,7 @@ export default function ResultsPage() {
                     </h3>
                   </div>
 
-                  {/* Mobile: Collapsible Filters */}
+                  {/* Mobile Filters Toggle */}
                   <div className="p-6 border-b border-gray-200">
                     <button
                       onClick={() => setShowFiltersForRace(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
@@ -393,7 +407,6 @@ export default function ResultsPage() {
                       <span>{showFilters ? 'Hide' : 'Show'} Filters</span>
                       <span className="text-2xl">{showFilters ? '−' : '+'}</span>
                     </button>
-
                     {showFilters && (
                       <div className="mt-4 space-y-4">
                         <input
@@ -466,7 +479,7 @@ export default function ResultsPage() {
 
                   {/* Pagination */}
                   {sorted.length > pageSize && (
-                    <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mt-12 p-8 bg-gray-50">
+                    <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mt-12 p-8 bg-gray-50 rounded-b-3xl">
                       <button
                         onClick={() =>
                           setCurrentPages((p) => ({
@@ -497,7 +510,7 @@ export default function ResultsPage() {
                     </div>
                   )}
 
-                  {/* Back to Top Button */}
+                  {/* Back to Top */}
                   {sorted.length > 30 && (
                     <div className="text-center py-8">
                       <button

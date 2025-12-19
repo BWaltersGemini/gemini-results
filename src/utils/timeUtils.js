@@ -1,8 +1,4 @@
-// src/utils/timeUtils.js
-/**
- * Parse chip_time string (e.g., "59:59", "1:23:45", "1:23:45.6") into seconds (float)
- * Returns Infinity if invalid
- */
+// src/utils/timeUtils.js (UPDATED — Added clean time formatter)
 export const parseChipTime = (timeStr) => {
   if (!timeStr || timeStr.trim() === '') return Infinity;
 
@@ -23,4 +19,52 @@ export const parseChipTime = (timeStr) => {
   }
 
   return Infinity;
+};
+
+/**
+ * Format ChronoTrack time string to HH:MM:SS.s with no leading zeros
+ * Examples:
+ *   "1:23:45.678" → "1:23:45.6"
+ *   "59:59.123"   → "59:59.1"
+ *   "12:15.550"   → "12:15.5"
+ *   "5.300"       → "5.3"
+ *   "0:05:30.000" → "5:30.0"
+ */
+export const formatChronoTime = (timeStr) => {
+  if (!timeStr || timeStr.trim() === '' || timeStr === '—') return '—';
+
+  const trimmed = timeStr.trim();
+  let [timePart, decimal = ''] = trimmed.split('.');
+  const parts = timePart.split(':').map(p => parseInt(p, 10));
+
+  let hours = 0;
+  let minutes = 0;
+  let seconds = 0;
+
+  if (parts.length === 3) {
+    [hours, minutes, seconds] = parts;
+  } else if (parts.length === 2) {
+    [minutes, seconds] = parts;
+  } else if (parts.length === 1) {
+    seconds = parts[0];
+  }
+
+  const formattedParts = [];
+
+  // Only include hours if > 0
+  if (hours > 0) {
+    formattedParts.push(hours);
+  }
+
+  // Minutes: always 2 digits if hours present, otherwise no leading zero
+  if (hours > 0 || minutes > 0) {
+    formattedParts.push(minutes.toString().padStart(2, '0'));
+  }
+
+  // Seconds: always 2 digits, plus one decimal if present
+  const secsInteger = seconds.toString().padStart(2, '0');
+  const decimalPart = decimal ? `.${decimal.charAt(0)}` : '';
+  formattedParts.push(secsInteger + decimalPart);
+
+  return formattedParts.join(':');
 };
