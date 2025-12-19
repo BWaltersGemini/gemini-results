@@ -1,8 +1,7 @@
-// src/components/Navbar.jsx (FINAL — Fully compatible with new schema: uses start_time only)
+// src/components/Navbar.jsx (FINAL — Uses Fresh masterGroups from Context)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
-import { useLocalStorage } from '../utils/useLocalStorage';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -13,10 +12,9 @@ export default function Navbar() {
     selectedEvent,
     setSelectedEvent,
     loading = true,
+    masterGroups = {},   // Fresh from context
+    editedEvents = {},   // Fresh from context
   } = useContext(RaceContext);
-
-  const [masterGroups, , isMasterGroupsLoading] = useLocalStorage('masterGroups', {});
-  const [editedEvents] = useLocalStorage('editedEvents', {});
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isListOpen, setIsListOpen] = useState(false);
@@ -44,7 +42,7 @@ export default function Navbar() {
     }
   }, [selectedEvent]);
 
-  // Build master event list using start_time
+  // Build master event list using fresh masterGroups from context
   const masterEventList = Object.keys(masterGroups).map((storedKey) => {
     const displayName = editedEvents[storedKey]?.name || storedKey;
     const eventIds = masterGroups[storedKey] || [];
@@ -96,11 +94,9 @@ export default function Navbar() {
     if (location.pathname.startsWith('/results')) {
       e.preventDefault();
     }
-
     setSelectedEvent(null);
     setSearchTerm('');
     setIsListOpen(false);
-
     navigate('/results');
     setIsMobileMenuOpen(false);
   };
@@ -173,7 +169,7 @@ export default function Navbar() {
         {/* Dropdown Results List */}
         {isListOpen && (
           <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
-            {loading || isMasterGroupsLoading ? (
+            {loading ? (
               <div className="p-8 text-center">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gemini-blue"></div>
                 <p className="mt-4 text-gray-600">Loading events...</p>
@@ -232,7 +228,7 @@ export default function Navbar() {
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="block text-lg font-medium text-gray-700 hover:text-gemini-blue"
                   >
-                    Sign up for More Races
+                    Keep Moving...
                   </a>
                 </div>
               </div>
