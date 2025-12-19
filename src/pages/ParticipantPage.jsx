@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Fixed: Stats visible + Card button below + Preview zoomed out)
+// src/pages/ParticipantPage.jsx (FINAL — Preview Card Now Fits Perfectly on All Screens)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -393,7 +393,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Result Card Generator Button — Now correctly placed below stats/splits */}
+        {/* Result Card Generator Button */}
         <div className="text-center my-16">
           <button
             onClick={() => setShowCardPreview(true)}
@@ -478,57 +478,57 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Card Preview Modal — Zoomed out to fit fully */}
+        {/* Card Preview Modal — Now Properly Zoomed Out to Fit */}
         {showCardPreview && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowCardPreview(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 overflow-auto max-h-full" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8" onClick={(e) => e.stopPropagation()}>
               <div className="text-center mb-8">
                 <h3 className="text-4xl font-bold">Your Result Card 🎉</h3>
                 <p className="text-xl text-gray-600 mt-4">This is exactly what will be shared!</p>
               </div>
 
-              {/* Zoomed-out Preview */}
-              <div className="flex justify-center mb-8">
-                <div className="w-full max-w-md aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl scale-90">
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center text-white">
-                    <div className="w-full bg-white rounded-2xl p-8 mb-8">
+              {/* Scaled Preview That Fits */}
+              <div className="flex justify-center mb-10">
+                <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl scale-95">
+                  <div className="h-full flex flex-col items-center justify-center p-6 text-center text-white">
+                    <div className="w-full bg-white rounded-2xl p-6 mb-6">
                       {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-40 object-contain" />
+                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-32 object-contain" />
                       ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-32 object-contain" />
+                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-28 object-contain" />
                       ) : (
-                        <h2 className="text-4xl font-black text-gemini-dark-gray">
+                        <h2 className="text-3xl font-black text-gemini-dark-gray">
                           {selectedEvent.name}
                         </h2>
                       )}
                     </div>
 
-                    <p className="text-4xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
-                    <p className="text-2xl text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
+                    <p className="text-3xl font-black text-[#80ccd6] mb-3">{raceDisplayName}</p>
+                    <p className="text-xl text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
 
-                    <h1 className="text-4xl font-black mb-8 leading-tight">
+                    <h1 className="text-3xl font-black mb-6 leading-tight">
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
 
-                    <p className="text-2xl text-gray-400 uppercase mb-4">Finish Time</p>
-                    <p className="text-5xl font-black text-[#ffd700] mb-10">
+                    <p className="text-xl text-gray-400 uppercase mb-3">Finish Time</p>
+                    <p className="text-5xl font-black text-[#ffd700] mb-8">
                       {formatChronoTime(participant.chip_time)}
                     </p>
 
-                    <div className="grid grid-cols-3 gap-4 text-lg">
+                    <div className="grid grid-cols-3 gap-3 text-base">
                       <div>
                         <p className="text-gray-400 uppercase">Overall</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
                         <p className="text-gray-400 text-sm">of {overallTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Gender</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
                         <p className="text-gray-400 text-sm">of {genderTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Division</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
                         <p className="text-gray-400 text-sm">of {divisionTotal}</p>
                       </div>
                     </div>
