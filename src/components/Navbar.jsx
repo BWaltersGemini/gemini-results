@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (FIXED — Search input text is now black/visible)
+// src/components/Navbar.jsx (FINAL — Added Clear button in search bar)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -128,6 +128,12 @@ export default function Navbar() {
     navigate('/');
   };
 
+  // Clear search term only
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setIsListOpen(true); // Keep dropdown open after clearing
+  };
+
   return (
     <>
       <nav ref={navbarRef} className="fixed top-0 w-full bg-white shadow-md z-50">
@@ -171,8 +177,18 @@ export default function Navbar() {
               }}
               onFocus={handleInputFocus}
               placeholder="Search Race Results..."
-              className="w-full p-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gemini-blue text-gray-900 placeholder-gray-500"
+              className="w-full p-3 pr-20 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gemini-blue text-gray-900 placeholder-gray-500"
             />
+            {/* Clear Button — appears only when there's text */}
+            {searchTerm && (
+              <button
+                onClick={handleClearSearch}
+                className="absolute right-14 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            )}
+            {/* Dropdown Toggle */}
             <button
               onClick={handleToggleOpen}
               className="absolute right-8 top-1/2 -translate-y-1/2 text-gemini-blue text-2xl"
