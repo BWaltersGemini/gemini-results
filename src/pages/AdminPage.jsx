@@ -1,11 +1,11 @@
-// src/pages/AdminPage.jsx (FINAL — Bulk Publish with Progress + Hide Mastered Events)
+// src/pages/AdminPage.jsx (FINAL — Bulk Publish with Progress + Hide Events with Masters)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
-import { RaceContext } from '../context/RaceContext';
+import { RaceContext } from '../context/RaceContext'; // For refreshResults
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -30,11 +30,11 @@ export default function AdminPage() {
   const [refreshingEvent, setRefreshingEvent] = useState(null);
   const [fetchingEvents, setFetchingEvents] = useState(false);
   const [publishingAll, setPublishingAll] = useState(false);
-  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 }); // NEW: progress
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [activeTab, setActiveTab] = useState('events');
   const [newMasterKeys, setNewMasterKeys] = useState({});
   const [saveStatus, setSaveStatus] = useState('');
-  const [hideMasteredEvents, setHideMasteredEvents] = useState(true); // NEW: checkbox
+  const [hideMasteredEvents, setHideMasteredEvents] = useState(true);
 
   const adminSupabase = createAdminSupabaseClient();
 
@@ -147,12 +147,10 @@ export default function AdminPage() {
     }
   };
 
-  // NEW: Bulk publish with progress
   const publishAllEvents = async () => {
-    if (!confirm(`Publish results for ALL ${chronoEvents.length} events?\nThis may take several minutes.`)) {
+    if (!confirm(`Publish results for ALL ${chronoEvents.length} events? This may take several minutes.`)) {
       return;
     }
-
     setPublishingAll(true);
     setBulkProgress({ current: 0, total: chronoEvents.length });
     let successCount = 0;
@@ -174,9 +172,8 @@ export default function AdminPage() {
     setSaveStatus(`Bulk publish complete: ${successCount} succeeded, ${failCount} failed`);
     setTimeout(() => setSaveStatus(''), 8000);
 
-    if (refreshResults) {
-      refreshResults();
-    }
+    // Trigger public refresh after bulk
+    if (refreshResults) refreshResults();
   };
 
   const formatDate = (epoch) => {
@@ -300,7 +297,6 @@ export default function AdminPage() {
         .from('chronotrack_results')
         .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
       if (error) throw error;
-
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
     } catch (err) {
       console.error('[Admin] Publish failed:', err);
@@ -311,14 +307,68 @@ export default function AdminPage() {
   };
 
   const handleFileUpload = async (e, type) => {
-    // unchanged
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    const urls = [];
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.url) urls.push(data.url);
+      } catch (err) {
+        console.error('Upload failed:', err);
+      }
+    }
+    if (type === 'ad') {
+      setAds(prev => [...prev, ...urls]);
+    }
   };
 
   if (!isLoggedIn) {
-    // unchanged login screen
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+          <h1 className="text-3xl font-bold text-center text-gemini-dark-gray mb-8">Admin Login</h1>
+          {error && <p className="text-red-600 text-center mb-4">{error}</p>}
+          <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full p-4 border border-gray-300 rounded-xl mb-4"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-4 border border-gray-300 rounded-xl mb-6"
+          />
+          <button
+            onClick={() => {
+              if (username === 'admin' && password === 'gemini2025') {
+                localStorage.setItem('adminLoggedIn', 'true');
+                setIsLoggedIn(true);
+              } else {
+                setError('Invalid credentials');
+              }
+            }}
+            className="w-full bg-gemini-blue text-white py-4 rounded-xl font-bold hover:bg-gemini-blue/90 transition"
+          >
+            Login
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  // Filter events for "Hide Events with Masters"
+  // Filter events for checkbox
   const displayedEvents = hideMasteredEvents
     ? chronoEvents.filter(event => !getCurrentMasterForEvent(event.id))
     : chronoEvents;
@@ -326,7 +376,6 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header & Logout */}
         <div className="flex justify-between items-center mb-12">
           <h1 className="text-4xl font-bold text-gemini-dark-gray">Admin Dashboard</h1>
           <button
@@ -346,9 +395,19 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tabs */}
         <div className="flex space-x-1 mb-8 bg-gray-100 p-1 rounded-xl w-fit">
-          {/* unchanged */}
+          <button
+            onClick={() => setActiveTab('events')}
+            className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'events' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+          >
+            Events & Masters
+          </button>
+          <button
+            onClick={() => setActiveTab('website')}
+            className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'website' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+          >
+            Website
+          </button>
         </div>
 
         {activeTab === 'events' && (
@@ -390,22 +449,150 @@ export default function AdminPage() {
               <div className="text-center py-20 bg-white rounded-2xl shadow">
                 <p className="text-xl text-gray-600">
                   {hideMasteredEvents 
-                    ? 'All events are assigned to masters or no events available.' 
+                    ? 'All events assigned to masters or no events available.' 
                     : 'No events cached yet.'}
                 </p>
                 <p className="text-gray-500 mt-2">Click "Fetch Latest Events" to load from ChronoTrack.</p>
               </div>
             ) : (
               displayedEvents.map((event) => {
-                // unchanged event cards
+                const currentMaster = getCurrentMasterForEvent(event.id);
+                const displayName = editedEvents[event.id]?.name || event.name;
+                const count = participantCounts[event.id] || 0;
+                return (
+                  <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                    <div
+                      className="p-6 cursor-pointer hover:bg-gemini-blue/5 transition flex justify-between items-center"
+                      onClick={() => toggleEventExpansion(event.id)}
+                    >
+                      <div>
+                        <h3 className="text-2xl font-bold text-gemini-dark-gray">
+                          {displayName} <span className="text-lg font-normal text-gray-500">({formatDate(event.start_time)})</span>
+                        </h3>
+                        <p className="text-gray-600 mt-1">
+                          ID: {event.id} • <strong>{count} participants published</strong>
+                        </p>
+                        {currentMaster && (
+                          <p className="text-sm text-gemini-blue font-medium mt-2">
+                            Master: {currentMaster}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-2xl text-gray-400">{expandedEvents[event.id] ? '−' : '+'}</span>
+                    </div>
+                    {expandedEvents[event.id] && (
+                      <div className="px-6 pb-6 border-t border-gray-200">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                          <div>
+                            <label className="block text-lg font-semibold text-gray-700 mb-2">Master Event</label>
+                            <div className="flex gap-3">
+                              <input
+                                type="text"
+                                list="master-keys"
+                                placeholder="Type or select master"
+                                value={newMasterKeys[event.id] || ''}
+                                onChange={(e) => setNewMasterKeys(prev => ({ ...prev, [event.id]: e.target.value }))}
+                                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl"
+                              />
+                              <datalist id="master-keys">
+                                {Object.keys(masterGroups).map(key => (
+                                  <option key={key} value={key} />
+                                ))}
+                              </datalist>
+                              <button
+                                onClick={() => assignToMaster(event.id, newMasterKeys[event.id] || currentMaster)}
+                                className="px-6 py-3 bg-gemini-blue text-white rounded-xl hover:bg-gemini-blue/90 font-medium transition"
+                              >
+                                Assign
+                              </button>
+                              {currentMaster && (
+                                <button
+                                  onClick={() => unlinkFromMaster(event.id)}
+                                  className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
+                                >
+                                  Unlink
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-lg font-semibold text-gray-700 mb-2">Display Name</label>
+                            <input
+                              type="text"
+                              value={displayName}
+                              onChange={(e) => handleEditEventName(event.id, e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-8 flex justify-center">
+                          <button
+                            onClick={() => refreshAndPublishResults(event.id)}
+                            disabled={refreshingEvent === event.id}
+                            className="px-10 py-4 bg-green-600 text-white text-xl font-bold rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition shadow-lg"
+                          >
+                            {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
+                          </button>
+                        </div>
+                        {event.races && event.races.length > 0 && (
+                          <div className="mt-8">
+                            <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">Races ({event.races.length})</h4>
+                            <div className="space-y-3">
+                              {event.races.map((race) => (
+                                <div key={race.race_id} className="flex items-center justify-between bg-gray-50 p-4 rounded-xl">
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={!(hiddenRaces[event.id] || []).includes(race.race_id)}
+                                      onChange={() => toggleRaceVisibility(event.id, race.race_id)}
+                                      className="h-5 w-5 text-gemini-blue rounded"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={editedEvents[event.id]?.races?.[race.race_id] || race.race_name}
+                                      onChange={(e) => handleEditRaceName(event.id, race.race_id, e.target.value)}
+                                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                    />
+                                  </div>
+                                  {race.distance && (
+                                    <span className="text-gray-600 ml-4">
+                                      {race.distance} {race.distance_unit || 'm'}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {(!event.races || event.races.length === 0) && (
+                          <div className="mt-8 text-center text-gray-500 italic">
+                            No races embedded for this event.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
               })
             )}
           </section>
         )}
 
-        {/* Website tab unchanged */}
         {activeTab === 'website' && (
-          // unchanged
+          <section className="space-y-12">
+            <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <h3 className="text-2xl font-bold mb-6">Advertisements</h3>
+              <input type="file" onChange={(e) => handleFileUpload(e, 'ad')} accept="image/*" multiple className="mb-6" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {ads.map((ad, i) => (
+                  <div key={i} className="rounded-xl overflow-hidden shadow-md hover:shadow-xl transition">
+                    <img src={ad} alt={`Ad ${i + 1}`} className="w-full h-48 object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
         )}
 
         <div className="text-center mt-16">
