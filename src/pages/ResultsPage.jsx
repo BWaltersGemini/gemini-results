@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Fixed Year Dropdown Matching + Always Visible)
+// src/pages/ResultsPage.jsx (FINAL COMPLETE — Fixed Multi-Year Dropdown Matching + Always Visible + Debug Logging Removed)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -45,7 +45,7 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Event selection logic
+  // Event selection logic — match on slugified key
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -81,7 +81,7 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // === YEAR SELECTOR LOGIC — FIXED MATCHING & ALWAYS VISIBLE ===
+  // === YEAR SELECTOR LOGIC — ALWAYS VISIBLE & CORRECT MATCHING ===
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -209,7 +209,7 @@ export default function ResultsPage() {
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
 
-          {/* YEAR DROPDOWN — ALWAYS VISIBLE & FIXED */}
+          {/* YEAR DROPDOWN — ALWAYS VISIBLE */}
           {availableYears.length > 0 && (
             <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
               <span className="text-2xl font-bold text-gemini-dark-gray">Select Year</span>
