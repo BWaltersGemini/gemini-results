@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Share/Download Card Matches Preview Exactly)
+// src/pages/ParticipantPage.jsx (FINAL — Shared Card Matches Preview Perfectly)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -119,14 +119,19 @@ export default function ParticipantPage() {
     });
   };
 
-  // Card Generation
+  // Card Generation — with CORS fix for logos
   const generateResultCard = async () => {
     if (!cardRef.current) return;
     try {
-      const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, allowTaint: true });
+      const canvas = await html2canvas(cardRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+      });
       const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.download = `${participant.first_name}_${participant.last_name}_gemini_result.png`;
+      link.download = `${participant.first_name}_${participant.last_name}_result.png`;
       link.href = image;
       link.click();
     } catch (err) {
@@ -138,14 +143,18 @@ export default function ParticipantPage() {
   const shareResultCard = async () => {
     if (!cardRef.current) return;
     try {
-      const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, allowTaint: true });
+      const canvas = await html2canvas(cardRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+      });
       canvas.toBlob(async (blob) => {
-        const file = new File([blob], 'gemini-result-card.png', { type: 'image/png' });
+        const file = new File([blob], 'result-card.png', { type: 'image/png' });
         if (navigator.share) {
           await navigator.share({
             files: [file],
             title: 'My Race Result!',
-            text: `I finished ${raceDisplayName} at ${selectedEvent.name} in ${participant.chip_time}! 🏃‍♂️ Timed by Gemini Timing`,
+            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️ Timed by Gemini Timing`,
           });
         } else {
           generateResultCard();
@@ -239,9 +248,8 @@ export default function ParticipantPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
-        {/* Page Content - unchanged */}
-        {/* ... (header, name, stats, times, splits, back button, sponsors) ... */}
-        {/* Keeping the main page content exactly as before for brevity — only card section changed below */}
+        {/* Main Page Content (unchanged - header, name, stats, times, splits, back button, sponsors) */}
+        {/* Keeping it identical to previous version for brevity — only card section updated below */}
 
         {/* Result Card Generator Button */}
         <div className="text-center mb-12">
@@ -253,15 +261,15 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* SINGLE SOURCE OF TRUTH: Hidden Card for html2canvas + Preview */}
+        {/* Hidden Card — Used for both preview and actual share/download */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
-            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-center text-center px-12 py-16"
+            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-center text-center px-16 py-20"
             style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
             {/* White Logo Section */}
-            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl p-12 mb-12 flex items-center justify-center">
+            <div className="w-full bg-white rounded-3xl shadow-2xl p-12 mb-16 flex items-center justify-center">
               {masterLogo ? (
                 <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-80 object-contain" crossOrigin="anonymous" />
               ) : eventLogos[selectedEvent.id] ? (
@@ -288,113 +296,113 @@ export default function ParticipantPage() {
               {participant.first_name}<br />{participant.last_name}
             </h1>
 
-            {/* Finish Time - HERO */}
-            <div className="mb-16">
-              <p className="text-5xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
+            {/* Finish Time */}
+            <div className="mb-20">
+              <p className="text-5xl text-gray-400 uppercase tracking-widest mb-6">Finish Time</p>
               <p className="text-13xl font-black text-[#ffd700] drop-shadow-2xl">
                 {formatChronoTime(participant.chip_time)}
               </p>
             </div>
 
-            {/* Rankings - Larger */}
-            <div className="grid grid-cols-3 gap-16 text-white">
+            {/* Rankings */}
+            <div className="grid grid-cols-3 gap-20 text-white">
               <div>
-                <p className="text-4xl text-gray-400 uppercase mb-3">Overall</p>
+                <p className="text-4xl text-gray-400 uppercase mb-4">Overall</p>
                 <p className="text-9xl font-bold text-[#ffd700]">
                   {participant.place || '—'}
                 </p>
-                <p className="text-4xl text-gray-400 mt-2">of {overallTotal}</p>
+                <p className="text-4xl text-gray-400 mt-4">of {overallTotal}</p>
               </div>
               <div>
-                <p className="text-4xl text-gray-400 uppercase mb-3">Gender</p>
+                <p className="text-4xl text-gray-400 uppercase mb-4">Gender</p>
                 <p className="text-9xl font-bold text-[#ffd700]">
                   {participant.gender_place || '—'}
                 </p>
-                <p className="text-4xl text-gray-400 mt-2">of {genderTotal}</p>
+                <p className="text-4xl text-gray-400 mt-4">of {genderTotal}</p>
               </div>
               <div>
-                <p className="text-4xl text-gray-400 uppercase mb-3">Division</p>
+                <p className="text-4xl text-gray-400 uppercase mb-4">Division</p>
                 <p className="text-9xl font-bold text-[#ffd700]">
                   {participant.age_group_place || '—'}
                 </p>
-                <p className="text-4xl text-gray-400 mt-2">of {divisionTotal}</p>
+                <p className="text-4xl text-gray-400 mt-4">of {divisionTotal}</p>
               </div>
             </div>
 
             {/* Branding */}
-            <p className="absolute bottom-12 left-1/2 -translate-x-1/2 text-4xl text-gray-500">
+            <p className="absolute bottom-16 left-1/2 -translate-x-1/2 text-4xl text-gray-500">
               Timed by Gemini Timing • www.geminitiming.com
             </p>
           </div>
         </div>
 
-        {/* Card Preview Modal — Now uses same layout (just scaled) */}
+        {/* Preview Modal — Now identical to shared card */}
         {showCardPreview && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowCardPreview(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="text-center mb-6">
-                <h3 className="text-3xl font-bold">Your Result Card 🎉</h3>
-                <p className="text-lg text-gray-600 mt-2">This is exactly what will be shared!</p>
+            <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center mb-8">
+                <h3 className="text-4xl font-bold">Your Result Card 🎉</h3>
+                <p className="text-xl text-gray-600 mt-4">This is exactly what will be shared!</p>
               </div>
 
               <div className="flex justify-center mb-8">
-                <div className="w-full aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl scale-95">
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center text-white">
-                    <div className="w-full bg-white rounded-2xl p-8 mb-8">
+                <div className="w-full aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl">
+                  <div className="h-full flex flex-col items-center justify-center p-10 text-center text-white">
+                    <div className="w-full bg-white rounded-3xl p-10 mb-10">
                       {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-40 object-contain" />
+                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-48 object-contain" />
                       ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-32 object-contain" />
+                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-40 object-contain" />
                       ) : (
-                        <h2 className="text-4xl font-black text-gemini-dark-gray">
+                        <h2 className="text-5xl font-black text-gemini-dark-gray">
                           {selectedEvent.name}
                         </h2>
                       )}
                     </div>
 
-                    <p className="text-4xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
-                    <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
+                    <p className="text-5xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
+                    <p className="text-3xl text-gray-300 mb-10">{formatDate(selectedEvent.start_time)}</p>
 
-                    <h1 className="text-4xl font-black mb-8 leading-tight">
+                    <h1 className="text-5xl font-black mb-10 leading-tight">
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
 
-                    <p className="text-2xl text-gray-400 uppercase mb-2">Finish Time</p>
-                    <p className="text-6xl font-black text-[#ffd700] mb-10">
+                    <p className="text-3xl text-gray-400 uppercase mb-4">Finish Time</p>
+                    <p className="text-7xl font-black text-[#ffd700] mb-12">
                       {formatChronoTime(participant.chip_time)}
                     </p>
 
-                    <div className="grid grid-cols-3 gap-4 text-lg">
+                    <div className="grid grid-cols-3 gap-6 text-2xl">
                       <div>
                         <p className="text-gray-400 uppercase">Overall</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
-                        <p className="text-gray-400 text-sm">of {overallTotal}</p>
+                        <p className="text-5xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                        <p className="text-gray-400">of {overallTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Gender</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
-                        <p className="text-gray-400 text-sm">of {genderTotal}</p>
+                        <p className="text-5xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                        <p className="text-gray-400">of {genderTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Division</p>
-                        <p className="text-4xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
-                        <p className="text-gray-400 text-sm">of {divisionTotal}</p>
+                        <p className="text-5xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                        <p className="text-gray-400">of {divisionTotal}</p>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-center gap-6">
+              <div className="flex justify-center gap-8">
                 <button
                   onClick={generateResultCard}
-                  className="px-8 py-4 bg-gemini-blue text-white font-bold text-lg rounded-full hover:bg-gemini-blue/90 transition"
+                  className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition"
                 >
                   Download
                 </button>
                 <button
                   onClick={shareResultCard}
-                  className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg rounded-full hover:opacity-90 transition"
+                  className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition"
                 >
                   Share
                 </button>
@@ -403,7 +411,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Rest of page (back button, sponsors) unchanged */}
+        {/* Back Button & Sponsors (unchanged) */}
         <div className="text-center mb-16">
           <button
             onClick={goBackToResults}
