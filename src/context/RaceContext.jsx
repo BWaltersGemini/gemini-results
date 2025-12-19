@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL COMPLETE — Robust race loading with fallback fetch)
+// src/context/RaceContext.jsx (FINAL — Full cache pagination + robust race loading)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -39,13 +39,13 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load ALL events from ChronoTrack in one call (direct API with size=600)
+  // Load ALL events from ChronoTrack in one call
   useEffect(() => {
     const loadEvents = async () => {
       try {
         setLoading(true);
         setError(null);
-        const allEvents = await fetchEvents(); // One call → all events
+        const allEvents = await fetchEvents();
         setEvents(allEvents);
         console.log('[RaceContext] All events loaded:', allEvents.length);
       } catch (err) {
@@ -66,7 +66,6 @@ export function RaceProvider({ children }) {
     }
 
     const loadRaces = async () => {
-      // Primary: Use embedded races if available
       let embeddedRaces = selectedEvent.races || [];
 
       if (embeddedRaces.length > 0) {
@@ -79,7 +78,6 @@ export function RaceProvider({ children }) {
         return;
       }
 
-      // Fallback 1: Fetch fresh races from API
       console.log('[RaceContext] No embedded races — fetching fresh from ChronoTrack...');
       try {
         const freshRaces = await fetchRacesForEvent(selectedEvent.id);
@@ -100,14 +98,13 @@ export function RaceProvider({ children }) {
           race_name: race.race_name,
         }));
 
-        // Update both context states
         setRaces(formatted);
         setSelectedEvent(prev => ({
           ...prev,
-          races: fullRaces, // Store full data for future use
+          races: fullRaces,
         }));
 
-        // Optional: Persist to Supabase for next load
+        // Sync to Supabase for future loads
         try {
           await supabase
             .from('chronotrack_events')
@@ -121,8 +118,6 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Fallback success: Loaded', formatted.length, 'races');
       } catch (err) {
         console.warn('[RaceContext] Race fetch fallback failed:', err);
-
-        // Fallback 2: Treat as single-race event (so results always show)
         const fallbackRace = [{
           race_id: selectedEvent.id,
           race_name: selectedEvent.name || 'Overall Results',
@@ -135,7 +130,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results — cache first, fresh sync on race day or force
+  // Load results — FULL PAGINATION FROM CACHE + fresh sync on race day
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -155,23 +150,44 @@ export function RaceProvider({ children }) {
         setError(null);
         let allResults = [];
 
-        // 1. Load from Supabase cache
-        const { data: cached, error: cacheError } = await supabase
-          .from('chronotrack_results')
-          .select('*')
-          .eq('event_id', selectedEvent.id)
-          .order('place', { ascending: true });
+        // === 1. LOAD ALL CACHED RESULTS WITH PAGINATION ===
+        let cachedResults = [];
+        let start = 0;
+        const pageSize = 1000;
 
-        if (cacheError) {
-          console.error('[RaceContext] Cache load error:', cacheError);
-        } else if (cached && cached.length > 0) {
-          allResults = cached;
-          const divisions = [...new Set(cached.map(r => r.age_group_name).filter(Boolean))].sort();
-          setUniqueDivisions(divisions);
-          console.log(`[RaceContext] Loaded ${cached.length} results from cache`);
+        while (!aborted) {
+          const { data, error } = await supabase
+            .from('chronotrack_results')
+            .select('*')
+            .eq('event_id', selectedEvent.id)
+            .order('place', { ascending: true })
+            .range(start, start + pageSize - 1);
+
+          if (error) {
+            console.error('[RaceContext] Cache pagination error:', error);
+            break;
+          }
+
+          if (!data || data.length === 0) {
+            break;
+          }
+
+          cachedResults = [...cachedResults, ...data];
+          start += data.length;
+
+          if (data.length < pageSize) {
+            break; // Last page
+          }
         }
 
-        // 2. Determine if this is race day
+        if (cachedResults.length > 0) {
+          allResults = cachedResults;
+          const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
+          setUniqueDivisions(divisions);
+          console.log(`[RaceContext] Loaded ${cachedResults.length} results from cache (paginated)`);
+        }
+
+        // === 2. Determine if race day ===
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         const eventDateStr = selectedEvent.start_time
@@ -180,14 +196,13 @@ export function RaceProvider({ children }) {
         const isRaceDay = eventDateStr === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        // 3. Fetch fresh if needed
-        const shouldFetchFresh = forceFresh || isRaceDay || !cached || cached.length === 0;
+        // === 3. Fetch fresh if needed ===
+        const shouldFetchFresh = forceFresh || isRaceDay || cachedResults.length === 0;
         if (shouldFetchFresh) {
           console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // === DEDUPLICATE RESULTS ===
             const seen = new Map();
             fresh.forEach(r => {
               const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
@@ -196,7 +211,6 @@ export function RaceProvider({ children }) {
             const deduped = Array.from(seen.values());
             console.log(`[RaceContext] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
-            // === UPSERT RESULTS ===
             const toUpsert = deduped.map(r => ({
               event_id: selectedEvent.id,
               race_id: r.race_id || null,
