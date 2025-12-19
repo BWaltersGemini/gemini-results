@@ -1,6 +1,6 @@
-// src/components/ResultsTable.jsx (FINAL — Clean time display + enhanced UX)
+// src/components/ResultsTable.jsx (FINAL — Black text + "Time" label)
 import { useNavigate } from 'react-router-dom';
-import { formatChronoTime } from '../utils/timeUtils'; // ← Clean time formatter
+import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsTable({ data = [], onNameClick, isMobile }) {
   const navigate = useNavigate();
@@ -56,21 +56,21 @@ export default function ResultsTable({ data = [], onNameClick, isMobile }) {
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div className="bg-gemini-blue/5 rounded-lg py-3">
                   <div className="text-xl font-bold text-gemini-blue">{formatChronoTime(r.chip_time)}</div>
-                  <div className="text-sm text-gray-600">Chip Time</div>
+                  <div className="text-sm text-gray-700 font-medium">Time</div> {/* ← Changed from "Chip Time" */}
                 </div>
                 <div className="bg-gray-50 rounded-lg py-3">
-                  <div className="text-xl font-bold">{formatPlace(r.gender_place)}</div>
-                  <div className="text-sm text-gray-600">Gender</div>
+                  <div className="text-xl font-bold text-gray-900">{formatPlace(r.gender_place)}</div>
+                  <div className="text-sm text-gray-700 font-medium">Gender</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg py-3">
-                  <div className="text-xl font-bold">
+                  <div className="text-xl font-bold text-gray-900">
                     {r.age_group_place ? `${formatPlace(r.age_group_place)} ${r.age_group_name || ''}`.trim() : '—'}
                   </div>
-                  <div className="text-sm text-gray-600">Division</div>
+                  <div className="text-sm text-gray-700 font-medium">Division</div>
                 </div>
                 <div className="bg-gemini-blue/5 rounded-lg py-3">
-                  <div className="text-xl font-bold">{r.pace || '—'}</div>
-                  <div className="text-sm text-gray-600">Pace</div>
+                  <div className="text-xl font-bold text-gray-900">{r.pace || '—'}</div>
+                  <div className="text-sm text-gray-700 font-medium">Pace</div>
                 </div>
               </div>
             </div>
@@ -91,7 +91,7 @@ export default function ResultsTable({ data = [], onNameClick, isMobile }) {
             <th className="px-6 py-5">Name</th>
             <th className="px-6 py-5">Gender Place</th>
             <th className="px-6 py-5">Division Place</th>
-            <th className="px-6 py-5">Chip Time</th>
+            <th className="px-6 py-5">Time</th> {/* ← Changed from "Chip Time" */}
             <th className="px-6 py-5">Pace</th>
             <th className="px-6 py-5">Age</th>
             <th className="px-6 py-5">Location</th>
@@ -107,14 +107,14 @@ export default function ResultsTable({ data = [], onNameClick, isMobile }) {
               <td className="px-6 py-5 font-black text-xl text-gemini-blue">
                 {r.place ? formatPlace(r.place) : '—'}
               </td>
-              <td className="px-6 py-5 font-semibold text-lg">{r.bib || '—'}</td>
+              <td className="px-6 py-5 font-semibold text-lg text-gray-900">{r.bib || '—'}</td>
               <td className="px-6 py-5 font-semibold text-gemini-dark-gray">
                 {r.first_name} {r.last_name}
               </td>
-              <td className="px-6 py-5 font-medium">
+              <td className="px-6 py-5 font-medium text-gray-900">
                 {r.gender_place ? formatPlace(r.gender_place) : '—'}
               </td>
-              <td className="px-6 py-5 font-medium whitespace-nowrap">
+              <td className="px-6 py-5 font-medium text-gray-900 whitespace-nowrap">
                 {r.age_group_place ? (
                   <span>
                     {formatPlace(r.age_group_place)} {r.age_group_name || ''}
@@ -123,9 +123,9 @@ export default function ResultsTable({ data = [], onNameClick, isMobile }) {
                   '—'
                 )}
               </td>
-              <td className="px-6 py-5 font-semibold">{formatChronoTime(r.chip_time)}</td>
-              <td className="px-6 py-5">{r.pace || '—'}</td>
-              <td className="px-6 py-5">{r.age || '—'}</td>
+              <td className="px-6 py-5 font-semibold text-gray-900">{formatChronoTime(r.chip_time)}</td>
+              <td className="px-6 py-5 text-gray-900">{r.pace || '—'}</td>
+              <td className="px-6 py-5 text-gray-900">{r.age || '—'}</td>
               <td className="px-6 py-5 text-gray-600">
                 {r.city && `${r.city}, `}{r.state} {r.country}
               </td>

@@ -1,16 +1,16 @@
-// src/pages/ParticipantPage.jsx (FINAL — Clean time display with timeUtils)
+// src/pages/ParticipantPage.jsx (FINAL — Correct "Back to Results" navigation)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { supabase } from '../supabaseClient';
 import { useLocalStorage } from '../utils/useLocalStorage';
-import { formatChronoTime } from '../utils/timeUtils'; // ← Clean time formatter
+import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ParticipantPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
-  const { bib, masterKey, year, raceSlug } = params;
+  const { bib } = params; // Only bib is needed from params
 
   const {
     events,
@@ -20,10 +20,12 @@ export default function ParticipantPage() {
     ads = [],
     loading: contextLoading,
     setSelectedEvent,
+    masterGroups = {},
+    editedEvents = {},
   } = useContext(RaceContext);
 
-  const [masterGroups] = useLocalStorage('masterGroups', {});
-  const [editedEvents] = useLocalStorage('editedEvents', {});
+  const [masterGroupsLocal] = useLocalStorage('masterGroups', {});
+  const [editedEventsLocal] = useLocalStorage('editedEvents', {});
 
   const initialState = location.state || {};
   const [participant, setParticipant] = useState(initialState.participant || null);
@@ -78,25 +80,18 @@ export default function ParticipantPage() {
         }
         if (events.length === 0) throw new Error('Events not loaded yet');
 
-        // Find event from master/year
-        const decodedMaster = decodeURIComponent(masterKey || '').replace(/-/g, ' ').toLowerCase();
-        let groupEntry = Object.entries(masterGroups).find(([key]) =>
-          slugify(editedEvents[key]?.name || key) === (masterKey || '').toLowerCase() ||
-          cleanName(editedEvents[key]?.name || key) === cleanName(decodedMaster)
-        );
-        let groupEventIds = groupEntry ? groupEntry[1] : [];
-        if (groupEventIds.length === 0 && masterKey) {
-          groupEventIds = events
-            .filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey.toLowerCase())
-            .map(e => e.id);
+        // Determine the correct event from context or fallback
+        let targetEvent = selectedEvent || contextSelectedEvent;
+        if (!targetEvent) {
+          // Fallback: find event by bib in results
+          const resultWithBib = contextResults?.find(r => String(r.bib) === String(bib));
+          if (resultWithBib) {
+            targetEvent = events.find(e => e.id === resultWithBib.event_id);
+          }
         }
 
-        const yearEvents = events
-          .filter(e => groupEventIds.includes(e.id) && getYearFromEvent(e) === year)
-          .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+        if (!targetEvent) throw new Error('Event not found');
 
-        if (yearEvents.length === 0) throw new Error('Event not found');
-        const targetEvent = yearEvents[0];
         setLocalSelectedEvent(targetEvent);
         setSelectedEvent(targetEvent);
 
@@ -123,18 +118,30 @@ export default function ParticipantPage() {
     };
 
     fetchDataIfMissing();
-  }, [bib, masterKey, year, events, contextResults, contextLoading, initialState, masterGroups, editedEvents]);
+  }, [bib, events, contextResults, contextLoading, initialState]);
 
-  const goBackToResults = () => navigate(-1);
+  // Correct "Back to Results" — goes to event results page
+  const goBackToResults = () => {
+    if (!selectedEvent) return;
+
+    // Find master key for this event
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(masterGroupsLocal || masterGroups).find(([_, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
+    if (foundMaster) {
+      masterSlug = slugify(foundMaster[0]);
+    }
+
+    const eventYear = getYearFromEvent(selectedEvent);
+
+    navigate(`/results/${masterSlug}/${eventYear}`);
+  };
 
   const handleDivisionClick = () => {
     if (!selectedEvent || !participant) return;
-    navigate(-1, {
-      state: {
-        autoFilterDivision: participant.age_group_name,
-        autoFilterRaceId: participant.race_id,
-      },
-    });
+    goBackToResults(); // Reuse correct navigation
+    // Optional: could add state to auto-filter division
   };
 
   // Loading state
@@ -252,7 +259,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Times — Now using clean formatter */}
+        {/* Times */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
@@ -264,11 +271,13 @@ export default function ParticipantPage() {
           </div>
           <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
-            <p className="text-5xl font-black text-green-700">{participant.pace || '—'}</p>
+            <p className="text-5xl font-black text-green-700">
+              {participant.pace ? formatChronoTime(participant.pace) : '—'}
+            </p>
           </div>
         </div>
 
-        {/* Splits — Clean time formatting */}
+        {/* Splits */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
             <button
@@ -304,7 +313,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Back Button */}
+        {/* Back Button — Now goes to correct event results page */}
         <div className="text-center mb-16">
           <button
             onClick={goBackToResults}

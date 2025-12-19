@@ -1,9 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL — Clean times + Mobile year buttons + Finishers only + Bib/Name search)
+// src/pages/ResultsPage.jsx (FINAL — All fixes: clean times, mobile year buttons, finishers only, black search text, bib/name search)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { formatChronoTime } from '../utils/timeUtils'; // ← Clean time formatter
+import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -30,7 +30,7 @@ export default function ResultsPage() {
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const [showFiltersForRace, setShowFiltersForRace] = useState({});
-  const [searchQuery, setSearchQuery] = useState(''); // NEW: Global Bib/Name search
+  const [searchQuery, setSearchQuery] = useState(''); // Global Bib/Name search
 
   const raceRefs = useRef({});
 
@@ -72,7 +72,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection logic
+  // Event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -150,7 +150,7 @@ export default function ResultsPage() {
     });
   };
 
-  // MASTER LANDING PAGE — 3 Most Recent Masters + Upcoming Events
+  // MASTER LANDING PAGE
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
@@ -292,7 +292,7 @@ export default function ResultsPage() {
           {/* Year Buttons + Search */}
           {availableYears.length > 0 && (
             <div className="flex flex-col items-center gap-6 mb-12">
-              {/* Year Buttons — Mobile-friendly */}
+              {/* Year Buttons */}
               <div className="flex flex-wrap justify-center gap-3">
                 <span className="text-xl font-bold text-gray-700 self-center mr-4">Year:</span>
                 {availableYears.map((y) => (
@@ -310,14 +310,14 @@ export default function ResultsPage() {
                 ))}
               </div>
 
-              {/* Bib/Name Search */}
+              {/* Bib/Name Search — Black text */}
               <div className="w-full max-w-md">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by Bib or Name..."
-                  className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-gemini-blue/50 focus:border-gemini-blue shadow-inner"
+                  className="w-full px-6 py-4 text-lg text-gray-900 placeholder-gray-500 border-2 border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-gemini-blue/50 focus:border-gemini-blue shadow-inner"
                 />
               </div>
             </div>
