@@ -1,24 +1,42 @@
-// src/pages/Home.jsx (UPDATED — Fixed Athletes & Events Timed stats)
+// src/pages/Home.jsx (FINAL — Fixed Athletes & Races Timed stats + all previous improvements)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient'; // ← Needed for global count
 
 export default function Home() {
   const {
     events = [],
-    results = [], // ← Now used to calculate totals
     loading,
   } = useContext(RaceContext);
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
-
-  // === Calculate Totals ===
-  const totalAthletesTimed = results.length;
-  const totalRacesTimed = events.length;
+  const [totalAthletesTimed, setTotalAthletesTimed] = useState(0); // Global count from Supabase
 
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
   const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
   const eventLogos = JSON.parse(localStorage.getItem('eventLogos')) || {};
+
+  // === Fetch global athletes count from Supabase ===
+  useEffect(() => {
+    const fetchGlobalAthletes = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('chronotrack_results')
+          .select('*', { count: 'exact', head: true });
+
+        if (error) throw error;
+        setTotalAthletesTimed(count || 0);
+      } catch (err) {
+        console.error('Failed to fetch global athletes count:', err);
+        setTotalAthletesTimed(0);
+      }
+    };
+
+    fetchGlobalAthletes();
+  }, []);
+
+  const totalRacesTimed = events.length;
 
   const slugify = (text) => {
     if (!text) return 'overall';
@@ -125,7 +143,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Experience Stats — NOW WORKING */}
+      {/* Experience Stats — NOW ACCURATE */}
       <section className="py-16 md:py-24 bg-gemini-light-gray">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gemini-dark-gray mb-12">
