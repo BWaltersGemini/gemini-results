@@ -1,4 +1,4 @@
-// src/pages/Home.jsx (FINAL — Recent & Live Results shows 3 most recent events)
+// src/pages/Home.jsx (FINAL — Animated stats with base + fetched totals)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,17 +11,19 @@ export default function Home() {
   } = useContext(RaceContext);
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
-  const [totalAthletesTimed, setTotalAthletesTimed] = useState(0);
-  const [displayAthletes, setDisplayAthletes] = useState(0);
-  const [displayRaces, setDisplayRaces] = useState(0);
 
-  // Base numbers
+  // Base numbers (your established history before digital tracking)
   const BASE_ATHLETES = 750000;
   const BASE_RACES = 700;
 
+  // Fetched current totals
+  const [fetchedAthletes, setFetchedAthletes] = useState(0);
+  const [displayAthletes, setDisplayAthletes] = useState(0);
+  const [displayRaces, setDisplayRaces] = useState(0);
+
   const totalRacesTimed = BASE_RACES + events.length;
 
-  // Fetch global athletes count
+  // Fetch global published athletes count
   useEffect(() => {
     const fetchGlobalAthletes = async () => {
       try {
@@ -30,24 +32,24 @@ export default function Home() {
           .select('*', { count: 'exact', head: true });
 
         if (error) throw error;
-        setTotalAthletesTimed(count || 0);
+        setFetchedAthletes(count || 0);
       } catch (err) {
         console.error('Failed to fetch global athletes count:', err);
-        setTotalAthletesTimed(0);
+        setFetchedAthletes(0);
       }
     };
 
     fetchGlobalAthletes();
   }, []);
 
-  const finalAthletes = BASE_ATHLETES + totalAthletesTimed;
+  const finalAthletes = BASE_ATHLETES + fetchedAthletes;
 
-  // Animated count-up
+  // Animated count-up effect
   useEffect(() => {
     if (loading) return;
 
-    const duration = 3000;
-    const steps = 60;
+    const duration = 3000; // 3 seconds
+    const steps = 60; // ~60 FPS
     const interval = duration / steps;
 
     let currentAthletes = 0;
@@ -124,16 +126,31 @@ export default function Home() {
     }
   };
 
-  // === THREE MOST RECENT EVENTS (not masters) ===
-  const recentEvents = events
-    .slice() // copy
-    .sort((a, b) => (b.start_time || 0) - (a.start_time || 0)) // newest first
-    .slice(0, 3); // only top 3
+  // Master event tiles (top 3 most recent)
+  const masterEventTiles = Object.keys(masterGroups)
+    .map(storedKey => {
+      const displayName = editedEvents[storedKey]?.name || storedKey;
+      const eventIds = masterGroups[storedKey] || [];
+      const masterEvents = events.filter(e => eventIds.includes(e.id.toString()));
+      if (masterEvents.length === 0) return null;
+      const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
+      const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
+      const masterSlug = slugify(storedKey);
+      const year = getYearFromEvent(latestEvent);
+      return {
+        storedKey,
+        displayName,
+        logo,
+        dateEpoch: latestEvent.start_time,
+        masterSlug,
+        year,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
 
-  const handleEventClick = (event) => {
-    setSelectedEvent(event);
-    const year = getYearFromEvent(event);
-    navigate(`/results/overall/${year}`);
+  const handleMasterClick = (masterSlug, year) => {
+    navigate(`/results/${masterSlug}/${year}`);
     window.scrollTo(0, 0);
   };
 
@@ -162,7 +179,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Experience Stats */}
+      {/* Experience Stats — Animated Count-Up */}
       <section className="py-16 md:py-24 bg-gemini-light-gray">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gemini-dark-gray mb-12">
@@ -189,7 +206,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Recent & Live Results — Now shows 3 most recent EVENTS */}
+      {/* Recent Master Events */}
       <section className="py-20 md:py-32 px-6 max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-gemini-dark-gray mb-4">
@@ -202,40 +219,36 @@ export default function Home() {
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-gemini-blue"></div>
             <p className="mt-6 text-xl text-gray-600">Loading results...</p>
           </div>
-        ) : recentEvents.length === 0 ? (
-          <p className="text-center text-gray-600 text-lg">No events available yet.</p>
+        ) : masterEventTiles.length === 0 ? (
+          <p className="text-center text-gray-600 text-lg">No master events configured yet.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-5xl mx-auto">
-            {recentEvents.map(event => {
-              const logo = eventLogos[event.id] || null;
-              const displayName = editedEvents[event.id]?.name || event.name;
-              return (
-                <button
-                  key={event.id}
-                  onClick={() => handleEventClick(event)}
-                  className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
-                >
-                  <div className="h-72 bg-gray-50 flex items-center justify-center p-8">
-                    {logo ? (
-                      <img src={logo} alt={displayName} className="max-h-56 max-w-full object-contain" />
-                    ) : (
-                      <span className="text-9xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
-                    )}
-                  </div>
-                  <div className="p-10 text-center">
-                    <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
-                      {displayName}
-                    </h3>
-                    <p className="text-lg text-gray-600 mb-6">
-                      {formatChronoDate(event.start_time)}
-                    </p>
-                    <span className="text-gemini-blue font-bold group-hover:underline">
-                      View Results →
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+            {masterEventTiles.map(master => (
+              <button
+                key={master.storedKey}
+                onClick={() => handleMasterClick(master.masterSlug, master.year)}
+                className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+              >
+                <div className="h-72 bg-gray-50 flex items-center justify-center p-8">
+                  {master.logo ? (
+                    <img src={master.logo} alt={master.displayName} className="max-h-56 max-w-full object-contain" />
+                  ) : (
+                    <span className="text-9xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
+                  )}
+                </div>
+                <div className="p-10 text-center">
+                  <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
+                    {master.displayName}
+                  </h3>
+                  <p className="text-lg text-gray-600 mb-6">
+                    Latest: {formatChronoDate(master.dateEpoch)}
+                  </p>
+                  <span className="text-gemini-blue font-bold group-hover:underline">
+                    View Results →
+                  </span>
+                </div>
+              </button>
+            ))}
           </div>
         )}
         <div className="text-center mt-16">
