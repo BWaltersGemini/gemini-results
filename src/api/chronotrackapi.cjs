@@ -218,7 +218,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          max: 50000,
+          size: 50000,
         },
       });
       bracketResults = res.data.bracket_results || [];
@@ -257,7 +257,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          max: 50000,
+          size: 50000,
         },
       });
       bracketResults = res.data.bracket_results || [];
@@ -289,7 +289,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          max: 50000,
+          size: 50000,
         },
       });
       bracketResults = res.data.bracket_results || [];
