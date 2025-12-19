@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Fully compatible with new schema: races embedded in chronotrack_events)
+// src/pages/ParticipantPage.jsx (FINAL — Crash-free + works with direct bib URLs)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -13,68 +13,47 @@ export default function ParticipantPage() {
 
   const {
     events,
+    selectedEvent: contextSelectedEvent,
     results: contextResults,
-    eventLogos,
-    ads,
+    eventLogos = {},
+    ads = [],
     loading: contextLoading,
+    setSelectedEvent,
   } = useContext(RaceContext);
 
   const [masterGroups] = useLocalStorage('masterGroups', {});
   const [editedEvents] = useLocalStorage('editedEvents', {});
 
   const initialState = location.state || {};
-  const [participant, setParticipant] = useState(initialState.participant);
-  const [selectedEvent, setSelectedEvent] = useState(initialState.selectedEvent);
-  const [results, setResults] = useState(initialState.results || contextResults);
+  const [participant, setParticipant] = useState(initialState.participant || null);
+  const [selectedEvent, setLocalSelectedEvent] = useState(initialState.selectedEvent || contextSelectedEvent);
+  const [results, setResults] = useState(initialState.results || contextResults || []);
   const [showSplits, setShowSplits] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!initialState.participant);
   const [fetchError, setFetchError] = useState(null);
 
-  // Safe time formatting
+  // Keep local selectedEvent in sync with context
+  useEffect(() => {
+    if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
+      setLocalSelectedEvent(contextSelectedEvent);
+    }
+  }, [contextSelectedEvent]);
+
   const formatTime = (timeStr) => {
     if (!timeStr || timeStr.trim() === '') return '—';
-    const trim = timeStr.trim();
-    const parts = trim.split(':');
-    let hours = 0;
-    let minutes = '0';
-    let seconds = '00.0';
-    if (parts.length === 3) {
-      hours = parseInt(parts[0], 10);
-      minutes = parts[1];
-      seconds = parts[2];
-    } else if (parts.length === 2) {
-      minutes = parts[0];
-      seconds = parts[1];
-    } else if (parts.length === 1) {
-      seconds = parts[0];
-    }
-    const [secs, tenths = '0'] = seconds.split('.');
-    const formattedSeconds = `${secs.padStart(2, '0')}.${tenths.padStart(1, '0')}`;
-    if (hours > 0) {
-      return `${hours}:${minutes.padStart(2, '0')}:${formattedSeconds}`;
-    } else {
-      return `${parseInt(minutes)}:${formattedSeconds}`;
-    }
+    return timeStr.trim();
   };
 
-  // Safe name cleaning for slug comparison
   const cleanName = (text) => {
     if (!text || typeof text !== 'string') return '';
     return text.trim().replace(/['`]/g, '').toLowerCase();
   };
 
-  // Slugify helper
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
-    return text
-      .trim()
-      .replace(/['`]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    return text.trim().replace(/['`]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   };
 
-  // Format date from Unix epoch (seconds)
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
     const date = new Date(epoch * 1000);
@@ -86,7 +65,6 @@ export default function ParticipantPage() {
     });
   };
 
-  // Extract year from start_time
   const getYearFromEvent = (event) => {
     if (!event?.start_time) return null;
     return new Date(event.start_time * 1000).getFullYear().toString();
@@ -94,59 +72,65 @@ export default function ParticipantPage() {
 
   useEffect(() => {
     const fetchDataIfMissing = async () => {
-      if (!participant || !selectedEvent || results.length === 0) {
-        setLoading(true);
-        setFetchError(null);
-        try {
-          if (contextLoading) return;
-          if (events.length === 0) throw new Error('No events available.');
+      if (participant && selectedEvent && results.length > 0) return; // Already have data from navigation state
 
-          const decodedMaster = decodeURIComponent(masterKey).replace(/-/g, ' ').toLowerCase();
-          let groupEntry = Object.entries(masterGroups).find(([key]) =>
-            slugify(editedEvents[key]?.name || key) === masterKey ||
-            cleanName(editedEvents[key]?.name || key) === cleanName(decodedMaster)
-          );
-          let groupEventIds = groupEntry ? groupEntry[1] : [];
-          if (groupEventIds.length === 0) {
-            groupEventIds = events
-              .filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey ||
-                cleanName(editedEvents[e.id]?.name || e.name) === cleanName(decodedMaster))
-              .map(e => e.id);
-          }
+      setLoading(true);
+      setFetchError(null);
 
-          const yearEvents = events
-            .filter(e => groupEventIds.includes(e.id) && getYearFromEvent(e) === year)
-            .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
-          if (yearEvents.length === 0) throw new Error('Event not found for this year.');
-
-          const targetEvent = yearEvents[0];
-          setSelectedEvent(targetEvent);
-
-          // Fetch results if not passed via state
-          if (results.length === 0 || initialState.results === undefined) {
-            const { data: fetchedResults, error: resultsError } = await supabase
-              .from('chronotrack_results')
-              .select('*')
-              .eq('event_id', targetEvent.id);
-
-            if (resultsError) throw resultsError;
-            setResults(fetchedResults || []);
-          }
-
-          // Find participant
-          const foundParticipant = (initialState.results || contextResults || fetchedResults || []).find(
-            r => r.bib === bib
-          );
-
-          if (!foundParticipant) throw new Error('Participant not found.');
-          setParticipant(foundParticipant);
-        } catch (err) {
-          console.error('Fetch error:', err);
-          setFetchError(err.message || 'Failed to load participant data.');
-        } finally {
-          setLoading(false);
+      try {
+        if (contextLoading || events.length === 0) {
+          // Wait a tick for context to load
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
+
+        if (events.length === 0) throw new Error('Events not loaded yet');
+
+        // Find event from master/year
+        const decodedMaster = decodeURIComponent(masterKey || '').replace(/-/g, ' ').toLowerCase();
+        let groupEntry = Object.entries(masterGroups).find(([key]) =>
+          slugify(editedEvents[key]?.name || key) === (masterKey || '').toLowerCase() ||
+          cleanName(editedEvents[key]?.name || key) === cleanName(decodedMaster)
+        );
+
+        let groupEventIds = groupEntry ? groupEntry[1] : [];
+
+        if (groupEventIds.length === 0 && masterKey) {
+          groupEventIds = events
+            .filter(e => slugify(editedEvents[e.id]?.name || e.name) === masterKey.toLowerCase())
+            .map(e => e.id);
+        }
+
+        const yearEvents = events
+          .filter(e => groupEventIds.includes(e.id) && getYearFromEvent(e) === year)
+          .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+
+        if (yearEvents.length === 0) throw new Error('Event not found');
+
+        const targetEvent = yearEvents[0];
+        setLocalSelectedEvent(targetEvent);
+        setSelectedEvent(targetEvent);
+
+        // Load results from Supabase
+        const { data: fetchedResults, error: resultsError } = await supabase
+          .from('chronotrack_results')
+          .select('*')
+          .eq('event_id', targetEvent.id);
+
+        if (resultsError) throw resultsError;
+
+        const allResults = fetchedResults || [];
+        setResults(allResults);
+
+        // Find participant by bib
+        const found = allResults.find(r => String(r.bib) === String(bib));
+        if (!found) throw new Error('Participant not found with this bib');
+
+        setParticipant(found);
+      } catch (err) {
+        console.error('Participant load error:', err);
+        setFetchError(err.message || 'Failed to load participant');
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -157,17 +141,16 @@ export default function ParticipantPage() {
 
   const handleDivisionClick = () => {
     if (!selectedEvent || !participant) return;
-    const raceId = participant.race_id;
-    navigate(location.pathname, {
+    navigate(-1, {
       state: {
         autoFilterDivision: participant.age_group_name,
-        autoFilterRaceId: raceId,
+        autoFilterRaceId: participant.race_id,
       },
-      replace: true,
     });
   };
 
-  if (loading) {
+  // Loading state
+  if (loading || contextLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
         <div className="text-center">
@@ -178,12 +161,13 @@ export default function ParticipantPage() {
     );
   }
 
+  // Error or not found
   if (fetchError || !participant || !selectedEvent) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
         <div className="text-center max-w-md">
           <p className="text-3xl font-bold text-gemini-red mb-6">Participant Not Found</p>
-          <p className="text-xl text-gray-700 mb-8">{fetchError || 'Unable to load data for this bib.'}</p>
+          <p className="text-xl text-gray-700 mb-8">{fetchError || 'Unable to load participant data.'}</p>
           <button
             onClick={goBackToResults}
             className="px-12 py-5 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl"
@@ -200,19 +184,19 @@ export default function ParticipantPage() {
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
 
-  // Find race name from embedded races
+  // Race name from embedded races
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
-        {/* Race Header */}
+        {/* Header */}
         <div className="text-center mb-8">
-          {eventLogos[selectedEvent?.id] ? (
+          {eventLogos[selectedEvent.id] ? (
             <img
               src={eventLogos[selectedEvent.id]}
-              alt="Race Logo"
+              alt="Event Logo"
               className="mx-auto max-h-24 mb-4 rounded-full shadow-md"
             />
           ) : (
@@ -222,22 +206,22 @@ export default function ParticipantPage() {
           )}
           <h2 className="text-3xl font-bold text-gemini-dark-gray">{selectedEvent.name}</h2>
           <p className="text-lg text-gray-600 italic">
-            {selectedEvent.start_time ? formatDate(selectedEvent.start_time) : 'Date TBD'}
+            {formatDate(selectedEvent.start_time)}
           </p>
           {raceDisplayName !== 'Overall' && (
             <p className="text-xl text-gemini-blue font-semibold mt-4">{raceDisplayName}</p>
           )}
         </div>
 
-        {/* Participant Name */}
+        {/* Name */}
         <h3 className="text-5xl font-extrabold mb-8 text-center text-gemini-blue drop-shadow-md">
           {participant.first_name} {participant.last_name}
         </h3>
 
-        {/* BIB and Stats */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
           <div className="flex justify-center">
-            <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-6 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono transform hover:scale-105 transition">
+            <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-6 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono">
               <p className="text-sm uppercase tracking-wider font-bold mb-2">BIB</p>
               <p className="text-6xl font-black">{participant.bib || '—'}</p>
             </div>
@@ -285,11 +269,11 @@ export default function ParticipantPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
-            <p className="text-5xl font-black text-gemini-blue">{formatTime(participant.chip_time) || '—'}</p>
+            <p className="text-5xl font-black text-gemini-blue">{formatTime(participant.chip_time)}</p>
           </div>
           <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gun Time</p>
-            <p className="text-5xl font-black text-gray-800">{formatTime(participant.clock_time) || '—'}</p>
+            <p className="text-5xl font-black text-gray-800">{formatTime(participant.clock_time)}</p>
           </div>
           <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
