@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs (FINAL — Reliable for all races, including 5K/Kids Run/Hill Climb)
+// src/api/chronotrackapi.cjs (FINAL — Reliable for all races, multi-race events, max: 50000 + relaxed gender filter)
 import axios from 'axios';
 
 // Direct ChronoTrack API — no proxy needed for events
@@ -51,7 +51,6 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
-// Fetch ALL events in one call using direct API + size=600
 export const fetchEvents = async () => {
   const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
   const userId = import.meta.env.VITE_CHRONOTRACK_USER;
@@ -106,7 +105,7 @@ export const fetchRacesForEvent = async (eventId) => {
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // Fetch races first (for reference and logging)
+  // Fetch races first for logging and race name lookup
   let races = [];
   try {
     const racesResponse = await axios.get(`${PROXY_BASE}/api/event/${eventId}/race`, {
@@ -128,7 +127,7 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Failed to fetch races for event', eventId, err);
   }
 
-  // Fetch brackets
+  // Fetch all brackets
   let allBrackets = [];
   try {
     const bracketsResponse = await axios.get(`${PROXY_BASE}/api/event/${eventId}/bracket`, {
@@ -136,32 +135,34 @@ export const fetchResultsForEvent = async (eventId) => {
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
     allBrackets = bracketsResponse.data.event_bracket || [];
+    console.log(`[ChronoTrack] Found ${allBrackets.length} total brackets`);
   } catch (err) {
     console.error('[ChronoTrack] Failed to fetch brackets for event', eventId, err);
     throw err;
   }
 
-  // === RELAXED & RELIABLE BRACKET FILTERING (like old working version) ===
+  // Filter brackets (reliable like old working version)
   const divisionBrackets = allBrackets.filter(b =>
-    ['AGE', 'OTHER'].includes(b.bracket_type)
+    b.bracket_wants_leaderboard === '1' && ['AGE', 'OTHER'].includes(b.bracket_type)
   );
 
-  // Simple name-based detection — catches Male/Female for ALL races
+  // Relaxed gender bracket detection — matches old working version exactly
   const genderBrackets = allBrackets.filter(b =>
+    b.bracket_wants_leaderboard === '1' &&
     b.bracket_type === 'SEX' &&
     /^(Male|Female)$/i.test(b.bracket_name?.trim() || '')
   );
 
   const overallBrackets = allBrackets.filter(b => {
     const name = (b.bracket_name || '').toLowerCase();
-    return name.includes('overall') || name.includes('all participants');
+    return b.bracket_wants_leaderboard === '1' && (name.includes('overall') || name.includes('all participants'));
   });
 
-  console.log(`[ChronoTrack] Found ${genderBrackets.length} gender brackets (Male/Female overall per race)`);
-  console.log(`[ChronoTrack] Found ${divisionBrackets.length} division brackets (age/specialty per race)`);
-  console.log(`[ChronoTrack] Found ${overallBrackets.length} overall brackets`);
+  console.log(`[ChronoTrack] Processing ${genderBrackets.length} gender brackets`);
+  console.log(`[ChronoTrack] Processing ${divisionBrackets.length} division brackets`);
+  console.log(`[ChronoTrack] Processing ${overallBrackets.length} overall brackets`);
 
-  // Fetch all overall results first
+  // Fetch main results first (with pagination)
   let allResults = [];
   let page = 1;
   const maxPages = 40;
@@ -200,7 +201,7 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // === GENDER PLACES ===
+  // === GENDER PLACES (using max: 50000 like old version) ===
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
@@ -215,7 +216,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          max: 50000,  // Gets ALL participants — no pagination risk
+          max: 50000,
         },
       });
       bracketResults = res.data.bracket_results || [];
@@ -233,7 +234,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // === DIVISION PLACES ===
+  // === DIVISION PLACES (AGE + OTHER) ===
   for (const bracket of divisionBrackets) {
     const name = (bracket.bracket_name || '').trim();
     if (!name) continue;
