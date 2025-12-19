@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL COMPLETE — Rich UX + Year Dropdown Always Visible)
+// src/pages/ResultsPage.jsx (FINAL COMPLETE — Fixed Multi-Year Dropdown + Rich UX + All Features)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -45,7 +45,7 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Event selection logic
+  // Event selection logic — select the correct event for the URL year
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -81,17 +81,18 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // === YEAR SELECTOR LOGIC — ALWAYS SHOW ===
+  // === YEAR SELECTOR LOGIC — FIXED & ALWAYS VISIBLE ===
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => key.toLowerCase() === normalizedUrlKey || slugify(key) === masterKey.toLowerCase()
     );
+
     if (storedMasterKey) {
-      const ids = masterGroups[storedMasterKey] || [];
-      const masterEvents = ids.map((id) => events.find((e) => e.id.toString() === id)).filter(Boolean);
-      availableYears = [...new Set(masterEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
+      const linkedEventIds = masterGroups[storedMasterKey] || [];
+      const linkedEvents = events.filter(e => linkedEventIds.includes(e.id.toString()));
+      availableYears = [...new Set(linkedEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
     }
   }
 
@@ -208,7 +209,7 @@ export default function ResultsPage() {
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
 
-          {/* YEAR DROPDOWN — ALWAYS VISIBLE */}
+          {/* YEAR DROPDOWN — ALWAYS VISIBLE & FIXED FOR MULTI-YEAR */}
           {availableYears.length > 0 && (
             <div className="inline-flex flex-col items-center gap-6 bg-white rounded-2xl shadow-2xl p-8">
               <span className="text-2xl font-bold text-gemini-dark-gray">Select Year</span>
