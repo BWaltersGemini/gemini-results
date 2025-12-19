@@ -146,9 +146,10 @@ export const fetchResultsForEvent = async (eventId) => {
   );
 
   const genderBrackets = allBrackets.filter(b =>
-    b.bracket_type === 'SEX' || (b.bracket_sex && !b.bracket_min_age && !b.bracket_max_age)
+    b.bracket_type === 'SEX' &&
+    /^(Male|Female)$/i.test(b.bracket_name?.trim() || '')
   );
-
+  
   const overallBrackets = allBrackets.filter(b => {
     const name = (b.bracket_name || '').toLowerCase();
     return name.includes('overall') || name.includes('all participants');
