@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Shared Card Matches Preview Perfectly)
+// src/pages/ParticipantPage.jsx (FINAL — Fixed: Stats visible + Card button below + Preview zoomed out)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -119,7 +119,7 @@ export default function ParticipantPage() {
     });
   };
 
-  // Card Generation — with CORS fix for logos
+  // Card Generation
   const generateResultCard = async () => {
     if (!cardRef.current) return;
     try {
@@ -248,20 +248,162 @@ export default function ParticipantPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
-        {/* Main Page Content (unchanged - header, name, stats, times, splits, back button, sponsors) */}
-        {/* Keeping it identical to previous version for brevity — only card section updated below */}
+        {/* Header */}
+        <div className="text-center mb-8">
+          {eventLogos[selectedEvent.id] ? (
+            <img
+              src={eventLogos[selectedEvent.id]}
+              alt="Event Logo"
+              className="mx-auto max-h-24 mb-4 rounded-full shadow-md"
+            />
+          ) : (
+            <div className="mx-auto w-32 h-32 bg-gray-200 rounded-full mb-4 flex items-center justify-center">
+              <span className="text-5xl">🏁</span>
+            </div>
+          )}
+          <h2 className="text-3xl font-bold text-gemini-dark-gray">{selectedEvent.name}</h2>
+          <p className="text-lg text-gray-600 italic">{formatDate(selectedEvent.start_time)}</p>
+          {raceDisplayName !== 'Overall' && (
+            <p className="text-xl text-gemini-blue font-semibold mt-4">{raceDisplayName}</p>
+          )}
+        </div>
 
-        {/* Result Card Generator Button */}
-        <div className="text-center mb-12">
+        {/* Name */}
+        <h3 className="text-5xl font-extrabold mb-8 text-center text-gemini-blue drop-shadow-md">
+          {participant.first_name} {participant.last_name}
+        </h3>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          <div className="flex justify-center">
+            <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-6 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono">
+              <p className="text-sm uppercase tracking-wider font-bold mb-2">BIB</p>
+              <p className="text-6xl font-black">{participant.bib || '—'}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Overall</p>
+              <p className="text-4xl font-bold text-gemini-dark-gray">
+                {participant.place || '—'} <span className="text-lg text-gray-600">of {overallTotal}</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender</p>
+              <p className="text-4xl font-bold text-gemini-dark-gray">
+                {participant.gender_place || '—'} <span className="text-lg text-gray-600">of {genderTotal}</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Age</p>
+              <p className="text-2xl font-bold text-gray-800">{participant.age || '—'}</p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender</p>
+              <p className="text-2xl font-bold text-gray-800">
+                {participant.gender === 'M' ? 'Male' : participant.gender === 'F' ? 'Female' : '—'}
+              </p>
+            </div>
+
+            <div className="md:col-span-4 mt-8">
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Division</p>
+              <button
+                onClick={handleDivisionClick}
+                className="text-3xl font-bold text-[#80ccd6] hover:underline transition cursor-pointer"
+              >
+                {participant.age_group_name || '—'} ({participant.age_group_place || '—'} of {divisionTotal})
+              </button>
+              <p className="text-base text-gray-600 mt-3">Click to view everyone in your division</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Animated Chip Time */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
+          <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
+            <p className="text-5xl font-black text-gemini-blue">
+              {timeRevealed ? (
+                formatChronoTime(participant.chip_time)
+              ) : (
+                <CountUp
+                  start={0}
+                  end={chipTimeSeconds}
+                  duration={3.5}
+                  formattingFn={(value) => {
+                    const hours = Math.floor(value / 3600);
+                    const mins = Math.floor((value % 3600) / 60);
+                    const secs = Math.floor(value % 60);
+                    const tenths = Math.round((value % 1) * 10);
+                    return `${hours ? hours + ':' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}${tenths ? '.' + tenths : ''}`;
+                  }}
+                  onEnd={handleTimeComplete}
+                />
+              )}
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gun Time</p>
+            <p className="text-5xl font-black text-gray-800">{formatChronoTime(participant.clock_time)}</p>
+          </div>
+
+          <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
+            <p className="text-5xl font-black text-green-700">
+              {participant.pace ? formatChronoTime(participant.pace) : '—'}
+            </p>
+          </div>
+        </div>
+
+        {/* Splits */}
+        {participant.splits && participant.splits.length > 0 && (
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
+            <button
+              onClick={() => setShowSplits(!showSplits)}
+              className="w-full bg-gradient-to-r from-[#80ccd6] to-[#80ccd6]/70 py-6 text-white font-bold text-xl hover:opacity-90 transition"
+            >
+              {showSplits ? 'Hide' : 'Show'} Split Times ({participant.splits.length})
+            </button>
+            {showSplits && (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-100 text-gray-700">
+                    <tr>
+                      <th className="px-8 py-5 text-left font-semibold">Split</th>
+                      <th className="px-8 py-5 text-left font-semibold">Time</th>
+                      <th className="px-8 py-5 text-left font-semibold">Pace</th>
+                      <th className="px-8 py-5 text-left font-semibold">Place</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {participant.splits.map((split, i) => (
+                      <tr key={i} className="hover:bg-gray-50 transition">
+                        <td className="px-8 py-5 font-medium">{split.name || `Split ${i + 1}`}</td>
+                        <td className="px-8 py-5">{formatChronoTime(split.time) || '—'}</td>
+                        <td className="px-8 py-5">{split.pace || '—'}</td>
+                        <td className="px-8 py-5">{split.place || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Result Card Generator Button — Now correctly placed below stats/splits */}
+        <div className="text-center my-16">
           <button
             onClick={() => setShowCardPreview(true)}
-            className="px-12 py-6 bg-gradient-to-r from-gemini-blue to-[#80ccd6] text-white font-bold text-2xl rounded-full hover:scale-105 transition shadow-2xl"
+            className="px-16 py-8 bg-gradient-to-r from-gemini-blue to-[#80ccd6] text-white font-bold text-3xl rounded-full hover:scale-105 transition shadow-2xl"
           >
             🎉 Create My Shareable Result Card
           </button>
         </div>
 
-        {/* Hidden Card — Used for both preview and actual share/download */}
+        {/* Hidden Card for Generation */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
@@ -336,57 +478,58 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Preview Modal — Now identical to shared card */}
+        {/* Card Preview Modal — Zoomed out to fit fully */}
         {showCardPreview && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowCardPreview(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 overflow-auto max-h-full" onClick={(e) => e.stopPropagation()}>
               <div className="text-center mb-8">
                 <h3 className="text-4xl font-bold">Your Result Card 🎉</h3>
                 <p className="text-xl text-gray-600 mt-4">This is exactly what will be shared!</p>
               </div>
 
+              {/* Zoomed-out Preview */}
               <div className="flex justify-center mb-8">
-                <div className="w-full aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl">
-                  <div className="h-full flex flex-col items-center justify-center p-10 text-center text-white">
-                    <div className="w-full bg-white rounded-3xl p-10 mb-10">
+                <div className="w-full max-w-md aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl scale-90">
+                  <div className="h-full flex flex-col items-center justify-center p-8 text-center text-white">
+                    <div className="w-full bg-white rounded-2xl p-8 mb-8">
                       {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-48 object-contain" />
+                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-40 object-contain" />
                       ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-40 object-contain" />
+                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-32 object-contain" />
                       ) : (
-                        <h2 className="text-5xl font-black text-gemini-dark-gray">
+                        <h2 className="text-4xl font-black text-gemini-dark-gray">
                           {selectedEvent.name}
                         </h2>
                       )}
                     </div>
 
-                    <p className="text-5xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
-                    <p className="text-3xl text-gray-300 mb-10">{formatDate(selectedEvent.start_time)}</p>
+                    <p className="text-4xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
+                    <p className="text-2xl text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
 
-                    <h1 className="text-5xl font-black mb-10 leading-tight">
+                    <h1 className="text-4xl font-black mb-8 leading-tight">
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
 
-                    <p className="text-3xl text-gray-400 uppercase mb-4">Finish Time</p>
-                    <p className="text-7xl font-black text-[#ffd700] mb-12">
+                    <p className="text-2xl text-gray-400 uppercase mb-4">Finish Time</p>
+                    <p className="text-5xl font-black text-[#ffd700] mb-10">
                       {formatChronoTime(participant.chip_time)}
                     </p>
 
-                    <div className="grid grid-cols-3 gap-6 text-2xl">
+                    <div className="grid grid-cols-3 gap-4 text-lg">
                       <div>
                         <p className="text-gray-400 uppercase">Overall</p>
-                        <p className="text-5xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
-                        <p className="text-gray-400">of {overallTotal}</p>
+                        <p className="text-4xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                        <p className="text-gray-400 text-sm">of {overallTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Gender</p>
-                        <p className="text-5xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
-                        <p className="text-gray-400">of {genderTotal}</p>
+                        <p className="text-4xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                        <p className="text-gray-400 text-sm">of {genderTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Division</p>
-                        <p className="text-5xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
-                        <p className="text-gray-400">of {divisionTotal}</p>
+                        <p className="text-4xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                        <p className="text-gray-400 text-sm">of {divisionTotal}</p>
                       </div>
                     </div>
                   </div>
@@ -411,7 +554,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Back Button & Sponsors (unchanged) */}
+        {/* Back Button */}
         <div className="text-center mb-16">
           <button
             onClick={goBackToResults}
@@ -421,6 +564,7 @@ export default function ParticipantPage() {
           </button>
         </div>
 
+        {/* Sponsors */}
         {ads.length > 0 && (
           <div>
             <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">Event Sponsors</h3>
