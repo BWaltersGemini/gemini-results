@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL COMPLETE — Supabase-first + Manual ChronoTrack Fetch + Refresh & Publish)
+// src/pages/AdminPage.jsx (FINAL COMPLETE — Auto-save on Publish & Master Changes + Supabase-first Load)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -14,7 +14,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  // Global config
+  // Global config state
   const [editedEvents, setEditedEvents] = useState({});
   const [masterGroups, setMasterGroups] = useState({});
   const [hiddenRaces, setHiddenRaces] = useState({});
@@ -29,6 +29,7 @@ export default function AdminPage() {
   const [fetchingEvents, setFetchingEvents] = useState(false);
   const [activeTab, setActiveTab] = useState('events');
   const [newMasterKeys, setNewMasterKeys] = useState({});
+  const [saveStatus, setSaveStatus] = useState(''); // Feedback toast
 
   const adminSupabase = createAdminSupabaseClient();
 
@@ -43,16 +44,36 @@ export default function AdminPage() {
     setHiddenRaces(config.hiddenRaces || {});
   };
 
-  const saveConfig = async (key, value) => {
+  const autoSaveConfig = async (key, value) => {
     try {
       const { error } = await adminSupabase
         .from('app_config')
         .upsert({ key, value }, { onConflict: 'key' });
       if (error) throw error;
-      console.log(`[Admin] Saved ${key}`);
+      setSaveStatus(`${key === 'masterGroups' ? 'Master links' : 'Results'} saved automatically`);
+      setTimeout(() => setSaveStatus(''), 4000);
     } catch (err) {
-      console.error(`[Admin] Save failed ${key}:`, err);
-      alert('Save failed. Check console.');
+      console.error(`Auto-save failed for ${key}:`, err);
+      setSaveStatus('Auto-save failed');
+      setTimeout(() => setSaveStatus(''), 6000);
+    }
+  };
+
+  const saveAllChanges = async () => {
+    try {
+      await Promise.all([
+        autoSaveConfig('masterGroups', masterGroups),
+        autoSaveConfig('editedEvents', editedEvents),
+        autoSaveConfig('eventLogos', eventLogos),
+        autoSaveConfig('hiddenMasters', hiddenMasters),
+        autoSaveConfig('showAdsPerMaster', showAdsPerMaster),
+        autoSaveConfig('ads', ads),
+        autoSaveConfig('hiddenRaces', hiddenRaces),
+      ]);
+      setSaveStatus('All changes saved!');
+      setTimeout(() => setSaveStatus(''), 4000);
+    } catch {
+      setSaveStatus('Bulk save failed');
     }
   };
 
@@ -86,8 +107,6 @@ export default function AdminPage() {
           counts[event.id] = count || 0;
         }
         setParticipantCounts(counts);
-
-        console.log('[Admin] Loaded cached events and counts from Supabase');
       } catch (err) {
         console.error('[Admin] Failed to load cached data:', err);
         setChronoEvents([]);
@@ -101,9 +120,7 @@ export default function AdminPage() {
   const fetchLatestFromChronoTrack = async () => {
     setFetchingEvents(true);
     try {
-      console.log('[Admin] Fetching latest events from ChronoTrack...');
       const freshEvents = await fetchChronoEvents();
-
       const sorted = freshEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
       const toUpsert = sorted.map(event => ({
@@ -120,10 +137,11 @@ export default function AdminPage() {
       if (error) throw error;
 
       setChronoEvents(sorted);
-      alert(`Fetched and cached ${sorted.length} events from ChronoTrack!`);
+      setSaveStatus('Events refreshed and cached!');
+      setTimeout(() => setSaveStatus(''), 4000);
     } catch (err) {
       console.error('[Admin] ChronoTrack fetch failed:', err);
-      alert('Failed to fetch events from ChronoTrack.');
+      setSaveStatus('Fetch failed');
     } finally {
       setFetchingEvents(false);
     }
@@ -142,22 +160,25 @@ export default function AdminPage() {
     return null;
   };
 
-  const assignToMaster = (eventId, masterKey) => {
+  const assignToMaster = async (eventId, masterKey) => {
     if (!masterKey) return;
     const updated = { ...masterGroups };
+    // Remove from old masters
     Object.keys(updated).forEach(key => {
       updated[key] = updated[key].filter(id => id !== eventId.toString());
       if (updated[key].length === 0) delete updated[key];
     });
+    // Add to new
     if (!updated[masterKey]) updated[masterKey] = [];
     if (!updated[masterKey].includes(eventId.toString())) {
       updated[masterKey].push(eventId.toString());
     }
     setMasterGroups(updated);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
+    await autoSaveConfig('masterGroups', updated); // AUTO-SAVE
   };
 
-  const unlinkFromMaster = (eventId) => {
+  const unlinkFromMaster = async (eventId) => {
     const updated = { ...masterGroups };
     let changed = false;
     Object.keys(updated).forEach(key => {
@@ -168,7 +189,10 @@ export default function AdminPage() {
         if (updated[key].length === 0) delete updated[key];
       }
     });
-    if (changed) setMasterGroups(updated);
+    if (changed) {
+      setMasterGroups(updated);
+      await autoSaveConfig('masterGroups', updated); // AUTO-SAVE
+    }
   };
 
   const toggleEventExpansion = (eventId) => {
@@ -209,9 +233,7 @@ export default function AdminPage() {
   const refreshAndPublishResults = async (eventId) => {
     setRefreshingEvent(eventId);
     try {
-      console.log(`[Admin] Publishing results for event ${eventId}...`);
       const fresh = await fetchResultsForEvent(eventId);
-
       if (fresh.length === 0) {
         alert('No results returned from ChronoTrack.');
         return;
@@ -254,10 +276,12 @@ export default function AdminPage() {
       if (error) throw error;
 
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
-      alert(`Successfully published ${deduped.length} results!`);
+      await autoSaveConfig('masterGroups', masterGroups); // Ensure config is current
+      setSaveStatus(`Published ${deduped.length} results — saved automatically!`);
+      setTimeout(() => setSaveStatus(''), 5000);
     } catch (err) {
       console.error('[Admin] Publish failed:', err);
-      alert('Failed to publish results.');
+      setSaveStatus('Publish failed');
     } finally {
       setRefreshingEvent(null);
     }
@@ -288,19 +312,6 @@ export default function AdminPage() {
     if (type === 'ad') {
       setAds(prev => [...prev, ...urls]);
     }
-  };
-
-  const handleSaveChanges = async () => {
-    await Promise.all([
-      saveConfig('masterGroups', masterGroups),
-      saveConfig('editedEvents', editedEvents),
-      saveConfig('eventLogos', eventLogos),
-      saveConfig('hiddenMasters', hiddenMasters),
-      saveConfig('showAdsPerMaster', showAdsPerMaster),
-      saveConfig('ads', ads),
-      saveConfig('hiddenRaces', hiddenRaces),
-    ]);
-    alert('All configuration changes saved to Supabase!');
   };
 
   if (!isLoggedIn) {
@@ -356,6 +367,13 @@ export default function AdminPage() {
             Logout
           </button>
         </div>
+
+        {/* Save Status Toast */}
+        {saveStatus && (
+          <div className="fixed top-24 right-8 z-50 bg-gemini-blue text-white px-8 py-4 rounded-2xl shadow-2xl animate-pulse text-lg font-semibold">
+            {saveStatus}
+          </div>
+        )}
 
         <div className="flex space-x-1 mb-8 bg-gray-100 p-1 rounded-xl w-fit">
           <button
@@ -542,10 +560,10 @@ export default function AdminPage() {
 
         <div className="text-center mt-16">
           <button
-            onClick={handleSaveChanges}
+            onClick={saveAllChanges}
             className="px-16 py-6 bg-gemini-blue text-white text-2xl font-bold rounded-full hover:bg-gemini-blue/90 shadow-2xl transition transform hover:scale-105"
           >
-            Save All Changes to Supabase
+            Save All Other Changes to Supabase
           </button>
         </div>
       </div>
