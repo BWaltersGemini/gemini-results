@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — With per-master "Show Ads" toggle)
+// src/pages/AdminPage.jsx (FINAL — Supabase Storage logos + Delete Master Event)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -21,7 +21,7 @@ export default function AdminPage() {
   const [masterGroups, setMasterGroups] = useState({});
   const [hiddenRaces, setHiddenRaces] = useState({});
   const [hiddenMasters, setHiddenMasters] = useState([]);
-  const [showAdsPerMaster, setShowAdsPerMaster] = useState({}); // ← NEW: per-master ads toggle
+  const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [eventLogos, setEventLogos] = useState({});
   const [ads, setAds] = useState([]);
   const [expandedEvents, setExpandedEvents] = useState({});
@@ -44,7 +44,7 @@ export default function AdminPage() {
     setEditedEvents(config.editedEvents || {});
     setEventLogos(config.eventLogos || {});
     setHiddenMasters(config.hiddenMasters || []);
-    setShowAdsPerMaster(config.showAdsPerMaster || {}); // ← Load ads toggle
+    setShowAdsPerMaster(config.showAdsPerMaster || {});
     setAds(config.ads || []);
     setHiddenRaces(config.hiddenRaces || {});
   };
@@ -55,7 +55,7 @@ export default function AdminPage() {
         .from('app_config')
         .upsert({ key, value }, { onConflict: 'key' });
       if (error) throw error;
-      setSaveStatus(`${key === 'showAdsPerMaster' ? 'Ads visibility' : key === 'masterGroups' ? 'Master links' : key === 'eventLogos' ? 'Event logo' : 'Config'} saved automatically`);
+      setSaveStatus(`${key === 'masterGroups' ? 'Master links' : key === 'eventLogos' ? 'Logo' : 'Config'} saved`);
       setTimeout(() => setSaveStatus(''), 4000);
     } catch (err) {
       console.error(`Auto-save failed for ${key}:`, err);
@@ -253,12 +253,81 @@ export default function AdminPage() {
     });
   };
 
-  // Toggle ads for master event
-  const toggleAdsForMaster = async (masterKey) => {
-    const updated = { ...showAdsPerMaster };
-    updated[masterKey] = !updated[masterKey];
-    setShowAdsPerMaster(updated);
-    await autoSaveConfig('showAdsPerMaster', updated);
+  // NEW: Upload logo to Supabase Storage
+  const handleLogoUpload = async (e, masterKey) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const { data, error: uploadError } = await adminSupabase.storage
+        .from('logos') // Make sure this bucket exists in Supabase
+        .upload(`public/${masterKey}`, file, {
+          upsert: true,
+          contentType: file.type,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = adminSupabase.storage
+        .from('logos')
+        .getPublicUrl(`public/${masterKey}`);
+
+      const updatedLogos = { ...eventLogos, [masterKey]: publicUrl };
+      setEventLogos(updatedLogos);
+      await autoSaveConfig('eventLogos', updatedLogos);
+      setSaveStatus('Master logo uploaded!');
+      setTimeout(() => setSaveStatus(''), 4000);
+    } catch (err) {
+      console.error('Logo upload failed:', err);
+      setSaveStatus('Logo upload failed');
+      setTimeout(() => setSaveStatus(''), 6000);
+    }
+  };
+
+  // Remove master logo
+  const handleRemoveLogo = async (masterKey) => {
+    try {
+      const { error } = await adminSupabase.storage
+        .from('logos')
+        .remove([`public/${masterKey}`]);
+
+      if (error && error.message !== 'Object not found') throw error;
+
+      const updatedLogos = { ...eventLogos };
+      delete updatedLogos[masterKey];
+      setEventLogos(updatedLogos);
+      await autoSaveConfig('eventLogos', updatedLogos);
+      setSaveStatus('Master logo removed');
+      setTimeout(() => setSaveStatus(''), 4000);
+    } catch (err) {
+      console.error('Logo removal failed:', err);
+      setSaveStatus('Logo removal failed');
+      setTimeout(() => setSaveStatus(''), 6000);
+    }
+  };
+
+  // NEW: Delete entire master event
+  const handleDeleteMaster = async (masterKey) => {
+    if (!confirm(`Delete master event "${masterKey}"? This will unlink all events and remove its logo.`)) {
+      return;
+    }
+
+    try {
+      const updatedGroups = { ...masterGroups };
+      delete updatedGroups[masterKey];
+      setMasterGroups(updatedGroups);
+      await autoSaveConfig('masterGroups', updatedGroups);
+
+      // Remove logo
+      await handleRemoveLogo(masterKey);
+
+      setSaveStatus(`Master "${masterKey}" deleted`);
+      setTimeout(() => setSaveStatus(''), 5000);
+    } catch (err) {
+      console.error('Delete master failed:', err);
+      setSaveStatus('Delete failed');
+      setTimeout(() => setSaveStatus(''), 6000);
+    }
   };
 
   const refreshAndPublishResults = async (eventId) => {
@@ -308,44 +377,6 @@ export default function AdminPage() {
     } finally {
       setRefreshingEvent(null);
     }
-  };
-
-  // Upload logo for master event
-  const handleLogoUpload = async (e, masterKey) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', 'logo');
-
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (data.url) {
-        const updatedLogos = { ...eventLogos, [masterKey]: data.url };
-        setEventLogos(updatedLogos);
-        await autoSaveConfig('eventLogos', updatedLogos);
-        setSaveStatus('Master logo uploaded!');
-        setTimeout(() => setSaveStatus(''), 4000);
-      }
-    } catch (err) {
-      console.error('Logo upload failed:', err);
-      setSaveStatus('Logo upload failed');
-      setTimeout(() => setSaveStatus(''), 6000);
-    }
-  };
-
-  const handleRemoveLogo = async (masterKey) => {
-    const updatedLogos = { ...eventLogos };
-    delete updatedLogos[masterKey];
-    setEventLogos(updatedLogos);
-    await autoSaveConfig('eventLogos', updatedLogos);
-    setSaveStatus('Master logo removed');
-    setTimeout(() => setSaveStatus(''), 4000);
   };
 
   const handleFileUpload = async (e, type) => {
@@ -525,60 +556,67 @@ export default function AdminPage() {
 
                     {expandedEvents[event.id] && (
                       <div className="px-6 pb-6 border-t border-gray-200">
-                        {/* Master Logo Upload */}
+                        {/* Master Management */}
                         {currentMaster && (
-                          <div className="mb-8 p-6 bg-gemini-blue/5 rounded-xl">
-                            <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">
-                              Upload Logo for Master: <span className="text-gemini-blue">{currentMaster}</span>
-                            </h4>
-                            {eventLogos[currentMaster] ? (
-                              <div className="flex items-center gap-6">
-                                <img
-                                  src={eventLogos[currentMaster]}
-                                  alt="Master Logo"
-                                  className="h-32 rounded-lg shadow-md"
-                                />
-                                <div>
+                          <div className="mb-8 p-6 bg-gradient-to-r from-gemini-blue/10 to-gemini-blue/5 rounded-xl border border-gemini-blue/30">
+                            <div className="flex justify-between items-center mb-6">
+                              <h4 className="text-xl font-bold text-gemini-dark-gray">
+                                Master Event: <span className="text-gemini-blue">{currentMaster}</span>
+                              </h4>
+                              <button
+                                onClick={() => handleDeleteMaster(currentMaster)}
+                                className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
+                              >
+                                Delete Master
+                              </button>
+                            </div>
+
+                            {/* Logo Upload */}
+                            <div className="mb-6">
+                              <h5 className="text-lg font-semibold text-gray-700 mb-3">Master Logo</h5>
+                              {eventLogos[currentMaster] ? (
+                                <div className="flex items-center gap-6">
+                                  <img
+                                    src={eventLogos[currentMaster]}
+                                    alt="Master Logo"
+                                    className="h-32 rounded-lg shadow-md"
+                                  />
                                   <button
                                     onClick={() => handleRemoveLogo(currentMaster)}
-                                    className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition font-medium"
+                                    className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
                                   >
                                     Remove Logo
                                   </button>
                                 </div>
-                              </div>
-                            ) : (
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => handleLogoUpload(e, currentMaster)}
-                                className="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90 cursor-pointer"
-                              />
-                            )}
+                              ) : (
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => handleLogoUpload(e, currentMaster)}
+                                  className="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90 cursor-pointer"
+                                />
+                              )}
+                            </div>
+
+                            {/* Ads Toggle */}
+                            <div>
+                              <h5 className="text-lg font-semibold text-gray-700 mb-3">Ads Visibility</h5>
+                              <label className="flex items-center gap-4 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!showAdsPerMaster[currentMaster]}
+                                  onChange={() => toggleAdsForMaster(currentMaster)}
+                                  className="h-6 w-6 text-gemini-blue rounded focus:ring-gemini-blue"
+                                />
+                                <span className="text-lg font-medium text-gray-800">
+                                  {showAdsPerMaster[currentMaster] ? 'Show ads' : 'Hide ads'} on this master event
+                                </span>
+                              </label>
+                            </div>
                           </div>
                         )}
 
-                        {/* Show Ads Toggle */}
-                        {currentMaster && (
-                          <div className="mb-8 p-6 bg-yellow-50 rounded-xl border border-yellow-300">
-                            <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">
-                              Ads Visibility for Master: <span className="text-gemini-blue">{currentMaster}</span>
-                            </h4>
-                            <label className="flex items-center gap-4 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={!!showAdsPerMaster[currentMaster]}
-                                onChange={() => toggleAdsForMaster(currentMaster)}
-                                className="h-6 w-6 text-gemini-blue rounded focus:ring-gemini-blue"
-                              />
-                              <span className="text-lg font-medium text-gray-800">
-                                {showAdsPerMaster[currentMaster] ? 'Ads are shown' : 'Ads are hidden'} on this master event
-                              </span>
-                            </label>
-                          </div>
-                        )}
-
-                        {/* Existing controls */}
+                        {/* Standard Controls */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                           <div>
                             <label className="block text-lg font-semibold text-gray-700 mb-2">Master Event</label>
@@ -680,7 +718,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {/* Website tab */}
+        {/* Website Tab */}
         {activeTab === 'website' && (
           <section className="space-y-12">
             <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
