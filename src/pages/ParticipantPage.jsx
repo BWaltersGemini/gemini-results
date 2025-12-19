@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (WITH Result Card Generator + Animated Time Reveal + Confetti)
+// src/pages/ParticipantPage.jsx (FINAL — Dark high-contrast Result Card + Master Logo + Race/Date)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -108,7 +108,7 @@ export default function ParticipantPage() {
     fetchDataIfMissing();
   }, [bib, events, contextResults, contextLoading, initialState]);
 
-  // Trigger confetti when time reveal finishes
+  // Confetti when time finishes
   const handleTimeComplete = () => {
     setTimeRevealed(true);
     confetti({
@@ -119,7 +119,7 @@ export default function ParticipantPage() {
     });
   };
 
-  // Result Card Generator
+  // Result Card Generation
   const generateResultCard = async () => {
     if (!cardRef.current) return;
     try {
@@ -148,7 +148,7 @@ export default function ParticipantPage() {
             text: `I finished ${selectedEvent.name} in ${participant.chip_time}! 🏃‍♂️`,
           });
         } else {
-          generateResultCard(); // fallback to download
+          generateResultCard();
         }
       });
     } catch (err) {
@@ -230,6 +230,12 @@ export default function ParticipantPage() {
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
   const chipTimeSeconds = parseChipTime(participant.chip_time);
 
+  // Determine master logo
+  const currentMasterKey = Object.keys(masterGroups).find(key =>
+    masterGroups[key]?.includes(selectedEvent?.id?.toString())
+  );
+  const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
@@ -304,7 +310,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Animated Chip Time + Other Times */}
+        {/* Animated Chip Time */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
@@ -388,87 +394,126 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden Result Card Canvas (for generation) */}
+        {/* Hidden Result Card (for html2canvas) */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
-            className="w-[1080px] h-[1080px] bg-gradient-to-br from-gemini-blue/20 to-[#80ccd6]/30 relative overflow-hidden flex flex-col items-center justify-center text-center p-16"
-            style={{ fontFamily: 'system-ui, sans-serif' }}
+            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-center text-center p-16 shadow-2xl"
+            style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
-            {/* Background decoration */}
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute top-0 left-0 w-96 h-96 bg-gemini-blue rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-              <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#80ccd6] rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+            {/* Subtle finish line glow */}
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute top-1/2 left-0 right-0 h-1 bg-white transform -translate-y-1/2" />
+              <div className="absolute top-1/2 left-0 right-0 h-px bg-yellow-400 blur-xl transform -translate-y-1/2" />
             </div>
 
-            {/* Event Logo */}
-            {eventLogos[selectedEvent.id] && (
-              <img src={eventLogos[selectedEvent.id]} alt="Event" className="w-48 h-48 object-contain mb-8 drop-shadow-2xl" />
-            )}
+            {/* Master Logo (priority) */}
+            {masterLogo ? (
+              <img src={masterLogo} alt="Series Logo" className="w-64 h-64 object-contain mb-8 drop-shadow-2xl" />
+            ) : eventLogos[selectedEvent.id] ? (
+              <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-56 h-56 object-contain mb-8 drop-shadow-2xl" />
+            ) : null}
 
-            {/* Name */}
-            <h1 className="text-8xl font-black text-gemini-dark-gray mb-8 drop-shadow-lg">
-              {participant.first_name} {participant.last_name}
+            {/* Event Name */}
+            <h2 className="text-5xl font-bold text-white mb-2 drop-shadow-lg">
+              {selectedEvent.name}
+            </h2>
+
+            {/* Race Name */}
+            <p className="text-6xl font-black text-[#80ccd6] mb-4 drop-shadow-2xl">
+              {raceDisplayName}
+            </p>
+
+            {/* Date */}
+            <p className="text-4xl text-gray-300 mb-12">
+              {formatDate(selectedEvent.start_time)}
+            </p>
+
+            {/* Runner Name */}
+            <h1 className="text-8xl font-black text-white mb-8 drop-shadow-2xl">
+              {participant.first_name}<br />{participant.last_name}
             </h1>
 
-            {/* Chip Time */}
-            <p className="text-12xl font-black text-gemini-blue mb-12">
-              {formatChronoTime(participant.chip_time)}
-            </p>
+            {/* Chip Time - HERO */}
+            <div className="mb-12">
+              <p className="text-4xl text-gray-400 uppercase tracking-widest mb-2">Finish Time</p>
+              <p className="text-12xl font-black text-[#ffd700] drop-shadow-2xl">
+                {formatChronoTime(participant.chip_time)}
+              </p>
+            </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-12 text-4xl font-bold">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-3 gap-12 text-white">
               <div>
-                <p className="text-gray-700">Overall</p>
-                <p className="text-gemini-blue">{participant.place || '—'} / {overallTotal}</p>
+                <p className="text-3xl text-gray-400 uppercase">Overall</p>
+                <p className="text-6xl font-bold text-[#ffd700]">
+                  {participant.place || '—'}
+                </p>
+                <p className="text-3xl text-gray-400">of {overallTotal}</p>
               </div>
               <div>
-                <p className="text-gray-700">Gender</p>
-                <p className="text-gemini-blue">{participant.gender_place || '—'} / {genderTotal}</p>
+                <p className="text-3xl text-gray-400 uppercase">Gender</p>
+                <p className="text-6xl font-bold text-[#ffd700]">
+                  {participant.gender_place || '—'}
+                </p>
+                <p className="text-3xl text-gray-400">of {genderTotal}</p>
               </div>
               <div>
-                <p className="text-gray-700">Division</p>
-                <p className="text-gemini-blue">{participant.age_group_place || '—'} / {divisionTotal}</p>
+                <p className="text-3xl text-gray-400 uppercase">Division</p>
+                <p className="text-6xl font-bold text-[#ffd700]">
+                  {participant.age_group_place || '—'}
+                </p>
+                <p className="text-3xl text-gray-400">of {divisionTotal}</p>
               </div>
             </div>
 
-            {/* Event Info */}
-            <p className="absolute bottom-16 left-1/2 -translate-x-1/2 text-4xl text-gray-700">
-              {selectedEvent.name} • {formatDate(selectedEvent.start_time)}
-            </p>
-
-            {/* Branding */}
-            <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-3xl text-gray-500">
-              Timed by Your Company Name
+            {/* Branding Footer */}
+            <p className="absolute bottom-12 left-1/2 -translate-x-1/2 text-3xl text-gray-500">
+              Timed by Your Company Name • yourwebsite.com
             </p>
           </div>
         </div>
 
         {/* Card Preview Modal */}
-        {showCardPreview && cardRef.current && (
+        {showCardPreview && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-8" onClick={() => setShowCardPreview(false)}>
             <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-8" onClick={(e) => e.stopPropagation()}>
               <div className="text-center mb-8">
                 <h3 className="text-4xl font-bold">Your Result Card 🎉</h3>
                 <p className="text-xl text-gray-600 mt-4">Ready to share!</p>
               </div>
-              <div className="flex justify-center mb-8">
-                <div ref={cardRef} className="w-96 h-96 bg-gradient-to-br from-gemini-blue/20 to-[#80ccd6]/30 rounded-3xl overflow-hidden shadow-2xl" style={{ transform: 'scale(0.8)' }}>
-                  {/* Same content as hidden card above */}
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-                    {eventLogos[selectedEvent.id] && (
-                      <img src={eventLogos[selectedEvent.id]} alt="Event" className="w-32 h-32 object-contain mb-6" />
-                    )}
-                    <h1 className="text-5xl font-black text-gemini-dark-gray mb-4">
-                      {participant.first_name} {participant.last_name}
-                    </h1>
-                    <p className="text-7xl font-black text-gemini-blue mb-8">
-                      {formatChronoTime(participant.chip_time)}
-                    </p>
-                    <div className="text-2xl">
-                      <p>Overall: {participant.place || '—'} / {overallTotal}</p>
-                      <p>Gender: {participant.gender_place || '—'} / {genderTotal}</p>
-                      <p>Division: {participant.age_group_place || '—'} / {divisionTotal}</p>
+              <div className="flex justify-center mb-8 overflow-hidden rounded-3xl">
+                <div className="w-full max-w-lg aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-center p-8 text-center text-white">
+                  {masterLogo ? (
+                    <img src={masterLogo} alt="Series Logo" className="w-40 h-40 object-contain mb-6 drop-shadow-2xl" />
+                  ) : eventLogos[selectedEvent.id] ? (
+                    <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-32 h-32 object-contain mb-6 drop-shadow-2xl" />
+                  ) : null}
+                  <h2 className="text-3xl font-bold mb-2">{selectedEvent.name}</h2>
+                  <p className="text-4xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
+                  <p className="text-2xl text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
+                  <h1 className="text-5xl font-black mb-6">
+                    {participant.first_name}<br />{participant.last_name}
+                  </h1>
+                  <p className="text-2xl text-gray-400 uppercase mb-2">Finish Time</p>
+                  <p className="text-6xl font-black text-[#ffd700] mb-8">
+                    {formatChronoTime(participant.chip_time)}
+                  </p>
+                  <div className="grid grid-cols-3 gap-6 text-xl">
+                    <div>
+                      <p className="text-gray-400 uppercase">Overall</p>
+                      <p className="text-4xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                      <p className="text-gray-400">of {overallTotal}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 uppercase">Gender</p>
+                      <p className="text-4xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                      <p className="text-gray-400">of {genderTotal}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 uppercase">Division</p>
+                      <p className="text-4xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                      <p className="text-gray-400">of {divisionTotal}</p>
                     </div>
                   </div>
                 </div>
