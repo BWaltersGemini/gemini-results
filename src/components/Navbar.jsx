@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (FINAL — Uses Fresh masterGroups from Context)
+// src/components/Navbar.jsx (UPDATED — Clear search bar on Logo & Results click + Masters sorted by most recent)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -12,8 +12,8 @@ export default function Navbar() {
     selectedEvent,
     setSelectedEvent,
     loading = true,
-    masterGroups = {},   // Fresh from context
-    editedEvents = {},   // Fresh from context
+    masterGroups = {},
+    editedEvents = {},
   } = useContext(RaceContext);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,8 +32,8 @@ export default function Navbar() {
 
   // Extract year from start_time (Unix epoch in seconds)
   const getYearFromEvent = (event) => {
-    if (!event?.start_time) return null;
-    return new Date(event.start_time * 1000).getFullYear().toString();
+    if (!event?.start_time) return 0;
+    return new Date(event.start_time * 1000).getFullYear();
   };
 
   useEffect(() => {
@@ -42,28 +42,35 @@ export default function Navbar() {
     }
   }, [selectedEvent]);
 
-  // Build master event list using fresh masterGroups from context
-  const masterEventList = Object.keys(masterGroups).map((storedKey) => {
-    const displayName = editedEvents[storedKey]?.name || storedKey;
-    const eventIds = masterGroups[storedKey] || [];
-    const masterEvents = events.filter((e) => eventIds.includes(String(e.id)));
+  // Build master event list and sort by most recent event descending
+  const masterEventList = Object.keys(masterGroups)
+    .map((storedKey) => {
+      const displayName = editedEvents[storedKey]?.name || storedKey;
+      const eventIds = masterGroups[storedKey] || [];
+      const masterEvents = events.filter((e) => eventIds.includes(String(e.id)));
 
-    if (masterEvents.length === 0) return null;
+      if (masterEvents.length === 0) return null;
 
-    // Sort by newest first using start_time
-    const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
+      // Find the most recent event in this master group
+      const latestEvent = masterEvents.reduce((latest, current) =>
+        (current.start_time || 0) > (latest.start_time || 0) ? current : latest
+      );
 
-    const masterSlug = slugify(storedKey);
-    const year = getYearFromEvent(latestEvent);
+      const masterSlug = slugify(storedKey);
+      const year = getYearFromEvent(latestEvent);
 
-    return {
-      storedKey,
-      displayName,
-      masterSlug,
-      year,
-      latestEvent,
-    };
-  }).filter(Boolean);
+      return {
+        storedKey,
+        displayName,
+        masterSlug,
+        year,
+        latestEvent,
+        latestStartTime: latestEvent.start_time || 0, // for sorting
+      };
+    })
+    .filter(Boolean)
+    // Sort by most recent year/event descending
+    .sort((a, b) => b.latestStartTime - a.latestStartTime);
 
   const filteredMasters = searchTerm
     ? masterEventList.filter((m) =>
@@ -89,21 +96,25 @@ export default function Navbar() {
     toggleDropdown();
   };
 
-  // When clicking "Results" — clear everything and go to main results page
+  // Clear search + selection when clicking "Results" or Logo
+  const clearSearchAndSelection = () => {
+    setSelectedEvent(null);
+    setSearchTerm('');
+    setIsListOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
   const handleResultsClick = (e) => {
     if (location.pathname.startsWith('/results')) {
       e.preventDefault();
     }
-    setSelectedEvent(null);
-    setSearchTerm('');
-    setIsListOpen(false);
+    clearSearchAndSelection();
     navigate('/results');
-    setIsMobileMenuOpen(false);
   };
 
   const handleLogoClick = () => {
+    clearSearchAndSelection();
     navigate('/');
-    setIsMobileMenuOpen(false);
   };
 
   return (
@@ -114,7 +125,6 @@ export default function Navbar() {
           <button onClick={handleLogoClick}>
             <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
           </button>
-
           {/* Desktop Links */}
           <div className="hidden md:flex items-center space-x-8">
             <Link
@@ -133,7 +143,6 @@ export default function Navbar() {
               Sign up for More Races
             </a>
           </div>
-
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
