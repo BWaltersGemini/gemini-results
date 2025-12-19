@@ -1,7 +1,7 @@
-// src/pages/AdminPage.jsx (CLEANED UP + UNLINK FROM MASTER + MODERN UI)
+// src/pages/AdminPage.jsx (OPTIMIZED — No results fetching in Events tab + Unlink + Clean UI)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchEvents as fetchChronoEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
+import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 
@@ -23,20 +23,9 @@ export default function AdminPage() {
   const [eventLogos, setEventLogos] = useState({});
   const [ads, setAds] = useState([]);
   const [expandedEvents, setExpandedEvents] = useState({});
-  const [chronotrackEnabled, setChronotrackEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [chronoEvents, setChronoEvents] = useState([]);
-  const [selectedEventId, setSelectedEventId] = useState('');
-  const [refreshStatus, setRefreshStatus] = useState('');
   const [activeTab, setActiveTab] = useState('events');
-  const [refreshingEvents, setRefreshingEvents] = useState(false);
-  const [showAssignedEvents, setShowAssignedEvents] = useState(false);
-  const [collapsedYears, setCollapsedYears] = useState({});
-  const [syncingEvents, setSyncingEvents] = useState([]);
-  const [eventResultsCount, setEventResultsCount] = useState({});
-  const [autoSyncOnAssign, setAutoSyncOnAssign] = useState({});
-  const [fetchingNewEvents, setFetchingNewEvents] = useState(false);
-  const [newEventsStatus, setNewEventsStatus] = useState('');
   const [newMasterKeys, setNewMasterKeys] = useState({});
 
   const adminSupabase = createAdminSupabaseClient();
@@ -77,21 +66,12 @@ export default function AdminPage() {
       const fetchData = async () => {
         try {
           setLoading(true);
-          const events = await fetchChronoEvents();
+          const events = await fetchChronoEvents(); // Includes embedded races
           const sorted = events.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
           setChronoEvents(sorted);
-
-          // Count results per event (optional preview)
-          const counts = {};
-          for (const event of sorted.slice(0, 50)) { // Limit to avoid slowdown
-            try {
-              const fresh = await fetchResultsForEvent(event.id);
-              counts[event.id] = fresh.length;
-            } catch {}
-          }
-          setEventResultsCount(counts);
         } catch (err) {
-          console.error('Fetch failed:', err);
+          console.error('Failed to fetch events:', err);
+          alert('Failed to load events from ChronoTrack.');
         } finally {
           setLoading(false);
         }
@@ -118,14 +98,16 @@ export default function AdminPage() {
   const assignToMaster = async (eventId, masterKey) => {
     if (!masterKey) return;
     const updated = { ...masterGroups };
-    // Remove from old master
+    // Remove from any existing master
     Object.keys(updated).forEach(key => {
       updated[key] = updated[key].filter(id => id !== eventId.toString());
       if (updated[key].length === 0) delete updated[key];
     });
-    // Add to new
+    // Add to selected master
     if (!updated[masterKey]) updated[masterKey] = [];
-    updated[masterKey].push(eventId.toString());
+    if (!updated[masterKey].includes(eventId.toString())) {
+      updated[masterKey].push(eventId.toString());
+    }
     setMasterGroups(updated);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
   };
@@ -301,6 +283,8 @@ export default function AdminPage() {
 
             {loading ? (
               <p className="text-center text-gray-600 py-12">Loading events...</p>
+            ) : chronoEvents.length === 0 ? (
+              <p className="text-center text-gray-600 py-12">No events found.</p>
             ) : (
               chronoEvents.map((event) => {
                 const currentMaster = getCurrentMasterForEvent(event.id);
@@ -317,7 +301,7 @@ export default function AdminPage() {
                           {displayName} <span className="text-lg font-normal text-gray-500">({formatDate(event.start_time)})</span>
                         </h3>
                         <p className="text-gray-600 mt-1">
-                          ID: {event.id} • {eventResultsCount[event.id] !== undefined ? `${eventResultsCount[event.id]} results` : 'Results not counted'}
+                          ID: {event.id}
                         </p>
                         {currentMaster && (
                           <p className="text-sm text-gemini-blue font-medium mt-2">
@@ -400,12 +384,18 @@ export default function AdminPage() {
                                   </div>
                                   {race.distance && (
                                     <span className="text-gray-600 ml-4">
-                                      {race.distance} {race.distance_unit}
+                                      {race.distance} {race.distance_unit || 'meters'}
                                     </span>
                                   )}
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        )}
+
+                        {(!event.races || event.races.length === 0) && (
+                          <div className="mt-8 text-gray-500 italic">
+                            No races embedded for this event.
                           </div>
                         )}
                       </div>
