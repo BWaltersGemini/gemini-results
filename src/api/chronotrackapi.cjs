@@ -158,10 +158,9 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Found ${divisionBrackets.length} division brackets (age/specialty per race)`);
   console.log(`[ChronoTrack] Found ${overallBrackets.length} overall brackets`);
 
-  // Fetch all overall results first
+  // Fetch all overall results first (bump size to 500)
   let allResults = [];
   let page = 1;
-  const pageSize = 250;
   const maxPages = 40;
 
   try {
@@ -171,14 +170,14 @@ export const fetchResultsForEvent = async (eventId) => {
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
           page,
-          size: pageSize,
+          size: 500,
         },
       });
 
       const results = res.data.event_results || [];
       if (results.length === 0) break;
       allResults = [...allResults, ...results];
-      if (results.length < pageSize) break;
+      if (results.length < 500) break;
       page++;
     }
     console.log(`[ChronoTrack] Fetched ${allResults.length} overall results for event ${eventId}`);
@@ -207,24 +206,17 @@ export const fetchResultsForEvent = async (eventId) => {
     console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName} | ID: ${raceId})`);
 
     let bracketResults = [];
-    let bPage = 1;
 
     try {
-      while (bPage <= maxPages) {
-        const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
-          headers: { Authorization: authHeader },
-          params: {
-            client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-            page: bPage,
-            size: pageSize,
-          },
-        });
-        const results = res.data.bracket_results || [];
-        if (results.length === 0) break;
-        bracketResults = [...bracketResults, ...results];
-        if (results.length < pageSize) break;
-        bPage++;
-      }
+      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
+        headers: { Authorization: authHeader },
+        params: {
+          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+          size: 500,
+          page: 1,
+        },
+      });
+      bracketResults = res.data.bracket_results || [];
 
       console.log(`[ChronoTrack] GENDER "${name}" → Loaded ${bracketResults.length} ranked participants (from ${raceName})`);
 
@@ -254,24 +246,17 @@ export const fetchResultsForEvent = async (eventId) => {
     console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName} | ID: ${raceId})`);
 
     let bracketResults = [];
-    let bPage = 1;
 
     try {
-      while (bPage <= maxPages) {
-        const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
-          headers: { Authorization: authHeader },
-          params: {
-            client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-            page: bPage,
-            size: pageSize,
-          },
-        });
-        const results = res.data.bracket_results || [];
-        if (results.length === 0) break;
-        bracketResults = [...bracketResults, ...results];
-        if (results.length < pageSize) break;
-        bPage++;
-      }
+      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
+        headers: { Authorization: authHeader },
+        params: {
+          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+          size: 500,
+          page: 1,
+        },
+      });
+      bracketResults = res.data.bracket_results || [];
 
       console.log(`[ChronoTrack] DIVISION "${name}" → Loaded ${bracketResults.length} ranked participants (from ${raceName})`);
 
@@ -294,24 +279,17 @@ export const fetchResultsForEvent = async (eventId) => {
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
 
     let bracketResults = [];
-    let bPage = 1;
 
     try {
-      while (bPage <= maxPages) {
-        const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
-          headers: { Authorization: authHeader },
-          params: {
-            client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-            page: bPage,
-            size: pageSize,
-          },
-        });
-        const results = res.data.bracket_results || [];
-        if (results.length === 0) break;
-        bracketResults = [...bracketResults, ...results];
-        if (results.length < pageSize) break;
-        bPage++;
-      }
+      const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracket.bracket_id}/results`, {
+        headers: { Authorization: authHeader },
+        params: {
+          client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+          size: 500,
+          page: 1,
+        },
+      });
+      bracketResults = res.data.bracket_results || [];
 
       bracketResults.forEach(r => {
         const key = getLookupKey(r);
