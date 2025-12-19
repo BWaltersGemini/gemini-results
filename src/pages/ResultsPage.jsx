@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Master Landing Uses Context Config + Year Dropdown Fixed)
+// src/pages/ResultsPage.jsx (FINAL COMPLETE — 3 Most Recent Masters + Upcoming Events)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -18,10 +18,13 @@ export default function ResultsPage() {
     eventLogos = {},
     ads = [],
     setSelectedEvent,
-    masterGroups = {}, // Fresh from context
+    masterGroups = {},
     editedEvents = {},
     hiddenMasters = [],
   } = useContext(RaceContext);
+
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(true);
 
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
@@ -43,6 +46,28 @@ export default function ResultsPage() {
     if (!event?.start_time) return null;
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
+
+  // Fetch upcoming events from You Keep Moving API
+  useEffect(() => {
+    const fetchUpcoming = async () => {
+      try {
+        setLoadingUpcoming(true);
+        const response = await fetch('https://youkeepmoving.com/wp-json/tribe/events/v1/events?per_page=6&status=publish');
+        if (!response.ok) throw new Error('Failed to fetch');
+        const data = await response.json();
+        const futureEvents = (data.events || [])
+          .filter(event => new Date(event.start_date) > new Date())
+          .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+        setUpcomingEvents(futureEvents);
+      } catch (err) {
+        console.error('Failed to load upcoming events:', err);
+        setUpcomingEvents([]);
+      } finally {
+        setLoadingUpcoming(false);
+      }
+    };
+    fetchUpcoming();
+  }, []);
 
   // Event selection logic
   useEffect(() => {
@@ -80,7 +105,7 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // === YEAR SELECTOR LOGIC — ALWAYS VISIBLE ===
+  // Year selector logic
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -124,9 +149,10 @@ export default function ResultsPage() {
     });
   };
 
-  // MASTER LANDING PAGE — NOW USES FRESH masterGroups FROM CONTEXT
+  // MASTER LANDING PAGE — 3 Most Recent + Upcoming Events
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
+
     const masterEventTiles = visibleMasters
       .map((storedKey) => {
         const displayName = editedEvents[storedKey]?.name || storedKey;
@@ -139,17 +165,21 @@ export default function ResultsPage() {
         const latestYear = getYearFromEvent(latestEvent);
         return { storedKey, displayName, logo, dateEpoch: latestEvent.start_time, masterSlug, latestYear };
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0)) // Most recent first
+      .slice(0, 3); // Only top 3
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
             <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">Race Results</h1>
-            <p className="text-xl text-gray-600">Select a race series to view results</p>
+            <p className="text-xl text-gray-600">Recent race series</p>
           </div>
+
+          {/* 3 Most Recent Masters */}
           {masterEventTiles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-20">
               {masterEventTiles.map((master) => (
                 <Link
                   key={master.storedKey}
@@ -174,8 +204,51 @@ export default function ResultsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-center text-gray-600 text-xl mt-20">No race series configured yet.</p>
+            <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
+
+          {/* Upcoming Events Section */}
+          <div className="mt-20">
+            <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
+            {loadingUpcoming ? (
+              <p className="text-center text-gray-600 text-xl">Loading upcoming events...</p>
+            ) : upcomingEvents.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                {upcomingEvents.map((event) => (
+                  <a
+                    key={event.id}
+                    href={event.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  >
+                    {event.image?.url ? (
+                      <img
+                        src={event.image.url}
+                        alt={event.title.rendered || event.title}
+                        className="w-full h-64 object-cover"
+                      />
+                    ) : (
+                      <div className="h-64 bg-gray-200 flex items-center justify-center">
+                        <span className="text-gray-500 font-medium">No Image</span>
+                      </div>
+                    )}
+                    <div className="p-8">
+                      <h3 className="text-xl font-bold text-gemini-dark-gray mb-2 line-clamp-2">
+                        {event.title.rendered || event.title}
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        {new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                      <span className="text-gemini-blue font-bold group-hover:underline">Register →</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-600 text-xl">No upcoming events at this time.</p>
+            )}
+          </div>
         </div>
       </div>
     );
