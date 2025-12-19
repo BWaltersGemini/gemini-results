@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Updated for new schema + unified divisions + gender place)
+// src/pages/ResultsPage.jsx (FINAL COMPLETE — Fully updated for new schema + no crashes)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -146,7 +146,7 @@ export default function ResultsPage() {
     });
   };
 
-  // MASTER LANDING PAGE
+  // MASTER LANDING PAGE (no event selected)
   if (!selectedEvent) {
     if (Object.keys(masterGroups).length === 0) {
       return (
@@ -219,7 +219,7 @@ export default function ResultsPage() {
     );
   }
 
-  // Year selector
+  // Year selector for current master
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const normalizedUrlKey = decodeURIComponent(masterKey).toLowerCase();
