@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — All fixes: clean times, mobile year buttons, finishers only, black search text, bib/name search)
+// src/pages/ResultsPage.jsx (FINAL — Complete with sticky Bib/Name search + all previous fixes)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -30,7 +30,18 @@ export default function ResultsPage() {
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const [showFiltersForRace, setShowFiltersForRace] = useState({});
-  const [searchQuery, setSearchQuery] = useState(''); // Global Bib/Name search
+
+  // Sticky Bib/Name search — persists within the same master event
+  const [searchQuery, setSearchQuery] = useState('');
+  const prevMasterKeyRef = useRef(masterKey);
+
+  // Clear search only when masterKey changes
+  useEffect(() => {
+    if (masterKey && masterKey !== prevMasterKeyRef.current) {
+      setSearchQuery('');
+      prevMasterKeyRef.current = masterKey;
+    }
+  }, [masterKey]);
 
   const raceRefs = useRef({});
 
@@ -72,7 +83,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection
+  // Event selection logic
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -150,7 +161,15 @@ export default function ResultsPage() {
     });
   };
 
-  // MASTER LANDING PAGE
+  // Global Bib/Name search across all races
+  const globalFilteredResults = searchQuery
+    ? results.filter(r =>
+        r.bib?.toString().includes(searchQuery) ||
+        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : results;
+
+  // MASTER LANDING PAGE (3 most recent masters + upcoming)
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
@@ -257,21 +276,13 @@ export default function ResultsPage() {
   // Event Results Page
   const embeddedRaces = selectedEvent?.races || [];
   const racesWithFinishers = embeddedRaces.filter((race) =>
-    results.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
+    globalFilteredResults.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
   );
 
   let displayedRaces = racesWithFinishers;
   if (raceSlug) {
     displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
   }
-
-  // Global Bib/Name search across all races
-  const globalFilteredResults = searchQuery
-    ? results.filter(r =>
-        r.bib?.toString().includes(searchQuery) ||
-        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : results;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
@@ -289,7 +300,7 @@ export default function ResultsPage() {
           </h1>
           <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
 
-          {/* Year Buttons + Search */}
+          {/* Year Buttons + Sticky Search */}
           {availableYears.length > 0 && (
             <div className="flex flex-col items-center gap-6 mb-12">
               {/* Year Buttons */}
@@ -310,7 +321,7 @@ export default function ResultsPage() {
                 ))}
               </div>
 
-              {/* Bib/Name Search — Black text */}
+              {/* Sticky Bib/Name Search */}
               <div className="w-full max-w-md">
                 <input
                   type="text"
