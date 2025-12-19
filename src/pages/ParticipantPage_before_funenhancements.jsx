@@ -1,13 +1,10 @@
-// src/pages/ParticipantPage.jsx (WITH Result Card Generator + Animated Time Reveal + Confetti)
+// src/pages/ParticipantPage.jsx (FINAL — Division click filters + highlights participant)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useContext, useRef } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { supabase } from '../supabaseClient';
 import { useLocalStorage } from '../utils/useLocalStorage';
-import { formatChronoTime, parseChipTime } from '../utils/timeUtils';
-import CountUp from 'react-countup';
-import confetti from 'canvas-confetti';
-import html2canvas from 'html2canvas';
+import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ParticipantPage() {
   const location = useLocation();
@@ -36,9 +33,6 @@ export default function ParticipantPage() {
   const [showSplits, setShowSplits] = useState(false);
   const [loading, setLoading] = useState(!initialState.participant);
   const [fetchError, setFetchError] = useState(null);
-  const [timeRevealed, setTimeRevealed] = useState(false);
-  const [showCardPreview, setShowCardPreview] = useState(false);
-  const cardRef = useRef(null);
 
   useEffect(() => {
     if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
@@ -54,7 +48,11 @@ export default function ParticipantPage() {
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
     const date = new Date(epoch * 1000);
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   const getYearFromEvent = (event) => {
@@ -62,7 +60,6 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Fetch data
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) return;
@@ -108,59 +105,12 @@ export default function ParticipantPage() {
     fetchDataIfMissing();
   }, [bib, events, contextResults, contextLoading, initialState]);
 
-  // Trigger confetti when time reveal finishes
-  const handleTimeComplete = () => {
-    setTimeRevealed(true);
-    confetti({
-      particleCount: 150,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'],
-    });
-  };
-
-  // Result Card Generator
-  const generateResultCard = async () => {
-    if (!cardRef.current) return;
-    try {
-      const canvas = await html2canvas(cardRef.current, { scale: 2 });
-      const image = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `${participant.first_name}_${participant.last_name}_result_card.png`;
-      link.href = image;
-      link.click();
-    } catch (err) {
-      console.error('Card generation failed:', err);
-      alert('Failed to generate card — try again!');
-    }
-  };
-
-  const shareResultCard = async () => {
-    if (!cardRef.current) return;
-    try {
-      const canvas = await html2canvas(cardRef.current, { scale: 2 });
-      canvas.toBlob(async (blob) => {
-        const file = new File([blob], 'result-card.png', { type: 'image/png' });
-        if (navigator.share) {
-          await navigator.share({
-            files: [file],
-            title: 'My Race Result!',
-            text: `I finished ${selectedEvent.name} in ${participant.chip_time}! 🏃‍♂️`,
-          });
-        } else {
-          generateResultCard(); // fallback to download
-        }
-      });
-    } catch (err) {
-      generateResultCard();
-    }
-  };
-
   const goBackToResults = () => {
     if (!selectedEvent) {
       navigate('/results');
       return;
     }
+
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
@@ -169,6 +119,7 @@ export default function ParticipantPage() {
     if (foundMaster) {
       masterSlug = slugify(foundMaster[0]);
     }
+
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
@@ -178,6 +129,7 @@ export default function ParticipantPage() {
       goBackToResults();
       return;
     }
+
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
@@ -186,7 +138,9 @@ export default function ParticipantPage() {
     if (foundMaster) {
       masterSlug = slugify(foundMaster[0]);
     }
+
     const eventYear = getYearFromEvent(selectedEvent);
+
     navigate(`/results/${masterSlug}/${eventYear}`, {
       state: {
         divisionFilter: participant.age_group_name,
@@ -226,14 +180,13 @@ export default function ParticipantPage() {
   const overallTotal = results.length;
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
+
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
-  const chipTimeSeconds = parseChipTime(participant.chip_time);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
-        {/* Header */}
         <div className="text-center mb-8">
           {eventLogos[selectedEvent.id] ? (
             <img
@@ -247,18 +200,18 @@ export default function ParticipantPage() {
             </div>
           )}
           <h2 className="text-3xl font-bold text-gemini-dark-gray">{selectedEvent.name}</h2>
-          <p className="text-lg text-gray-600 italic">{formatDate(selectedEvent.start_time)}</p>
+          <p className="text-lg text-gray-600 italic">
+            {formatDate(selectedEvent.start_time)}
+          </p>
           {raceDisplayName !== 'Overall' && (
             <p className="text-xl text-gemini-blue font-semibold mt-4">{raceDisplayName}</p>
           )}
         </div>
 
-        {/* Name */}
         <h3 className="text-5xl font-extrabold mb-8 text-center text-gemini-blue drop-shadow-md">
           {participant.first_name} {participant.last_name}
         </h3>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
           <div className="flex justify-center">
             <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-6 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono">
@@ -266,7 +219,6 @@ export default function ParticipantPage() {
               <p className="text-6xl font-black">{participant.bib || '—'}</p>
             </div>
           </div>
-
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Overall</p>
@@ -290,7 +242,6 @@ export default function ParticipantPage() {
                 {participant.gender === 'M' ? 'Male' : participant.gender === 'F' ? 'Female' : '—'}
               </p>
             </div>
-
             <div className="md:col-span-4 mt-8">
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Division</p>
               <button
@@ -299,41 +250,22 @@ export default function ParticipantPage() {
               >
                 {participant.age_group_name || '—'} ({participant.age_group_place || '—'} of {divisionTotal})
               </button>
-              <p className="text-base text-gray-600 mt-3">Click to view everyone in your division</p>
+              <p className="text-base text-gray-600 mt-3">
+                Click to view everyone in your division
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Animated Chip Time + Other Times */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
-            <p className="text-5xl font-black text-gemini-blue">
-              {timeRevealed ? (
-                formatChronoTime(participant.chip_time)
-              ) : (
-                <CountUp
-                  start={0}
-                  end={chipTimeSeconds}
-                  duration={3.5}
-                  formattingFn={(value) => {
-                    const hours = Math.floor(value / 3600);
-                    const mins = Math.floor((value % 3600) / 60);
-                    const secs = Math.floor(value % 60);
-                    const tenths = Math.round((value % 1) * 10);
-                    return `${hours ? hours + ':' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}${tenths ? '.' + tenths : ''}`;
-                  }}
-                  onEnd={handleTimeComplete}
-                />
-              )}
-            </p>
+            <p className="text-5xl font-black text-gemini-blue">{formatChronoTime(participant.chip_time)}</p>
           </div>
-
           <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gun Time</p>
             <p className="text-5xl font-black text-gray-800">{formatChronoTime(participant.clock_time)}</p>
           </div>
-
           <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
             <p className="text-5xl font-black text-green-700">
@@ -342,7 +274,6 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Splits */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
             <button
@@ -378,120 +309,6 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Result Card Generator Button */}
-        <div className="text-center mb-12">
-          <button
-            onClick={() => setShowCardPreview(true)}
-            className="px-12 py-6 bg-gradient-to-r from-gemini-blue to-[#80ccd6] text-white font-bold text-2xl rounded-full hover:scale-105 transition shadow-2xl"
-          >
-            🎉 Create My Shareable Result Card
-          </button>
-        </div>
-
-        {/* Hidden Result Card Canvas (for generation) */}
-        <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
-          <div
-            ref={cardRef}
-            className="w-[1080px] h-[1080px] bg-gradient-to-br from-gemini-blue/20 to-[#80ccd6]/30 relative overflow-hidden flex flex-col items-center justify-center text-center p-16"
-            style={{ fontFamily: 'system-ui, sans-serif' }}
-          >
-            {/* Background decoration */}
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute top-0 left-0 w-96 h-96 bg-gemini-blue rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-              <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#80ccd6] rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
-            </div>
-
-            {/* Event Logo */}
-            {eventLogos[selectedEvent.id] && (
-              <img src={eventLogos[selectedEvent.id]} alt="Event" className="w-48 h-48 object-contain mb-8 drop-shadow-2xl" />
-            )}
-
-            {/* Name */}
-            <h1 className="text-8xl font-black text-gemini-dark-gray mb-8 drop-shadow-lg">
-              {participant.first_name} {participant.last_name}
-            </h1>
-
-            {/* Chip Time */}
-            <p className="text-12xl font-black text-gemini-blue mb-12">
-              {formatChronoTime(participant.chip_time)}
-            </p>
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-12 text-4xl font-bold">
-              <div>
-                <p className="text-gray-700">Overall</p>
-                <p className="text-gemini-blue">{participant.place || '—'} / {overallTotal}</p>
-              </div>
-              <div>
-                <p className="text-gray-700">Gender</p>
-                <p className="text-gemini-blue">{participant.gender_place || '—'} / {genderTotal}</p>
-              </div>
-              <div>
-                <p className="text-gray-700">Division</p>
-                <p className="text-gemini-blue">{participant.age_group_place || '—'} / {divisionTotal}</p>
-              </div>
-            </div>
-
-            {/* Event Info */}
-            <p className="absolute bottom-16 left-1/2 -translate-x-1/2 text-4xl text-gray-700">
-              {selectedEvent.name} • {formatDate(selectedEvent.start_time)}
-            </p>
-
-            {/* Branding */}
-            <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-3xl text-gray-500">
-              Timed by Your Company Name
-            </p>
-          </div>
-        </div>
-
-        {/* Card Preview Modal */}
-        {showCardPreview && cardRef.current && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-8" onClick={() => setShowCardPreview(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-8" onClick={(e) => e.stopPropagation()}>
-              <div className="text-center mb-8">
-                <h3 className="text-4xl font-bold">Your Result Card 🎉</h3>
-                <p className="text-xl text-gray-600 mt-4">Ready to share!</p>
-              </div>
-              <div className="flex justify-center mb-8">
-                <div ref={cardRef} className="w-96 h-96 bg-gradient-to-br from-gemini-blue/20 to-[#80ccd6]/30 rounded-3xl overflow-hidden shadow-2xl" style={{ transform: 'scale(0.8)' }}>
-                  {/* Same content as hidden card above */}
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-                    {eventLogos[selectedEvent.id] && (
-                      <img src={eventLogos[selectedEvent.id]} alt="Event" className="w-32 h-32 object-contain mb-6" />
-                    )}
-                    <h1 className="text-5xl font-black text-gemini-dark-gray mb-4">
-                      {participant.first_name} {participant.last_name}
-                    </h1>
-                    <p className="text-7xl font-black text-gemini-blue mb-8">
-                      {formatChronoTime(participant.chip_time)}
-                    </p>
-                    <div className="text-2xl">
-                      <p>Overall: {participant.place || '—'} / {overallTotal}</p>
-                      <p>Gender: {participant.gender_place || '—'} / {genderTotal}</p>
-                      <p>Division: {participant.age_group_place || '—'} / {divisionTotal}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-center gap-8">
-                <button
-                  onClick={generateResultCard}
-                  className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition"
-                >
-                  Download PNG
-                </button>
-                <button
-                  onClick={shareResultCard}
-                  className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition"
-                >
-                  Share Now
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Back Button */}
         <div className="text-center mb-16">
           <button
             onClick={goBackToResults}
@@ -501,10 +318,11 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Sponsors */}
         {ads.length > 0 && (
           <div>
-            <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">Event Sponsors</h3>
+            <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">
+              Event Sponsors
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
               {ads.map((ad, i) => (
                 <div key={i} className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 hover:shadow-2xl transition">
