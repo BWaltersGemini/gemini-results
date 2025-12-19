@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Shareable Card: Smaller Logo, Content Shifted Up, Rankings Fully Visible)
+// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Card: Updated Footer Text + Extra Space)
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
@@ -64,7 +64,6 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Fetch data if not passed via navigation state
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) return;
@@ -117,7 +116,6 @@ export default function ParticipantPage() {
     fetchDataIfMissing();
   }, [bib, events, contextResults, contextLoading, initialState]);
 
-  // Confetti when time animation completes
   const handleTimeComplete = () => {
     setTimeRevealed(true);
     confetti({
@@ -128,7 +126,6 @@ export default function ParticipantPage() {
     });
   };
 
-  // Generate and download the card
   const generateResultCard = async () => {
     if (!cardRef.current) return;
 
@@ -154,7 +151,6 @@ export default function ParticipantPage() {
     }
   };
 
-  // Share via Web Share API or fallback to download
   const shareResultCard = async () => {
     if (!cardRef.current) return;
 
@@ -175,7 +171,7 @@ export default function ParticipantPage() {
           await navigator.share({
             files: [file],
             title: 'My Race Result!',
-            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️ Timed by Gemini Timing`,
+            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️ Find our next race at www.youkeepmoving.com`,
           });
         } else {
           generateResultCard();
@@ -186,7 +182,6 @@ export default function ParticipantPage() {
     }
   };
 
-  // Navigation helpers
   const goBackToResults = () => {
     if (!selectedEvent) {
       navigate('/results');
@@ -267,7 +262,6 @@ export default function ParticipantPage() {
 
   const chipTimeSeconds = parseChipTime(participant.chip_time);
 
-  // Master series logo priority
   const currentMasterKey = Object.keys(masterGroups).find(key =>
     masterGroups[key]?.includes(selectedEvent?.id?.toString())
   );
@@ -430,14 +424,14 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden High-Resolution Card for Generation */}
+        {/* Hidden High-Resolution Card */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
-            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-8 pt-8 pb-12"
+            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-8 pt-8 pb-20"
             style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
-            {/* Smaller Logo Section (~50% smaller than previous version) */}
+            {/* Smaller Logo Section */}
             <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 mb-8 flex items-center justify-center">
               {masterLogo ? (
                 <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-40 object-contain" crossOrigin="anonymous" />
@@ -473,8 +467,8 @@ export default function ParticipantPage() {
               </p>
             </div>
 
-            {/* Rankings — Now fully visible with extra margin */}
-            <div className="grid grid-cols-3 gap-10 text-white w-full max-w-5xl mt-8">
+            {/* Rankings */}
+            <div className="grid grid-cols-3 gap-10 text-white w-full max-w-5xl mb-16">
               <div>
                 <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
                 <p className="text-7xl font-bold text-[#ffd700] leading-none">
@@ -498,14 +492,14 @@ export default function ParticipantPage() {
               </div>
             </div>
 
-            {/* Branding — Fixed at bottom */}
-            <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
-              Timed by Gemini Timing • www.geminitiming.com
+            {/* Updated Footer with More Space Above */}
+            <p className="absolute bottom-10 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
+              Find our next race... www.youkeepmoving.com
             </p>
           </div>
         </div>
 
-        {/* Card Preview Modal — Matches generated card exactly */}
+        {/* Preview Modal */}
         {showCardPreview && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8" onClick={(e) => e.stopPropagation()}>
@@ -536,7 +530,7 @@ export default function ParticipantPage() {
                     <p className="text-5xl font-black text-[#ffd700] mb-6">
                       {formatChronoTime(participant.chip_time)}
                     </p>
-                    <div className="grid grid-cols-3 gap-4 text-xs w-full">
+                    <div className="grid grid-cols-3 gap-4 text-xs w-full mb-8">
                       <div>
                         <p className="text-gray-400 uppercase">Overall</p>
                         <p className="text-3xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
@@ -553,6 +547,7 @@ export default function ParticipantPage() {
                         <p className="text-gray-400">of {divisionTotal}</p>
                       </div>
                     </div>
+                    <p className="text-sm text-gray-500">Find our next race... www.youkeepmoving.com</p>
                   </div>
                 </div>
               </div>
@@ -575,7 +570,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Back Button */}
+        {/* Back Button & Sponsors */}
         <div className="text-center mb-16">
           <button
             onClick={goBackToResults}
@@ -585,7 +580,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Sponsors */}
         {ads.length > 0 && (
           <div>
             <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">Event Sponsors</h3>
