@@ -1,7 +1,8 @@
-// src/context/RaceContext.jsx (FINAL — Full cache pagination + robust race loading)
+// src/context/RaceContext.jsx (FINAL — Fresh Supabase Config Load + No localStorage Cache for Global Config)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
+import { loadAppConfig } from '../utils/appConfig';
 
 export const RaceContext = createContext();
 
@@ -16,7 +17,32 @@ export function RaceProvider({ children }) {
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Persist selected event in localStorage
+  // Global config — loaded fresh from Supabase
+  const [masterGroups, setMasterGroups] = useState({});
+  const [editedEvents, setEditedEvents] = useState({});
+  const [eventLogos, setEventLogos] = useState({});
+  const [hiddenMasters, setHiddenMasters] = useState([]);
+  const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
+  const [ads, setAds] = useState([]);
+  const [hiddenRaces, setHiddenRaces] = useState({});
+
+  // Load global config fresh from Supabase on mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      const config = await loadAppConfig();
+      setMasterGroups(config.masterGroups || {});
+      setEditedEvents(config.editedEvents || {});
+      setEventLogos(config.eventLogos || {});
+      setHiddenMasters(config.hiddenMasters || []);
+      setShowAdsPerMaster(config.showAdsPerMaster || {});
+      setAds(config.ads || []);
+      setHiddenRaces(config.hiddenRaces || {});
+      console.log('[RaceContext] Fresh global config loaded from Supabase');
+    };
+    loadConfig();
+  }, []);
+
+  // Persist only selectedEventId in localStorage (user preference)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const savedEventId = localStorage.getItem('selectedEventId');
@@ -39,7 +65,7 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load ALL events from ChronoTrack in one call
+  // Load ALL events from ChronoTrack
   useEffect(() => {
     const loadEvents = async () => {
       try {
@@ -175,9 +201,7 @@ export function RaceProvider({ children }) {
           cachedResults = [...cachedResults, ...data];
           start += data.length;
 
-          if (data.length < pageSize) {
-            break; // Last page
-          }
+          if (data.length < pageSize) break;
         }
 
         if (cachedResults.length > 0) {
@@ -293,6 +317,13 @@ export function RaceProvider({ children }) {
         error,
         uniqueDivisions,
         isLiveRace,
+        masterGroups,
+        editedEvents,
+        eventLogos,
+        hiddenMasters,
+        showAdsPerMaster,
+        ads,
+        hiddenRaces,
       }}
     >
       {children}
