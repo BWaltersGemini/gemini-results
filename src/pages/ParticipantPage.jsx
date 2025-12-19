@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Preview Card Now Fits Perfectly on All Screens)
+// src/pages/ParticipantPage.jsx (FINAL — Perfect Preview Fit + Larger Time/Rankings + No Overlap)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -403,11 +403,11 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden Card for Generation */}
+        {/* Hidden Card for Generation (High Resolution) */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
-            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-center text-center px-16 py-20"
+            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-center text-center px-16 py-24"
             style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
             {/* White Logo Section */}
@@ -424,111 +424,111 @@ export default function ParticipantPage() {
             </div>
 
             {/* Race Name */}
-            <p className="text-7xl font-black text-[#80ccd6] mb-6 drop-shadow-2xl">
+            <p className="text-7xl font-black text-[#80ccd6] mb-8 drop-shadow-2xl">
               {raceDisplayName}
             </p>
 
             {/* Date */}
-            <p className="text-5xl text-gray-300 mb-16">
+            <p className="text-5xl text-gray-300 mb-20">
               {formatDate(selectedEvent.start_time)}
             </p>
 
             {/* Runner Name */}
-            <h1 className="text-8xl font-black text-white mb-16 drop-shadow-2xl leading-tight">
+            <h1 className="text-8xl font-black text-white mb-20 drop-shadow-2xl leading-tight">
               {participant.first_name}<br />{participant.last_name}
             </h1>
 
-            {/* Finish Time */}
-            <div className="mb-20">
-              <p className="text-5xl text-gray-400 uppercase tracking-widest mb-6">Finish Time</p>
-              <p className="text-13xl font-black text-[#ffd700] drop-shadow-2xl">
+            {/* Finish Time - MASSIVE */}
+            <div className="mb-24">
+              <p className="text-6xl text-gray-400 uppercase tracking-widest mb-8">Finish Time</p>
+              <p className="text-14xl font-black text-[#ffd700] drop-shadow-2xl">
                 {formatChronoTime(participant.chip_time)}
               </p>
             </div>
 
-            {/* Rankings */}
+            {/* Rankings - Larger */}
             <div className="grid grid-cols-3 gap-20 text-white">
               <div>
-                <p className="text-4xl text-gray-400 uppercase mb-4">Overall</p>
-                <p className="text-9xl font-bold text-[#ffd700]">
+                <p className="text-5xl text-gray-400 uppercase mb-6">Overall</p>
+                <p className="text-10xl font-bold text-[#ffd700]">
                   {participant.place || '—'}
                 </p>
-                <p className="text-4xl text-gray-400 mt-4">of {overallTotal}</p>
+                <p className="text-5xl text-gray-400 mt-6">of {overallTotal}</p>
               </div>
               <div>
-                <p className="text-4xl text-gray-400 uppercase mb-4">Gender</p>
-                <p className="text-9xl font-bold text-[#ffd700]">
+                <p className="text-5xl text-gray-400 uppercase mb-6">Gender</p>
+                <p className="text-10xl font-bold text-[#ffd700]">
                   {participant.gender_place || '—'}
                 </p>
-                <p className="text-4xl text-gray-400 mt-4">of {genderTotal}</p>
+                <p className="text-5xl text-gray-400 mt-6">of {genderTotal}</p>
               </div>
               <div>
-                <p className="text-4xl text-gray-400 uppercase mb-4">Division</p>
-                <p className="text-9xl font-bold text-[#ffd700]">
+                <p className="text-5xl text-gray-400 uppercase mb-6">Division</p>
+                <p className="text-10xl font-bold text-[#ffd700]">
                   {participant.age_group_place || '—'}
                 </p>
-                <p className="text-4xl text-gray-400 mt-4">of {divisionTotal}</p>
+                <p className="text-5xl text-gray-400 mt-6">of {divisionTotal}</p>
               </div>
             </div>
 
-            {/* Branding */}
-            <p className="absolute bottom-16 left-1/2 -translate-x-1/2 text-4xl text-gray-500">
+            {/* Branding - Lower to avoid overlap */}
+            <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-4xl text-gray-500">
               Timed by Gemini Timing • www.geminitiming.com
             </p>
           </div>
         </div>
 
-        {/* Card Preview Modal — Now Properly Zoomed Out to Fit */}
+        {/* Card Preview Modal — Now Fully Visible & Zoomed Out */}
         {showCardPreview && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8" onClick={(e) => e.stopPropagation()}>
               <div className="text-center mb-8">
                 <h3 className="text-4xl font-bold">Your Result Card 🎉</h3>
                 <p className="text-xl text-gray-600 mt-4">This is exactly what will be shared!</p>
               </div>
 
-              {/* Scaled Preview That Fits */}
+              {/* Preview — Scaled down to fit completely */}
               <div className="flex justify-center mb-10">
-                <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl scale-95">
-                  <div className="h-full flex flex-col items-center justify-center p-6 text-center text-white">
-                    <div className="w-full bg-white rounded-2xl p-6 mb-6">
+                <div className="w-full max-w-md aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl scale-85 origin-center">
+                  <div className="h-full flex flex-col items-center justify-center p-8 text-center text-white">
+                    <div className="w-full bg-white rounded-2xl p-8 mb-8">
                       {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-32 object-contain" />
+                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-36 object-contain" />
                       ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-28 object-contain" />
+                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-32 object-contain" />
                       ) : (
-                        <h2 className="text-3xl font-black text-gemini-dark-gray">
+                        <h2 className="text-4xl font-black text-gemini-dark-gray">
                           {selectedEvent.name}
                         </h2>
                       )}
                     </div>
 
-                    <p className="text-3xl font-black text-[#80ccd6] mb-3">{raceDisplayName}</p>
-                    <p className="text-xl text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
+                    <p className="text-4xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
+                    <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
 
-                    <h1 className="text-3xl font-black mb-6 leading-tight">
+                    <h1 className="text-4xl font-black mb-8 leading-tight">
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
 
-                    <p className="text-xl text-gray-400 uppercase mb-3">Finish Time</p>
-                    <p className="text-5xl font-black text-[#ffd700] mb-8">
+                    <p className="text-2xl text-gray-400 uppercase mb-4">Finish Time</p>
+                    <p className="text-5xl font-black text-[#ffd700] mb-10">
                       {formatChronoTime(participant.chip_time)}
                     </p>
 
-                    <div className="grid grid-cols-3 gap-3 text-base">
+                    <div className="grid grid-cols-3 gap-4 text-lg">
                       <div>
                         <p className="text-gray-400 uppercase">Overall</p>
-                        <p className="text-3xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                        <p className="text-4xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
                         <p className="text-gray-400 text-sm">of {overallTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Gender</p>
-                        <p className="text-3xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                        <p className="text-4xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
                         <p className="text-gray-400 text-sm">of {genderTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Division</p>
-                        <p className="text-3xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                        <p className="text-4xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
                         <p className="text-gray-400 text-sm">of {divisionTotal}</p>
                       </div>
                     </div>
