@@ -1,4 +1,4 @@
-// src/utils/appConfig.js (FINAL — Safe JSON Parse + No Cache)
+// src/utils/appConfig.js (FINAL — Correct for jsonb column)
 import { supabase } from '../supabaseClient';
 
 export const loadAppConfig = async () => {
@@ -22,15 +22,9 @@ export const loadAppConfig = async () => {
 
     if (data && data.length > 0) {
       data.forEach(row => {
-        let parsed;
-        try {
-          parsed = JSON.parse(row.value);
-        } catch (e) {
-          console.warn(`[AppConfig] Invalid JSON in DB for key "${row.key}":`, row.value);
-          parsed = {}; // or [] depending on expected type
-        }
+        // row.value is already a parsed JS object (jsonb → object/array)
         if (row.key in config) {
-          config[row.key] = parsed;
+          config[row.key] = row.value || (Array.isArray(config[row.key]) ? [] : {});
         }
       });
     }
