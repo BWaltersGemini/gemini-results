@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Correct "Back to Results" navigation)
+// src/pages/ParticipantPage.jsx (FINAL — Correct Back to Results navigation)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -10,7 +10,7 @@ export default function ParticipantPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
-  const { bib } = params; // Only bib is needed from params
+  const { bib } = params;
 
   const {
     events,
@@ -35,17 +35,11 @@ export default function ParticipantPage() {
   const [loading, setLoading] = useState(!initialState.participant);
   const [fetchError, setFetchError] = useState(null);
 
-  // Keep local selectedEvent in sync with context
   useEffect(() => {
     if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
       setLocalSelectedEvent(contextSelectedEvent);
     }
   }, [contextSelectedEvent]);
-
-  const cleanName = (text) => {
-    if (!text || typeof text !== 'string') return '';
-    return text.trim().replace(/['`]/g, '').toLowerCase();
-  };
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -55,7 +49,6 @@ export default function ParticipantPage() {
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
     const date = new Date(epoch * 1000);
-    if (isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
@@ -80,10 +73,8 @@ export default function ParticipantPage() {
         }
         if (events.length === 0) throw new Error('Events not loaded yet');
 
-        // Determine the correct event from context or fallback
         let targetEvent = selectedEvent || contextSelectedEvent;
         if (!targetEvent) {
-          // Fallback: find event by bib in results
           const resultWithBib = contextResults?.find(r => String(r.bib) === String(bib));
           if (resultWithBib) {
             targetEvent = events.find(e => e.id === resultWithBib.event_id);
@@ -95,7 +86,6 @@ export default function ParticipantPage() {
         setLocalSelectedEvent(targetEvent);
         setSelectedEvent(targetEvent);
 
-        // Load results from Supabase
         const { data: fetchedResults, error: resultsError } = await supabase
           .from('chronotrack_results')
           .select('*')
@@ -105,7 +95,6 @@ export default function ParticipantPage() {
         const allResults = fetchedResults || [];
         setResults(allResults);
 
-        // Find participant by bib
         const found = allResults.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found with this bib');
         setParticipant(found);
@@ -120,11 +109,11 @@ export default function ParticipantPage() {
     fetchDataIfMissing();
   }, [bib, events, contextResults, contextLoading, initialState]);
 
-  // Correct "Back to Results" — goes to event results page
+  // Fixed: Always go to correct results page
   const goBackToResults = () => {
     if (!selectedEvent) return;
 
-    // Find master key for this event
+    // Find master slug
     let masterSlug = 'overall';
     const foundMaster = Object.entries(masterGroupsLocal || masterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
@@ -134,17 +123,13 @@ export default function ParticipantPage() {
     }
 
     const eventYear = getYearFromEvent(selectedEvent);
-
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
 
   const handleDivisionClick = () => {
-    if (!selectedEvent || !participant) return;
-    goBackToResults(); // Reuse correct navigation
-    // Optional: could add state to auto-filter division
+    goBackToResults();
   };
 
-  // Loading state
   if (loading || contextLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
@@ -156,7 +141,6 @@ export default function ParticipantPage() {
     );
   }
 
-  // Error or not found
   if (fetchError || !participant || !selectedEvent) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
@@ -174,19 +158,16 @@ export default function ParticipantPage() {
     );
   }
 
-  // Calculate totals
   const overallTotal = results.length;
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
 
-  // Race name from embedded races
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
-        {/* Header */}
         <div className="text-center mb-8">
           {eventLogos[selectedEvent.id] ? (
             <img
@@ -208,12 +189,10 @@ export default function ParticipantPage() {
           )}
         </div>
 
-        {/* Name */}
         <h3 className="text-5xl font-extrabold mb-8 text-center text-gemini-blue drop-shadow-md">
           {participant.first_name} {participant.last_name}
         </h3>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
           <div className="flex justify-center">
             <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-6 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono">
@@ -259,7 +238,6 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Times */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
@@ -277,7 +255,6 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Splits */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
             <button
@@ -313,7 +290,6 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Back Button — Now goes to correct event results page */}
         <div className="text-center mb-16">
           <button
             onClick={goBackToResults}
@@ -323,7 +299,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Sponsors */}
         {ads.length > 0 && (
           <div>
             <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">
