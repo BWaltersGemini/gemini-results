@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL COMPLETE — Fixed Multi-Year Dropdown Matching + Always Visible + Debug Logging Removed)
+// src/pages/ResultsPage.jsx (FINAL COMPLETE — Robust Year Dropdown Matching)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -45,14 +45,15 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Event selection logic — match on slugified key
+  // Event selection logic — robust matching
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
     const urlSlug = slugify(decodeURIComponent(masterKey));
-    const storedMasterKey = Object.keys(masterGroups).find(
-      (key) => slugify(key) === urlSlug
-    );
+
+    const storedMasterKey = Object.keys(masterGroups).find((key) => {
+      return slugify(key) === urlSlug;
+    });
 
     if (!storedMasterKey) return;
 
@@ -81,17 +82,16 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // === YEAR SELECTOR LOGIC — ALWAYS VISIBLE & CORRECT MATCHING ===
+  // === YEAR SELECTOR LOGIC — ROBUST & ALWAYS VISIBLE ===
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
-    const storedMasterKey = Object.keys(masterGroups).find(
-      (key) => slugify(key) === urlSlug
-    );
+
+    const storedMasterKey = Object.keys(masterGroups).find((key) => slugify(key) === urlSlug);
 
     if (storedMasterKey) {
       const linkedEventIds = masterGroups[storedMasterKey] || [];
-      const linkedEvents = events.filter(e => linkedEventIds.includes(e.id.toString()));
+      const linkedEvents = events.filter((e) => linkedEventIds.includes(e.id.toString()));
       availableYears = [...new Set(linkedEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
     }
   }
