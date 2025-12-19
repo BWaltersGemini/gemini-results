@@ -1,8 +1,8 @@
-// src/pages/Home.jsx (FINAL — Fixed Athletes & Races Timed stats + all previous improvements)
+// src/pages/Home.jsx (FINAL — Animated stats with base + fetched totals)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient'; // ← Needed for global count
+import { supabase } from '../supabaseClient';
 
 export default function Home() {
   const {
@@ -11,13 +11,19 @@ export default function Home() {
   } = useContext(RaceContext);
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
-  const [totalAthletesTimed, setTotalAthletesTimed] = useState(0); // Global count from Supabase
 
-  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
-  const eventLogos = JSON.parse(localStorage.getItem('eventLogos')) || {};
+  // Base numbers (your established history before digital tracking)
+  const BASE_ATHLETES = 750000;
+  const BASE_RACES = 700;
 
-  // === Fetch global athletes count from Supabase ===
+  // Fetched current totals
+  const [fetchedAthletes, setFetchedAthletes] = useState(0);
+  const [displayAthletes, setDisplayAthletes] = useState(0);
+  const [displayRaces, setDisplayRaces] = useState(0);
+
+  const totalRacesTimed = BASE_RACES + events.length;
+
+  // Fetch global published athletes count
   useEffect(() => {
     const fetchGlobalAthletes = async () => {
       try {
@@ -26,24 +32,58 @@ export default function Home() {
           .select('*', { count: 'exact', head: true });
 
         if (error) throw error;
-        setTotalAthletesTimed(count || 0);
+        setFetchedAthletes(count || 0);
       } catch (err) {
         console.error('Failed to fetch global athletes count:', err);
-        setTotalAthletesTimed(0);
+        setFetchedAthletes(0);
       }
     };
 
     fetchGlobalAthletes();
   }, []);
 
-  const totalRacesTimed = events.length;
+  const finalAthletes = BASE_ATHLETES + fetchedAthletes;
+
+  // Animated count-up effect
+  useEffect(() => {
+    if (loading) return;
+
+    const duration = 3000; // 3 seconds
+    const steps = 60; // ~60 FPS
+    const interval = duration / steps;
+
+    let currentAthletes = 0;
+    let currentRaces = 0;
+    const athletesStep = finalAthletes / steps;
+    const racesStep = totalRacesTimed / steps;
+
+    const timer = setInterval(() => {
+      currentAthletes += athletesStep;
+      currentRaces += racesStep;
+
+      if (currentAthletes >= finalAthletes && currentRaces >= totalRacesTimed) {
+        setDisplayAthletes(finalAthletes);
+        setDisplayRaces(totalRacesTimed);
+        clearInterval(timer);
+      } else {
+        setDisplayAthletes(Math.floor(currentAthletes));
+        setDisplayRaces(Math.floor(currentRaces));
+      }
+    }, interval);
+
+    return () => clearInterval(timer);
+  }, [finalAthletes, totalRacesTimed, loading]);
+
+  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
+  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
+  const eventLogos = JSON.parse(localStorage.getItem('eventLogos')) || {};
 
   const slugify = (text) => {
     if (!text) return 'overall';
     return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   };
 
-  // Fetch upcoming events from You Keep Moving
+  // Fetch upcoming events
   useEffect(() => {
     const fetchUpcomingEvents = async () => {
       try {
@@ -62,7 +102,6 @@ export default function Home() {
     fetchUpcomingEvents();
   }, []);
 
-  // Format date from start_time (Unix epoch seconds)
   const formatChronoDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
     const date = new Date(epoch * 1000);
@@ -70,7 +109,6 @@ export default function Home() {
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Extract year from start_time
   const getYearFromEvent = (event) => {
     if (!event?.start_time) return null;
     return new Date(event.start_time * 1000).getFullYear().toString();
@@ -88,14 +126,13 @@ export default function Home() {
     }
   };
 
-  // Build master event tiles using most recent year — only top 3
+  // Master event tiles (top 3 most recent)
   const masterEventTiles = Object.keys(masterGroups)
     .map(storedKey => {
       const displayName = editedEvents[storedKey]?.name || storedKey;
       const eventIds = masterGroups[storedKey] || [];
       const masterEvents = events.filter(e => eventIds.includes(e.id.toString()));
       if (masterEvents.length === 0) return null;
-      // Sort by start_time (newest first)
       const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
       const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
       const masterSlug = slugify(storedKey);
@@ -110,9 +147,8 @@ export default function Home() {
       };
     })
     .filter(Boolean)
-    .slice(0, 3); // Only the 3 most recent masters
+    .slice(0, 3);
 
-  // Handle navigation with scroll to top
   const handleMasterClick = (masterSlug, year) => {
     navigate(`/results/${masterSlug}/${year}`);
     window.scrollTo(0, 0);
@@ -143,7 +179,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Experience Stats — NOW ACCURATE */}
+      {/* Experience Stats — Animated Count-Up */}
       <section className="py-16 md:py-24 bg-gemini-light-gray">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gemini-dark-gray mb-12">
@@ -152,7 +188,7 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
             <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
               <p className="text-5xl md:text-7xl lg:text-8xl font-black text-gemini-blue mb-4 leading-tight">
-                {totalAthletesTimed.toLocaleString()}+
+                {displayAthletes.toLocaleString()}+
               </p>
               <p className="text-xl md:text-2xl font-semibold text-gemini-dark-gray">
                 Athletes Timed
@@ -160,7 +196,7 @@ export default function Home() {
             </div>
             <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
               <p className="text-5xl md:text-7xl lg:text-8xl font-black text-gemini-blue mb-4 leading-tight">
-                {totalRacesTimed}+
+                {displayRaces.toLocaleString()}+
               </p>
               <p className="text-xl md:text-2xl font-semibold text-gemini-dark-gray">
                 Races Timed
@@ -170,7 +206,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Recent Master Events — Only 3 */}
+      {/* Recent Master Events */}
       <section className="py-20 md:py-32 px-6 max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-gemini-dark-gray mb-4">
