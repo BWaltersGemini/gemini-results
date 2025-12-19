@@ -1,4 +1,4 @@
-// src/utils/appConfig.js (FINAL — Fresh Load from Supabase, No Caching)
+// src/utils/appConfig.js (FINAL — Safe JSON Parse + No Cache)
 import { supabase } from '../supabaseClient';
 
 export const loadAppConfig = async () => {
@@ -16,17 +16,21 @@ export const loadAppConfig = async () => {
       hiddenMasters: [],
       showAdsPerMaster: {},
       ads: [],
-      hiddenRaces: {}, // Added for completeness (used in ResultsPage)
+      hiddenRaces: {},
+      hiddenEvents: [],
     };
 
     if (data && data.length > 0) {
       data.forEach(row => {
+        let parsed;
         try {
-          // Parse JSON values
-          config[row.key] = JSON.parse(row.value);
+          parsed = JSON.parse(row.value);
         } catch (e) {
-          console.warn(`[AppConfig] Failed to parse JSON for key ${row.key}:`, e);
-          config[row.key] = row.value; // Fallback to raw value
+          console.warn(`[AppConfig] Invalid JSON in DB for key "${row.key}":`, row.value);
+          parsed = {}; // or [] depending on expected type
+        }
+        if (row.key in config) {
+          config[row.key] = parsed;
         }
       });
     }
@@ -34,8 +38,7 @@ export const loadAppConfig = async () => {
     console.log('[AppConfig] Fresh config loaded from Supabase:', Object.keys(config));
     return config;
   } catch (err) {
-    console.error('[AppConfig] Failed to load config from Supabase:', err);
-    // Return defaults on error
+    console.error('[AppConfig] Failed to load config:', err);
     return {
       masterGroups: {},
       editedEvents: {},
@@ -44,6 +47,7 @@ export const loadAppConfig = async () => {
       showAdsPerMaster: {},
       ads: [],
       hiddenRaces: {},
+      hiddenEvents: [],
     };
   }
 };
