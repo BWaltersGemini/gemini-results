@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL COMPLETE — Direct all-events fetch + embedded races + all features)
+// src/context/RaceContext.jsx (FINAL COMPLETE — Robust race loading with fallback fetch)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -19,7 +19,6 @@ export function RaceProvider({ children }) {
   // Persist selected event in localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
     const savedEventId = localStorage.getItem('selectedEventId');
     if (savedEventId && events.length > 0) {
       const restored = events.find(e => e.id === savedEventId);
@@ -33,7 +32,6 @@ export function RaceProvider({ children }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
     if (selectedEvent) {
       localStorage.setItem('selectedEventId', selectedEvent.id);
     } else {
@@ -47,7 +45,6 @@ export function RaceProvider({ children }) {
       try {
         setLoading(true);
         setError(null);
-
         const allEvents = await fetchEvents(); // One call → all events
         setEvents(allEvents);
         console.log('[RaceContext] All events loaded:', allEvents.length);
@@ -58,25 +55,84 @@ export function RaceProvider({ children }) {
         setLoading(false);
       }
     };
-
     loadEvents();
   }, []);
 
-  // Load races from embedded JSONB when event selected
+  // === ROBUST RACE LOADING WITH FALLBACK ===
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
       return;
     }
 
-    const embeddedRaces = selectedEvent.races || [];
-    const formattedRaces = embeddedRaces.map(race => ({
-      race_id: race.race_id,
-      race_name: race.race_name || 'Unknown Race',
-    }));
+    const loadRaces = async () => {
+      // Primary: Use embedded races if available
+      let embeddedRaces = selectedEvent.races || [];
 
-    setRaces(formattedRaces);
-    console.log('[RaceContext] Loaded embedded races:', formattedRaces.length);
+      if (embeddedRaces.length > 0) {
+        const formatted = embeddedRaces.map(race => ({
+          race_id: race.race_id || race.id,
+          race_name: race.race_name || 'Unknown Race',
+        }));
+        setRaces(formatted);
+        console.log('[RaceContext] Loaded embedded races:', formatted.length);
+        return;
+      }
+
+      // Fallback 1: Fetch fresh races from API
+      console.log('[RaceContext] No embedded races — fetching fresh from ChronoTrack...');
+      try {
+        const freshRaces = await fetchRacesForEvent(selectedEvent.id);
+        const fullRaces = freshRaces.map(race => ({
+          race_id: race.race_id,
+          race_name: race.race_name || 'Unknown Race',
+          race_tag: race.race_tag || null,
+          race_type: race.race_type || null,
+          race_subtype: race.race_subtype || null,
+          distance: race.race_course_distance || null,
+          distance_unit: race.race_pref_distance_unit || 'meters',
+          planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
+          actual_start_time: race.race_actual_start_time ? parseFloat(race.race_actual_start_time) : null,
+        }));
+
+        const formatted = fullRaces.map(race => ({
+          race_id: race.race_id,
+          race_name: race.race_name,
+        }));
+
+        // Update both context states
+        setRaces(formatted);
+        setSelectedEvent(prev => ({
+          ...prev,
+          races: fullRaces, // Store full data for future use
+        }));
+
+        // Optional: Persist to Supabase for next load
+        try {
+          await supabase
+            .from('chronotrack_events')
+            .update({ races: fullRaces })
+            .eq('id', selectedEvent.id);
+          console.log('[RaceContext] Embedded races synced to Supabase');
+        } catch (syncErr) {
+          console.warn('[RaceContext] Failed to sync races to Supabase:', syncErr);
+        }
+
+        console.log('[RaceContext] Fallback success: Loaded', formatted.length, 'races');
+      } catch (err) {
+        console.warn('[RaceContext] Race fetch fallback failed:', err);
+
+        // Fallback 2: Treat as single-race event (so results always show)
+        const fallbackRace = [{
+          race_id: selectedEvent.id,
+          race_name: selectedEvent.name || 'Overall Results',
+        }];
+        setRaces(fallbackRace);
+        console.log('[RaceContext] Ultimate fallback: Single overall race');
+      }
+    };
+
+    loadRaces();
   }, [selectedEvent]);
 
   // Load results — cache first, fresh sync on race day or force
@@ -118,52 +174,19 @@ export function RaceProvider({ children }) {
         // 2. Determine if this is race day
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-
         const eventDateStr = selectedEvent.start_time
           ? new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0]
           : null;
-
         const isRaceDay = eventDateStr === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
         // 3. Fetch fresh if needed
         const shouldFetchFresh = forceFresh || isRaceDay || !cached || cached.length === 0;
-
         if (shouldFetchFresh) {
           console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // === SYNC EMBEDDED RACES ===
-            try {
-              const eventRaces = await fetchRacesForEvent(selectedEvent.id);
-              const racesArray = eventRaces.map(race => ({
-                race_id: race.race_id,
-                race_name: race.race_name || 'Unknown Race',
-                race_tag: race.race_tag || null,
-                race_type: race.race_type || null,
-                race_subtype: race.race_subtype || null,
-                distance: race.race_course_distance || null,
-                distance_unit: race.race_pref_distance_unit || 'meters',
-                planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
-                actual_start_time: race.race_actual_start_time ? parseFloat(race.race_actual_start_time) : null,
-              }));
-
-              const { error: raceUpdateError } = await supabase
-                .from('chronotrack_events')
-                .update({ races: racesArray })
-                .eq('id', selectedEvent.id);
-
-              if (raceUpdateError) {
-                console.warn('[RaceContext] Failed to update embedded races:', raceUpdateError);
-              } else {
-                console.log('[RaceContext] Updated embedded races');
-                setSelectedEvent(prev => ({ ...prev, races: racesArray }));
-              }
-            } catch (raceErr) {
-              console.warn('[RaceContext] Race sync failed (non-critical):', raceErr);
-            }
-
             // === DEDUPLICATE RESULTS ===
             const seen = new Map();
             fresh.forEach(r => {
@@ -231,7 +254,6 @@ export function RaceProvider({ children }) {
     if (selectedEvent.start_time) {
       const eventDateStr = new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0];
       const todayStr = new Date().toISOString().split('T')[0];
-
       if (eventDateStr === todayStr) {
         pollInterval = setInterval(() => loadResults(true), 120000);
         console.log('[RaceContext] Live polling started (every 2 minutes)');
