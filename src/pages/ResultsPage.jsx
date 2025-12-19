@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Complete with sticky Bib/Name search + all previous fixes)
+// src/pages/ResultsPage.jsx (FINAL — Focused search + master logo + all fixes)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -31,11 +31,10 @@ export default function ResultsPage() {
   const [raceFilters, setRaceFilters] = useState({});
   const [showFiltersForRace, setShowFiltersForRace] = useState({});
 
-  // Sticky Bib/Name search — persists within the same master event
+  // Sticky Bib/Name search
   const [searchQuery, setSearchQuery] = useState('');
   const prevMasterKeyRef = useRef(masterKey);
 
-  // Clear search only when masterKey changes
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
@@ -83,7 +82,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection logic
+  // Event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -120,7 +119,7 @@ export default function ResultsPage() {
     }
   }, [location.state, selectedEvent, navigate]);
 
-  // Available years for current master
+  // Available years
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -161,13 +160,44 @@ export default function ResultsPage() {
     });
   };
 
-  // Global Bib/Name search across all races
-  const globalFilteredResults = searchQuery
+  // Global search matches
+  const searchMatches = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
         `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : results;
+    : [];
+
+  // Find first race with matching results to scroll to
+  const firstMatchingRaceId = searchMatches.length > 0
+    ? searchMatches[0].race_id
+    : null;
+
+  // Auto-scroll to first match when search changes
+  useEffect(() => {
+    if (searchQuery && firstMatchingRaceId && raceRefs.current[firstMatchingRaceId]) {
+      raceRefs.current[firstMatchingRaceId].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [searchQuery, firstMatchingRaceId]);
+
+  // Embedded races and displayed races
+  const embeddedRaces = selectedEvent?.races || [];
+  const racesWithFinishers = embeddedRaces.filter((race) =>
+    results.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
+  );
+
+  let displayedRaces = racesWithFinishers;
+  if (raceSlug) {
+    displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
+  }
+
+  // Master logo (preferred) or fallback to individual event logo
+  const currentMasterKey = Object.keys(masterGroups).find(key =>
+    masterGroups[key]?.includes(selectedEvent?.id?.toString())
+  );
+  const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
+  const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
+  const displayLogo = masterLogo || fallbackLogo;
 
   // MASTER LANDING PAGE (3 most recent masters + upcoming)
   if (!selectedEvent) {
@@ -274,37 +304,32 @@ export default function ResultsPage() {
   }
 
   // Event Results Page
-  const embeddedRaces = selectedEvent?.races || [];
-  const racesWithFinishers = embeddedRaces.filter((race) =>
-    globalFilteredResults.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
-  );
-
-  let displayedRaces = racesWithFinishers;
-  if (raceSlug) {
-    displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          {eventLogos[selectedEvent.id] && (
-            <img
-              src={eventLogos[selectedEvent.id]}
-              alt="Event Logo"
-              className="mx-auto max-h-40 mb-8 rounded-2xl shadow-2xl bg-white p-6"
-            />
-          )}
-          <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-4">
-            {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
-          </h1>
-          <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
+        {/* Full Header — Hidden when searching */}
+        {!searchQuery && (
+          <div className="text-center mb-16">
+            {displayLogo ? (
+              <div className="mx-auto max-w-md mb-10">
+                <img
+                  src={displayLogo}
+                  alt="Event Series Logo"
+                  className="w-full h-auto max-h-64 object-contain drop-shadow-2xl"
+                />
+              </div>
+            ) : (
+              <div className="h-32 mb-10" />
+            )}
 
-          {/* Year Buttons + Sticky Search */}
-          {availableYears.length > 0 && (
-            <div className="flex flex-col items-center gap-6 mb-12">
-              {/* Year Buttons */}
-              <div className="flex flex-wrap justify-center gap-3">
+            <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-4">
+              {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
+            </h1>
+            <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
+
+            {/* Year Buttons */}
+            {availableYears.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-3 mb-12">
                 <span className="text-xl font-bold text-gray-700 self-center mr-4">Year:</span>
                 {availableYears.map((y) => (
                   <button
@@ -320,26 +345,41 @@ export default function ResultsPage() {
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+        )}
 
-              {/* Sticky Bib/Name Search */}
-              <div className="w-full max-w-md">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Bib or Name..."
-                  className="w-full px-6 py-4 text-lg text-gray-900 placeholder-gray-500 border-2 border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-gemini-blue/50 focus:border-gemini-blue shadow-inner"
-                />
-              </div>
-            </div>
+        {/* Search Bar — Fixed when searching */}
+        <div className={`w-full max-w-2xl mx-auto mb-12 transition-all duration-500 ${searchQuery ? 'fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white shadow-2xl rounded-full px-6 py-4 max-w-full w-11/12' : ''}`}>
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by Bib or Name..."
+              className="w-full px-6 py-4 text-lg text-gray-900 placeholder-gray-500 border-2 border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-gemini-blue/50 focus:border-gemini-blue shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-14 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <p className="text-center mt-4 text-gray-700 font-medium">
+              {searchMatches.length} result{searchMatches.length !== 1 ? 's' : ''} found
+            </p>
           )}
         </div>
 
-        {/* Race Tiles */}
-        {displayedRaces.length > 0 && (
+        {/* Race Tiles — Hidden when searching */}
+        {!searchQuery && displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
-              const raceResults = globalFilteredResults.filter((r) => r.race_id === race.race_id);
+              const raceResults = results.filter((r) => r.race_id === race.race_id);
               const finishers = raceResults.filter((r) => r.chip_time && r.chip_time.trim() !== '').length;
               return (
                 <button
@@ -381,7 +421,7 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const filters = raceFilters[raceId] || { search: '', gender: '', division: '' };
               const showFilters = showFiltersForRace[raceId] || false;
-              const raceResults = globalFilteredResults.filter((r) => r.race_id === raceId);
+              const raceResults = results.filter((r) => r.race_id === raceId);
               const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
                 const bibStr = r.bib ? r.bib.toString() : '';
