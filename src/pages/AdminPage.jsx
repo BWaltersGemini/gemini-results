@@ -1,13 +1,17 @@
-// src/pages/AdminPage.jsx (FINAL COMPLETE — Auto-save + Fixed Participant Count with adminSupabase)
-import { useState, useEffect } from 'react';
+// src/pages/AdminPage.jsx (UPDATED — Triggers public refresh after publish)
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
+import { RaceContext } from '../context/RaceContext'; // ← Import RaceContext
 
 export default function AdminPage() {
   const navigate = useNavigate();
+
+  // Access refreshResults from RaceContext
+  const { refreshResults } = useContext(RaceContext);
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
@@ -86,25 +90,20 @@ export default function AdminPage() {
   // Load cached events + participant counts from Supabase (fast)
   useEffect(() => {
     if (!isLoggedIn) return;
-
     const loadCachedData = async () => {
       try {
         const { data: cachedEvents, error: eventsError } = await supabase
           .from('chronotrack_events')
           .select('*')
           .order('start_time', { ascending: false });
-
         if (eventsError) throw eventsError;
-
         setChronoEvents(cachedEvents || []);
-
         const counts = {};
         for (const event of cachedEvents || []) {
           const { count: adminCount, error: countError } = await adminSupabase
             .from('chronotrack_results')
             .select('id', { count: 'exact', head: true })
             .eq('event_id', event.id);
-
           if (countError) {
             console.error('[Admin] Count error for event', event.id, countError);
             counts[event.id] = 0;
@@ -118,7 +117,6 @@ export default function AdminPage() {
         setChronoEvents([]);
       }
     };
-
     loadCachedData();
   }, [isLoggedIn]);
 
@@ -128,20 +126,16 @@ export default function AdminPage() {
     try {
       const freshEvents = await fetchChronoEvents();
       const sorted = freshEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
       const toUpsert = sorted.map(event => ({
         id: event.id,
         name: event.name,
         start_time: event.start_time,
         races: event.races || [],
       }));
-
       const { error } = await adminSupabase
         .from('chronotrack_events')
         .upsert(toUpsert, { onConflict: 'id' });
-
       if (error) throw error;
-
       setChronoEvents(sorted);
       setSaveStatus('Events refreshed and cached!');
       setTimeout(() => setSaveStatus(''), 4000);
@@ -242,14 +236,12 @@ export default function AdminPage() {
         alert('No results returned from ChronoTrack.');
         return;
       }
-
       const seen = new Map();
       fresh.forEach(r => {
         const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
         if (!seen.has(key)) seen.set(key, r);
       });
       const deduped = Array.from(seen.values());
-
       const toUpsert = deduped.map(r => ({
         event_id: eventId,
         race_id: r.race_id || null,
@@ -272,15 +264,20 @@ export default function AdminPage() {
         entry_id: r.entry_id ?? null,
         race_name: r.race_name ?? null,
       }));
-
       const { error } = await adminSupabase
         .from('chronotrack_results')
         .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
-
       if (error) throw error;
 
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
       setSaveStatus(`Published ${deduped.length} results — saved automatically!`);
+
+      // ← NEW: Trigger public results refresh
+      if (refreshResults) {
+        console.log('[Admin] Triggering public results refresh...');
+        refreshResults();
+      }
+
       setTimeout(() => setSaveStatus(''), 5000);
     } catch (err) {
       console.error('[Admin] Publish failed:', err);
@@ -293,13 +290,11 @@ export default function AdminPage() {
   const handleFileUpload = async (e, type) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-
     const urls = [];
     for (const file of files) {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', type);
-
       try {
         const res = await fetch('/api/upload', {
           method: 'POST',
@@ -311,7 +306,6 @@ export default function AdminPage() {
         console.error('Upload failed:', err);
       }
     }
-
     if (type === 'ad') {
       setAds(prev => [...prev, ...urls]);
     }
@@ -418,7 +412,6 @@ export default function AdminPage() {
                 const currentMaster = getCurrentMasterForEvent(event.id);
                 const displayName = editedEvents[event.id]?.name || event.name;
                 const count = participantCounts[event.id] || 0;
-
                 return (
                   <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     <div
@@ -476,7 +469,6 @@ export default function AdminPage() {
                               )}
                             </div>
                           </div>
-
                           <div>
                             <label className="block text-lg font-semibold text-gray-700 mb-2">Display Name</label>
                             <input
@@ -546,7 +538,6 @@ export default function AdminPage() {
         {activeTab === 'website' && (
           <section className="space-y-12">
             <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
-
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <h3 className="text-2xl font-bold mb-6">Advertisements</h3>
               <input type="file" onChange={(e) => handleFileUpload(e, 'ad')} accept="image/*" multiple className="mb-6" />

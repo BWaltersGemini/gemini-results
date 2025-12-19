@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Fresh Supabase Config Load + No localStorage Cache for Global Config)
+// src/context/RaceContext.jsx (UPDATED — Forces fresh fetch on admin publish)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -16,6 +16,9 @@ export function RaceProvider({ children }) {
   const [error, setError] = useState(null);
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
+
+  // NEW: Trigger for forcing fresh results fetch
+  const [resultsVersion, setResultsVersion] = useState(0);
 
   // Global config — loaded fresh from Supabase
   const [masterGroups, setMasterGroups] = useState({});
@@ -90,10 +93,8 @@ export function RaceProvider({ children }) {
       setRaces([]);
       return;
     }
-
     const loadRaces = async () => {
       let embeddedRaces = selectedEvent.races || [];
-
       if (embeddedRaces.length > 0) {
         const formatted = embeddedRaces.map(race => ({
           race_id: race.race_id || race.id,
@@ -103,7 +104,6 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Loaded embedded races:', formatted.length);
         return;
       }
-
       console.log('[RaceContext] No embedded races — fetching fresh from ChronoTrack...');
       try {
         const freshRaces = await fetchRacesForEvent(selectedEvent.id);
@@ -118,18 +118,15 @@ export function RaceProvider({ children }) {
           planned_start_time: race.race_planned_start_time ? parseInt(race.race_planned_start_time, 10) : null,
           actual_start_time: race.race_actual_start_time ? parseFloat(race.race_actual_start_time) : null,
         }));
-
         const formatted = fullRaces.map(race => ({
           race_id: race.race_id,
           race_name: race.race_name,
         }));
-
         setRaces(formatted);
         setSelectedEvent(prev => ({
           ...prev,
           races: fullRaces,
         }));
-
         // Sync to Supabase for future loads
         try {
           await supabase
@@ -140,7 +137,6 @@ export function RaceProvider({ children }) {
         } catch (syncErr) {
           console.warn('[RaceContext] Failed to sync races to Supabase:', syncErr);
         }
-
         console.log('[RaceContext] Fallback success: Loaded', formatted.length, 'races');
       } catch (err) {
         console.warn('[RaceContext] Race fetch fallback failed:', err);
@@ -152,11 +148,10 @@ export function RaceProvider({ children }) {
         console.log('[RaceContext] Ultimate fallback: Single overall race');
       }
     };
-
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results — FULL PAGINATION FROM CACHE + fresh sync on race day
+  // Load results — now reacts to resultsVersion for forced refresh
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -164,13 +159,11 @@ export function RaceProvider({ children }) {
       setIsLiveRace(false);
       return;
     }
-
     let aborted = false;
     let pollInterval = null;
 
-    const loadResults = async (forceFresh = false) => {
+    const loadResults = async () => {
       if (aborted) return;
-
       try {
         setLoadingResults(true);
         setError(null);
@@ -180,7 +173,6 @@ export function RaceProvider({ children }) {
         let cachedResults = [];
         let start = 0;
         const pageSize = 1000;
-
         while (!aborted) {
           const { data, error } = await supabase
             .from('chronotrack_results')
@@ -188,27 +180,14 @@ export function RaceProvider({ children }) {
             .eq('event_id', selectedEvent.id)
             .order('place', { ascending: true })
             .range(start, start + pageSize - 1);
-
           if (error) {
             console.error('[RaceContext] Cache pagination error:', error);
             break;
           }
-
-          if (!data || data.length === 0) {
-            break;
-          }
-
+          if (!data || data.length === 0) break;
           cachedResults = [...cachedResults, ...data];
           start += data.length;
-
           if (data.length < pageSize) break;
-        }
-
-        if (cachedResults.length > 0) {
-          allResults = cachedResults;
-          const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
-          setUniqueDivisions(divisions);
-          console.log(`[RaceContext] Loaded ${cachedResults.length} results from cache (paginated)`);
         }
 
         // === 2. Determine if race day ===
@@ -220,12 +199,12 @@ export function RaceProvider({ children }) {
         const isRaceDay = eventDateStr === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        // === 3. Fetch fresh if needed ===
-        const shouldFetchFresh = forceFresh || isRaceDay || cachedResults.length === 0;
-        if (shouldFetchFresh) {
-          console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
-          const fresh = await fetchResultsForEvent(selectedEvent.id);
+        // === 3. Always fetch fresh if on race day OR if version changed (admin publish) ===
+        const shouldFetchFresh = isRaceDay || cachedResults.length === 0;
 
+        if (shouldFetchFresh) {
+          console.log('[RaceContext] Fetching fresh results from ChronoTrack (race day or no cache)...');
+          const fresh = await fetchResultsForEvent(selectedEvent.id);
           if (!aborted && fresh.length > 0) {
             const seen = new Map();
             fresh.forEach(r => {
@@ -273,6 +252,12 @@ export function RaceProvider({ children }) {
               }
             }
           }
+        } else {
+          // Use cached results if not race day and cache exists
+          allResults = cachedResults;
+          const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
+          setUniqueDivisions(divisions);
+          console.log(`[RaceContext] Using cached results (${cachedResults.length})`);
         }
 
         if (!aborted) setResults(allResults);
@@ -293,7 +278,7 @@ export function RaceProvider({ children }) {
       const eventDateStr = new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0];
       const todayStr = new Date().toISOString().split('T')[0];
       if (eventDateStr === todayStr) {
-        pollInterval = setInterval(() => loadResults(true), 120000);
+        pollInterval = setInterval(() => loadResults(), 120000);
         console.log('[RaceContext] Live polling started (every 2 minutes)');
       }
     }
@@ -302,7 +287,13 @@ export function RaceProvider({ children }) {
       aborted = true;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [selectedEvent]);
+  }, [selectedEvent, resultsVersion]); // ← Critical: reacts to version change
+
+  // Expose refresh function for AdminPage
+  const refreshResults = () => {
+    console.log('[RaceContext] Forced refresh triggered');
+    setResultsVersion(prev => prev + 1);
+  };
 
   return (
     <RaceContext.Provider
@@ -324,6 +315,7 @@ export function RaceProvider({ children }) {
         showAdsPerMaster,
         ads,
         hiddenRaces,
+        refreshResults, // ← Now available to consumers
       }}
     >
       {children}
