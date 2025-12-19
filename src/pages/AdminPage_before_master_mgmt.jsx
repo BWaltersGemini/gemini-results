@@ -1,11 +1,11 @@
-// src/pages/AdminPage.jsx (FINAL — With per-master "Show Ads" toggle)
+// src/pages/AdminPage.jsx (FINAL — Bulk Publish with Progress + Hide Events with Masters)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
-import { RaceContext } from '../context/RaceContext';
+import { RaceContext } from '../context/RaceContext'; // For refreshResults
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ export default function AdminPage() {
   const [masterGroups, setMasterGroups] = useState({});
   const [hiddenRaces, setHiddenRaces] = useState({});
   const [hiddenMasters, setHiddenMasters] = useState([]);
-  const [showAdsPerMaster, setShowAdsPerMaster] = useState({}); // ← NEW: per-master ads toggle
+  const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [eventLogos, setEventLogos] = useState({});
   const [ads, setAds] = useState([]);
   const [expandedEvents, setExpandedEvents] = useState({});
@@ -44,7 +44,7 @@ export default function AdminPage() {
     setEditedEvents(config.editedEvents || {});
     setEventLogos(config.eventLogos || {});
     setHiddenMasters(config.hiddenMasters || []);
-    setShowAdsPerMaster(config.showAdsPerMaster || {}); // ← Load ads toggle
+    setShowAdsPerMaster(config.showAdsPerMaster || {});
     setAds(config.ads || []);
     setHiddenRaces(config.hiddenRaces || {});
   };
@@ -55,7 +55,7 @@ export default function AdminPage() {
         .from('app_config')
         .upsert({ key, value }, { onConflict: 'key' });
       if (error) throw error;
-      setSaveStatus(`${key === 'showAdsPerMaster' ? 'Ads visibility' : key === 'masterGroups' ? 'Master links' : key === 'eventLogos' ? 'Event logo' : 'Config'} saved automatically`);
+      setSaveStatus(`${key === 'masterGroups' ? 'Master links' : 'Config'} saved automatically`);
       setTimeout(() => setSaveStatus(''), 4000);
     } catch (err) {
       console.error(`Auto-save failed for ${key}:`, err);
@@ -155,6 +155,7 @@ export default function AdminPage() {
     setBulkProgress({ current: 0, total: chronoEvents.length });
     let successCount = 0;
     let failCount = 0;
+
     for (let i = 0; i < chronoEvents.length; i++) {
       const event = chronoEvents[i];
       try {
@@ -166,9 +167,12 @@ export default function AdminPage() {
       }
       setBulkProgress({ current: i + 1, total: chronoEvents.length });
     }
+
     setPublishingAll(false);
     setSaveStatus(`Bulk publish complete: ${successCount} succeeded, ${failCount} failed`);
     setTimeout(() => setSaveStatus(''), 8000);
+
+    // Trigger public refresh after bulk
     if (refreshResults) refreshResults();
   };
 
@@ -253,14 +257,6 @@ export default function AdminPage() {
     });
   };
 
-  // Toggle ads for master event
-  const toggleAdsForMaster = async (masterKey) => {
-    const updated = { ...showAdsPerMaster };
-    updated[masterKey] = !updated[masterKey];
-    setShowAdsPerMaster(updated);
-    await autoSaveConfig('showAdsPerMaster', updated);
-  };
-
   const refreshAndPublishResults = async (eventId) => {
     setRefreshingEvent(eventId);
     try {
@@ -304,48 +300,10 @@ export default function AdminPage() {
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
     } catch (err) {
       console.error('[Admin] Publish failed:', err);
-      throw err;
+      throw err; // re-throw for bulk handler
     } finally {
       setRefreshingEvent(null);
     }
-  };
-
-  // Upload logo for master event
-  const handleLogoUpload = async (e, masterKey) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', 'logo');
-
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (data.url) {
-        const updatedLogos = { ...eventLogos, [masterKey]: data.url };
-        setEventLogos(updatedLogos);
-        await autoSaveConfig('eventLogos', updatedLogos);
-        setSaveStatus('Master logo uploaded!');
-        setTimeout(() => setSaveStatus(''), 4000);
-      }
-    } catch (err) {
-      console.error('Logo upload failed:', err);
-      setSaveStatus('Logo upload failed');
-      setTimeout(() => setSaveStatus(''), 6000);
-    }
-  };
-
-  const handleRemoveLogo = async (masterKey) => {
-    const updatedLogos = { ...eventLogos };
-    delete updatedLogos[masterKey];
-    setEventLogos(updatedLogos);
-    await autoSaveConfig('eventLogos', updatedLogos);
-    setSaveStatus('Master logo removed');
-    setTimeout(() => setSaveStatus(''), 4000);
   };
 
   const handleFileUpload = async (e, type) => {
@@ -410,6 +368,7 @@ export default function AdminPage() {
     );
   }
 
+  // Filter events for checkbox
   const displayedEvents = hideMasteredEvents
     ? chronoEvents.filter(event => !getCurrentMasterForEvent(event.id))
     : chronoEvents;
@@ -479,8 +438,8 @@ export default function AdminPage() {
                   disabled={publishingAll}
                   className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 disabled:opacity-50 transition"
                 >
-                  {publishingAll
-                    ? `Publishing... (${bulkProgress.current}/${bulkProgress.total})`
+                  {publishingAll 
+                    ? `Publishing... (${bulkProgress.current}/${bulkProgress.total})` 
                     : 'Publish ALL Results'}
                 </button>
               </div>
@@ -489,8 +448,8 @@ export default function AdminPage() {
             {displayedEvents.length === 0 ? (
               <div className="text-center py-20 bg-white rounded-2xl shadow">
                 <p className="text-xl text-gray-600">
-                  {hideMasteredEvents
-                    ? 'All events assigned to masters or no events available.'
+                  {hideMasteredEvents 
+                    ? 'All events assigned to masters or no events available.' 
                     : 'No events cached yet.'}
                 </p>
                 <p className="text-gray-500 mt-2">Click "Fetch Latest Events" to load from ChronoTrack.</p>
@@ -500,7 +459,6 @@ export default function AdminPage() {
                 const currentMaster = getCurrentMasterForEvent(event.id);
                 const displayName = editedEvents[event.id]?.name || event.name;
                 const count = participantCounts[event.id] || 0;
-
                 return (
                   <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     <div
@@ -522,63 +480,8 @@ export default function AdminPage() {
                       </div>
                       <span className="text-2xl text-gray-400">{expandedEvents[event.id] ? '−' : '+'}</span>
                     </div>
-
                     {expandedEvents[event.id] && (
                       <div className="px-6 pb-6 border-t border-gray-200">
-                        {/* Master Logo Upload */}
-                        {currentMaster && (
-                          <div className="mb-8 p-6 bg-gemini-blue/5 rounded-xl">
-                            <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">
-                              Upload Logo for Master: <span className="text-gemini-blue">{currentMaster}</span>
-                            </h4>
-                            {eventLogos[currentMaster] ? (
-                              <div className="flex items-center gap-6">
-                                <img
-                                  src={eventLogos[currentMaster]}
-                                  alt="Master Logo"
-                                  className="h-32 rounded-lg shadow-md"
-                                />
-                                <div>
-                                  <button
-                                    onClick={() => handleRemoveLogo(currentMaster)}
-                                    className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition font-medium"
-                                  >
-                                    Remove Logo
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => handleLogoUpload(e, currentMaster)}
-                                className="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90 cursor-pointer"
-                              />
-                            )}
-                          </div>
-                        )}
-
-                        {/* Show Ads Toggle */}
-                        {currentMaster && (
-                          <div className="mb-8 p-6 bg-yellow-50 rounded-xl border border-yellow-300">
-                            <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">
-                              Ads Visibility for Master: <span className="text-gemini-blue">{currentMaster}</span>
-                            </h4>
-                            <label className="flex items-center gap-4 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={!!showAdsPerMaster[currentMaster]}
-                                onChange={() => toggleAdsForMaster(currentMaster)}
-                                className="h-6 w-6 text-gemini-blue rounded focus:ring-gemini-blue"
-                              />
-                              <span className="text-lg font-medium text-gray-800">
-                                {showAdsPerMaster[currentMaster] ? 'Ads are shown' : 'Ads are hidden'} on this master event
-                              </span>
-                            </label>
-                          </div>
-                        )}
-
-                        {/* Existing controls */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                           <div>
                             <label className="block text-lg font-semibold text-gray-700 mb-2">Master Event</label>
@@ -622,8 +525,6 @@ export default function AdminPage() {
                             />
                           </div>
                         </div>
-
-                        {/* Publish Button */}
                         <div className="mt-8 flex justify-center">
                           <button
                             onClick={() => refreshAndPublishResults(event.id)}
@@ -633,8 +534,6 @@ export default function AdminPage() {
                             {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
                           </button>
                         </div>
-
-                        {/* Races */}
                         {event.races && event.races.length > 0 && (
                           <div className="mt-8">
                             <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">Races ({event.races.length})</h4>
@@ -665,7 +564,6 @@ export default function AdminPage() {
                             </div>
                           </div>
                         )}
-
                         {(!event.races || event.races.length === 0) && (
                           <div className="mt-8 text-center text-gray-500 italic">
                             No races embedded for this event.
@@ -680,7 +578,6 @@ export default function AdminPage() {
           </section>
         )}
 
-        {/* Website tab */}
         {activeTab === 'website' && (
           <section className="space-y-12">
             <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
