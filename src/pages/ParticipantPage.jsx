@@ -1,4 +1,5 @@
-// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Shareable Card + No Cropping)
+// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Shareable Card: Smaller Logo, Content Shifted Up, Rankings Fully Visible)
+
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -63,7 +64,7 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Fetch participant data if not passed via navigation state
+  // Fetch data if not passed via navigation state
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) return;
@@ -116,7 +117,7 @@ export default function ParticipantPage() {
     fetchDataIfMissing();
   }, [bib, events, contextResults, contextLoading, initialState]);
 
-  // Confetti on time reveal
+  // Confetti when time animation completes
   const handleTimeComplete = () => {
     setTimeRevealed(true);
     confetti({
@@ -127,7 +128,7 @@ export default function ParticipantPage() {
     });
   };
 
-  // Generate and download card
+  // Generate and download the card
   const generateResultCard = async () => {
     if (!cardRef.current) return;
 
@@ -296,7 +297,7 @@ export default function ParticipantPage() {
           )}
         </div>
 
-        {/* Name */}
+        {/* Participant Name */}
         <h3 className="text-5xl font-extrabold mb-8 text-center text-gemini-blue drop-shadow-md">
           {participant.first_name} {participant.last_name}
         </h3>
@@ -347,7 +348,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Animated Times */}
+        {/* Times */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
             <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
@@ -419,7 +420,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Create Card Button */}
+        {/* Create Shareable Card Button */}
         <div className="text-center my-16">
           <button
             onClick={() => setShowCardPreview(true)}
@@ -429,82 +430,82 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden High-Res Card for Generation */}
+        {/* Hidden High-Resolution Card for Generation */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
-            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-10 pt-12 pb-10"
+            className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-8 pt-8 pb-12"
             style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
-            {/* Logo Section */}
-            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl p-10 mb-10 flex items-center justify-center">
+            {/* Smaller Logo Section (~50% smaller than previous version) */}
+            <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 mb-8 flex items-center justify-center">
               {masterLogo ? (
-                <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-64 object-contain" crossOrigin="anonymous" />
+                <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-40 object-contain" crossOrigin="anonymous" />
               ) : eventLogos[selectedEvent.id] ? (
-                <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-60 object-contain" crossOrigin="anonymous" />
+                <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-36 object-contain" crossOrigin="anonymous" />
               ) : (
-                <h2 className="text-6xl font-black text-gemini-dark-gray leading-tight">
+                <h2 className="text-5xl font-black text-gemini-dark-gray leading-tight">
                   {selectedEvent.name}
                 </h2>
               )}
             </div>
 
             {/* Race Name */}
-            <p className="text-5xl font-black text-[#80ccd6] mb-6 drop-shadow-lg">
+            <p className="text-5xl font-black text-[#80ccd6] mb-4 drop-shadow-lg">
               {raceDisplayName}
             </p>
 
             {/* Date */}
-            <p className="text-4xl text-gray-300 mb-12">
+            <p className="text-4xl text-gray-300 mb-8">
               {formatDate(selectedEvent.start_time)}
             </p>
 
             {/* Runner Name */}
-            <h1 className="text-7xl font-black text-white mb-12 drop-shadow-2xl leading-none px-8">
+            <h1 className="text-7xl font-black text-white mb-10 drop-shadow-2xl leading-none px-8">
               {participant.first_name}<br />{participant.last_name}
             </h1>
 
             {/* Finish Time */}
-            <div className="mb-16">
-              <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
+            <div className="mb-12">
+              <p className="text-4xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
               <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
                 {formatChronoTime(participant.chip_time)}
               </p>
             </div>
 
-            {/* Rankings */}
-            <div className="grid grid-cols-3 gap-12 text-white w-full max-w-5xl">
+            {/* Rankings — Now fully visible with extra margin */}
+            <div className="grid grid-cols-3 gap-10 text-white w-full max-w-5xl mt-8">
               <div>
-                <p className="text-3xl text-gray-400 uppercase mb-4">Overall</p>
+                <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
                 <p className="text-7xl font-bold text-[#ffd700] leading-none">
                   {participant.place || '—'}
                 </p>
-                <p className="text-3xl text-gray-400 mt-4">of {overallTotal}</p>
+                <p className="text-3xl text-gray-400 mt-3">of {overallTotal}</p>
               </div>
               <div>
-                <p className="text-3xl text-gray-400 uppercase mb-4">Gender</p>
+                <p className="text-3xl text-gray-400 uppercase mb-3">Gender</p>
                 <p className="text-7xl font-bold text-[#ffd700] leading-none">
                   {participant.gender_place || '—'}
                 </p>
-                <p className="text-3xl text-gray-400 mt-4">of {genderTotal}</p>
+                <p className="text-3xl text-gray-400 mt-3">of {genderTotal}</p>
               </div>
               <div>
-                <p className="text-3xl text-gray-400 uppercase mb-4">Division</p>
+                <p className="text-3xl text-gray-400 uppercase mb-3">Division</p>
                 <p className="text-7xl font-bold text-[#ffd700] leading-none">
                   {participant.age_group_place || '—'}
                 </p>
-                <p className="text-3xl text-gray-400 mt-4">of {divisionTotal}</p>
+                <p className="text-3xl text-gray-400 mt-3">of {divisionTotal}</p>
               </div>
             </div>
 
-            {/* Footer Branding */}
+            {/* Branding — Fixed at bottom */}
             <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
               Timed by Gemini Timing • www.geminitiming.com
             </p>
           </div>
         </div>
 
-        {/* Preview Modal */}
+        {/* Card Preview Modal — Matches generated card exactly */}
         {showCardPreview && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8" onClick={(e) => e.stopPropagation()}>
@@ -515,19 +516,19 @@ export default function ParticipantPage() {
 
               <div className="flex justify-center mb-10">
                 <div className="w-96 h-96 bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl">
-                  <div className="h-full flex flex-col items-center justify-start px-4 pt-6 pb-4 text-center text-white text-sm">
-                    <div className="w-full bg-white rounded-2xl p-5 mb-4">
+                  <div className="h-full flex flex-col items-center justify-start px-4 pt-4 pb-6 text-center text-white text-sm">
+                    <div className="w-full bg-white rounded-2xl p-4 mb-4">
                       {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-24 object-contain" />
+                        <img src={masterLogo} alt="Series Logo" className="w-full max-h-20 object-contain" />
                       ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-20 object-contain" />
+                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="w-full max-h-18 object-contain" />
                       ) : (
                         <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
                       )}
                     </div>
 
                     <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
-                    <p className="text-lg text-gray-300 mb-4">{formatDate(selectedEvent.start_time)}</p>
+                    <p className="text-lg text-gray-300 mb-3">{formatDate(selectedEvent.start_time)}</p>
                     <h1 className="text-3xl font-black mb-4 leading-none">
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
