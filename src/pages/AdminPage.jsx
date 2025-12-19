@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL COMPLETE — Supabase cache + manual Refresh & Publish + Clean UI)
+// src/pages/AdminPage.jsx (FINAL COMPLETE — Supabase-first + Manual ChronoTrack Fetch + Refresh & Publish)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -14,7 +14,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  // Global config state
+  // Global config
   const [editedEvents, setEditedEvents] = useState({});
   const [masterGroups, setMasterGroups] = useState({});
   const [hiddenRaces, setHiddenRaces] = useState({});
@@ -23,10 +23,10 @@ export default function AdminPage() {
   const [eventLogos, setEventLogos] = useState({});
   const [ads, setAds] = useState([]);
   const [expandedEvents, setExpandedEvents] = useState({});
-  const [loading, setLoading] = useState(true);
   const [chronoEvents, setChronoEvents] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
   const [refreshingEvent, setRefreshingEvent] = useState(null);
+  const [fetchingEvents, setFetchingEvents] = useState(false);
   const [activeTab, setActiveTab] = useState('events');
   const [newMasterKeys, setNewMasterKeys] = useState({});
 
@@ -62,38 +62,72 @@ export default function AdminPage() {
     if (loggedIn) loadGlobalConfig();
   }, []);
 
+  // Load cached events + participant counts from Supabase (fast)
   useEffect(() => {
-    if (isLoggedIn) {
-      const fetchData = async () => {
-        try {
-          setLoading(true);
+    if (!isLoggedIn) return;
 
-          // Load events from ChronoTrack (metadata + embedded races)
-          const events = await fetchChronoEvents();
-          const sorted = events.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-          setChronoEvents(sorted);
+    const loadCachedData = async () => {
+      try {
+        const { data: cachedEvents, error: eventsError } = await supabase
+          .from('chronotrack_events')
+          .select('*')
+          .order('start_time', { ascending: false });
 
-          // Load participant counts from Supabase cache
-          const counts = {};
-          for (const event of sorted) {
-            const { count, error } = await supabase
-              .from('chronotrack_results')
-              .select('id', { count: 'exact', head: true })
-              .eq('event_id', event.id);
+        if (eventsError) throw eventsError;
 
-            counts[event.id] = error ? 0 : count || 0;
-          }
-          setParticipantCounts(counts);
-        } catch (err) {
-          console.error('Failed to load data:', err);
-          alert('Failed to load events or participant counts.');
-        } finally {
-          setLoading(false);
+        setChronoEvents(cachedEvents || []);
+
+        const counts = {};
+        for (const event of cachedEvents || []) {
+          const { count } = await supabase
+            .from('chronotrack_results')
+            .select('id', { count: 'exact', head: true })
+            .eq('event_id', event.id);
+          counts[event.id] = count || 0;
         }
-      };
-      fetchData();
-    }
+        setParticipantCounts(counts);
+
+        console.log('[Admin] Loaded cached events and counts from Supabase');
+      } catch (err) {
+        console.error('[Admin] Failed to load cached data:', err);
+        setChronoEvents([]);
+      }
+    };
+
+    loadCachedData();
   }, [isLoggedIn]);
+
+  // Manual fetch latest events from ChronoTrack
+  const fetchLatestFromChronoTrack = async () => {
+    setFetchingEvents(true);
+    try {
+      console.log('[Admin] Fetching latest events from ChronoTrack...');
+      const freshEvents = await fetchChronoEvents();
+
+      const sorted = freshEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+
+      const toUpsert = sorted.map(event => ({
+        id: event.id,
+        name: event.name,
+        start_time: event.start_time,
+        races: event.races || [],
+      }));
+
+      const { error } = await adminSupabase
+        .from('chronotrack_events')
+        .upsert(toUpsert, { onConflict: 'id' });
+
+      if (error) throw error;
+
+      setChronoEvents(sorted);
+      alert(`Fetched and cached ${sorted.length} events from ChronoTrack!`);
+    } catch (err) {
+      console.error('[Admin] ChronoTrack fetch failed:', err);
+      alert('Failed to fetch events from ChronoTrack.');
+    } finally {
+      setFetchingEvents(false);
+    }
+  };
 
   const formatDate = (epoch) => {
     if (!epoch) return 'Date TBD';
@@ -175,7 +209,7 @@ export default function AdminPage() {
   const refreshAndPublishResults = async (eventId) => {
     setRefreshingEvent(eventId);
     try {
-      console.log(`[Admin] Refreshing results for event ${eventId}...`);
+      console.log(`[Admin] Publishing results for event ${eventId}...`);
       const fresh = await fetchResultsForEvent(eventId);
 
       if (fresh.length === 0) {
@@ -222,8 +256,8 @@ export default function AdminPage() {
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
       alert(`Successfully published ${deduped.length} results!`);
     } catch (err) {
-      console.error('[Admin] Refresh failed:', err);
-      alert('Failed to refresh results. Check console.');
+      console.error('[Admin] Publish failed:', err);
+      alert('Failed to publish results.');
     } finally {
       setRefreshingEvent(null);
     }
@@ -340,12 +374,24 @@ export default function AdminPage() {
 
         {activeTab === 'events' && (
           <section className="space-y-6">
-            <h2 className="text-3xl font-bold text-gemini-dark-gray mb-6">ChronoTrack Events</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-gemini-dark-gray">
+                ChronoTrack Events ({chronoEvents.length})
+              </h2>
+              <button
+                onClick={fetchLatestFromChronoTrack}
+                disabled={fetchingEvents}
+                className="px-8 py-4 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition"
+              >
+                {fetchingEvents ? 'Fetching...' : 'Fetch Latest Events from ChronoTrack'}
+              </button>
+            </div>
 
-            {loading ? (
-              <p className="text-center text-gray-600 py-12">Loading events...</p>
-            ) : chronoEvents.length === 0 ? (
-              <p className="text-center text-gray-600 py-12">No events found.</p>
+            {chronoEvents.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl shadow">
+                <p className="text-xl text-gray-600">No events cached yet.</p>
+                <p className="text-gray-500 mt-2">Click the button above to load events from ChronoTrack.</p>
+              </div>
             ) : (
               chronoEvents.map((event) => {
                 const currentMaster = getCurrentMasterForEvent(event.id);
@@ -383,7 +429,7 @@ export default function AdminPage() {
                               <input
                                 type="text"
                                 list="master-keys"
-                                placeholder="Type or select"
+                                placeholder="Type or select master"
                                 value={newMasterKeys[event.id] || ''}
                                 onChange={(e) => setNewMasterKeys(prev => ({ ...prev, [event.id]: e.target.value }))}
                                 className="flex-1 px-4 py-3 border border-gray-300 rounded-xl"
@@ -395,14 +441,14 @@ export default function AdminPage() {
                               </datalist>
                               <button
                                 onClick={() => assignToMaster(event.id, newMasterKeys[event.id] || currentMaster)}
-                                className="px-6 py-3 bg-gemini-blue text-white rounded-xl hover:bg-gemini-blue/90 font-medium"
+                                className="px-6 py-3 bg-gemini-blue text-white rounded-xl hover:bg-gemini-blue/90 font-medium transition"
                               >
                                 Assign
                               </button>
                               {currentMaster && (
                                 <button
                                   onClick={() => unlinkFromMaster(event.id)}
-                                  className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium"
+                                  className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
                                 >
                                   Unlink
                                 </button>
@@ -463,7 +509,7 @@ export default function AdminPage() {
                         )}
 
                         {(!event.races || event.races.length === 0) && (
-                          <div className="mt-8 text-gray-500 italic text-center">
+                          <div className="mt-8 text-center text-gray-500 italic">
                             No races embedded for this event.
                           </div>
                         )}
@@ -499,7 +545,7 @@ export default function AdminPage() {
             onClick={handleSaveChanges}
             className="px-16 py-6 bg-gemini-blue text-white text-2xl font-bold rounded-full hover:bg-gemini-blue/90 shadow-2xl transition transform hover:scale-105"
           >
-            Save Configuration Changes
+            Save All Changes to Supabase
           </button>
         </div>
       </div>
