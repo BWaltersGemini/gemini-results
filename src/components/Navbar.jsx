@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx (FIXED — Search bar clears on first click of Logo/Results)
+// src/components/Navbar.jsx (FIXED — Search input text is now black/visible)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useContext, useState, useEffect, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -30,7 +30,6 @@ export default function Navbar() {
         setIsMobileMenuOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -118,7 +117,7 @@ export default function Navbar() {
   };
 
   const handleResultsClick = (e) => {
-    e.preventDefault(); // Prevent navigation flicker
+    e.preventDefault();
     clearSearchAndSelection();
     navigate('/results');
   };
@@ -136,7 +135,6 @@ export default function Navbar() {
           <button onClick={handleLogoClick}>
             <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
           </button>
-
           <div className="hidden md:flex items-center space-x-8">
             <button
               onClick={handleResultsClick}
@@ -153,7 +151,6 @@ export default function Navbar() {
               Sign up for More Races
             </a>
           </div>
-
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="md:hidden text-3xl text-gray-700 focus:outline-none"
@@ -174,7 +171,7 @@ export default function Navbar() {
               }}
               onFocus={handleInputFocus}
               placeholder="Search Race Results..."
-              className="w-full p-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+              className="w-full p-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gemini-blue text-gray-900 placeholder-gray-500"
             />
             <button
               onClick={handleToggleOpen}
