@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (UPDATED — Forces fresh fetch on admin publish)
+// src/context/RaceContext.jsx (FINAL — Fixed fresh fetch on admin publish for past events)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -17,7 +17,7 @@ export function RaceProvider({ children }) {
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // NEW: Trigger for forcing fresh results fetch
+  // Trigger for forcing fresh results fetch (used by AdminPage)
   const [resultsVersion, setResultsVersion] = useState(0);
 
   // Global config — loaded fresh from Supabase
@@ -151,7 +151,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results — now reacts to resultsVersion for forced refresh
+  // Load results — now forces fresh fetch when resultsVersion changes (admin publish)
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -199,11 +199,11 @@ export function RaceProvider({ children }) {
         const isRaceDay = eventDateStr === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        // === 3. Always fetch fresh if on race day OR if version changed (admin publish) ===
-        const shouldFetchFresh = isRaceDay || cachedResults.length === 0;
+        // === 3. Fetch fresh if: race day, no cache, OR admin forced refresh (resultsVersion changed) ===
+        const shouldFetchFresh = isRaceDay || cachedResults.length === 0 || resultsVersion > 0;
 
         if (shouldFetchFresh) {
-          console.log('[RaceContext] Fetching fresh results from ChronoTrack (race day or no cache)...');
+          console.log('[RaceContext] Fetching fresh results from ChronoTrack (forced or race day)...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           if (!aborted && fresh.length > 0) {
             const seen = new Map();
@@ -253,7 +253,6 @@ export function RaceProvider({ children }) {
             }
           }
         } else {
-          // Use cached results if not race day and cache exists
           allResults = cachedResults;
           const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
           setUniqueDivisions(divisions);
@@ -287,11 +286,11 @@ export function RaceProvider({ children }) {
       aborted = true;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [selectedEvent, resultsVersion]); // ← Critical: reacts to version change
+  }, [selectedEvent, resultsVersion]); // ← Reacts to admin-triggered refresh
 
-  // Expose refresh function for AdminPage
+  // Function exposed to AdminPage to force refresh
   const refreshResults = () => {
-    console.log('[RaceContext] Forced refresh triggered');
+    console.log('[RaceContext] Admin triggered forced refresh');
     setResultsVersion(prev => prev + 1);
   };
 
@@ -315,7 +314,7 @@ export function RaceProvider({ children }) {
         showAdsPerMaster,
         ads,
         hiddenRaces,
-        refreshResults, // ← Now available to consumers
+        refreshResults, // ← Used by AdminPage
       }}
     >
       {children}
