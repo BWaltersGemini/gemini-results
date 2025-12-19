@@ -1,6 +1,6 @@
-// src/components/Navbar.jsx (UPDATED — Clear search bar on Logo & Results click + Masters sorted by most recent)
+// src/components/Navbar.jsx (FIXED — Search bar clears on first click of Logo/Results)
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useContext, useState, useEffect } from 'react';
+import { useContext, useState, useEffect, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
 
 export default function Navbar() {
@@ -20,6 +20,21 @@ export default function Navbar() {
   const [isListOpen, setIsListOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const navbarRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (navbarRef.current && !navbarRef.current.contains(event.target)) {
+        setIsListOpen(false);
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Slugify helper
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -30,7 +45,7 @@ export default function Navbar() {
       .replace(/^-+|-+$/g, '');
   };
 
-  // Extract year from start_time (Unix epoch in seconds)
+  // Extract year from start_time
   const getYearFromEvent = (event) => {
     if (!event?.start_time) return 0;
     return new Date(event.start_time * 1000).getFullYear();
@@ -42,7 +57,7 @@ export default function Navbar() {
     }
   }, [selectedEvent]);
 
-  // Build master event list and sort by most recent event descending
+  // Build and sort master events by most recent
   const masterEventList = Object.keys(masterGroups)
     .map((storedKey) => {
       const displayName = editedEvents[storedKey]?.name || storedKey;
@@ -51,7 +66,6 @@ export default function Navbar() {
 
       if (masterEvents.length === 0) return null;
 
-      // Find the most recent event in this master group
       const latestEvent = masterEvents.reduce((latest, current) =>
         (current.start_time || 0) > (latest.start_time || 0) ? current : latest
       );
@@ -65,11 +79,10 @@ export default function Navbar() {
         masterSlug,
         year,
         latestEvent,
-        latestStartTime: latestEvent.start_time || 0, // for sorting
+        latestStartTime: latestEvent.start_time || 0,
       };
     })
     .filter(Boolean)
-    // Sort by most recent year/event descending
     .sort((a, b) => b.latestStartTime - a.latestStartTime);
 
   const filteredMasters = searchTerm
@@ -96,7 +109,7 @@ export default function Navbar() {
     toggleDropdown();
   };
 
-  // Clear search + selection when clicking "Results" or Logo
+  // Clear everything immediately
   const clearSearchAndSelection = () => {
     setSelectedEvent(null);
     setSearchTerm('');
@@ -105,35 +118,32 @@ export default function Navbar() {
   };
 
   const handleResultsClick = (e) => {
-    if (location.pathname.startsWith('/results')) {
-      e.preventDefault();
-    }
+    e.preventDefault(); // Prevent navigation flicker
     clearSearchAndSelection();
     navigate('/results');
   };
 
-  const handleLogoClick = () => {
+  const handleLogoClick = (e) => {
+    e.preventDefault();
     clearSearchAndSelection();
     navigate('/');
   };
 
   return (
     <>
-      {/* Navbar */}
-      <nav className="fixed top-0 w-full bg-white shadow-md z-50">
+      <nav ref={navbarRef} className="fixed top-0 w-full bg-white shadow-md z-50">
         <div className="px-4 py-3 flex items-center justify-between">
           <button onClick={handleLogoClick}>
             <img src="/Gemini-Logo-Black.png" alt="Gemini Timing" className="h-9" />
           </button>
-          {/* Desktop Links */}
+
           <div className="hidden md:flex items-center space-x-8">
-            <Link
-              to="/results"
+            <button
               onClick={handleResultsClick}
               className="text-gray-700 hover:text-gemini-blue font-medium"
             >
               Results
-            </Link>
+            </button>
             <a
               href="https://youkeepmoving.com"
               target="_blank"
@@ -143,7 +153,7 @@ export default function Navbar() {
               Sign up for More Races
             </a>
           </div>
-          {/* Mobile Menu Button */}
+
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="md:hidden text-3xl text-gray-700 focus:outline-none"
@@ -175,7 +185,7 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Dropdown Results List */}
+        {/* Dropdown */}
         {isListOpen && (
           <div className="absolute left-0 right-0 top-full bg-white border-t border-gray-200 shadow-xl max-h-96 overflow-y-auto z-40">
             {loading ? (
@@ -223,13 +233,12 @@ export default function Navbar() {
                   <button onClick={() => setIsMobileMenuOpen(false)} className="text-3xl text-gray-700">✕</button>
                 </div>
                 <div className="space-y-6">
-                  <Link
-                    to="/results"
+                  <button
                     onClick={handleResultsClick}
-                    className="block text-lg font-medium text-gray-700 hover:text-gemini-blue"
+                    className="block text-lg font-medium text-gray-700 hover:text-gemini-blue w-full text-left"
                   >
                     {selectedEvent ? '← All Results' : 'Results'}
-                  </Link>
+                  </button>
                   <a
                     href="https://youkeepmoving.com"
                     target="_blank"
