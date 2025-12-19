@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL COMPLETE — Auto-save on Publish & Master Changes + Supabase-first Load)
+// src/pages/AdminPage.jsx (FINAL COMPLETE — Auto-save + Fixed Participant Count with adminSupabase)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -50,7 +50,7 @@ export default function AdminPage() {
         .from('app_config')
         .upsert({ key, value }, { onConflict: 'key' });
       if (error) throw error;
-      setSaveStatus(`${key === 'masterGroups' ? 'Master links' : 'Results'} saved automatically`);
+      setSaveStatus(`${key === 'masterGroups' ? 'Master links' : 'Config'} saved automatically`);
       setTimeout(() => setSaveStatus(''), 4000);
     } catch (err) {
       console.error(`Auto-save failed for ${key}:`, err);
@@ -100,11 +100,17 @@ export default function AdminPage() {
 
         const counts = {};
         for (const event of cachedEvents || []) {
-          const { count } = await supabase
+          const { count: adminCount, error: countError } = await adminSupabase
             .from('chronotrack_results')
             .select('id', { count: 'exact', head: true })
             .eq('event_id', event.id);
-          counts[event.id] = count || 0;
+
+          if (countError) {
+            console.error('[Admin] Count error for event', event.id, countError);
+            counts[event.id] = 0;
+          } else {
+            counts[event.id] = adminCount || 0;
+          }
         }
         setParticipantCounts(counts);
       } catch (err) {
@@ -163,19 +169,17 @@ export default function AdminPage() {
   const assignToMaster = async (eventId, masterKey) => {
     if (!masterKey) return;
     const updated = { ...masterGroups };
-    // Remove from old masters
     Object.keys(updated).forEach(key => {
       updated[key] = updated[key].filter(id => id !== eventId.toString());
       if (updated[key].length === 0) delete updated[key];
     });
-    // Add to new
     if (!updated[masterKey]) updated[masterKey] = [];
     if (!updated[masterKey].includes(eventId.toString())) {
       updated[masterKey].push(eventId.toString());
     }
     setMasterGroups(updated);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
-    await autoSaveConfig('masterGroups', updated); // AUTO-SAVE
+    await autoSaveConfig('masterGroups', updated);
   };
 
   const unlinkFromMaster = async (eventId) => {
@@ -191,7 +195,7 @@ export default function AdminPage() {
     });
     if (changed) {
       setMasterGroups(updated);
-      await autoSaveConfig('masterGroups', updated); // AUTO-SAVE
+      await autoSaveConfig('masterGroups', updated);
     }
   };
 
@@ -276,7 +280,6 @@ export default function AdminPage() {
       if (error) throw error;
 
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
-      await autoSaveConfig('masterGroups', masterGroups); // Ensure config is current
       setSaveStatus(`Published ${deduped.length} results — saved automatically!`);
       setTimeout(() => setSaveStatus(''), 5000);
     } catch (err) {
