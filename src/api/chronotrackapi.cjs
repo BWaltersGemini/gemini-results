@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs (FINAL — Reliable for all races, multi-race events, max: 50000 + relaxed gender filter)
+// src/api/chronotrackapi.cjs (FINAL — Fixed bracket list pagination with size=500 + all previous fixes)
 import axios from 'axios';
 
 // Direct ChronoTrack API — no proxy needed for events
@@ -127,26 +127,28 @@ export const fetchResultsForEvent = async (eventId) => {
     console.warn('[ChronoTrack] Failed to fetch races for event', eventId, err);
   }
 
-  // Fetch all brackets
+  // Fetch ALL brackets — now with size=500 to avoid default 50 limit
   let allBrackets = [];
   try {
     const bracketsResponse = await axios.get(`${PROXY_BASE}/api/event/${eventId}/bracket`, {
       headers: { Authorization: authHeader },
-      params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+      params: {
+        client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
+        size: 500,  // ← Critical: prevents default 50-item limit on bracket list
+      },
     });
     allBrackets = bracketsResponse.data.event_bracket || [];
-    console.log(`[ChronoTrack] Found ${allBrackets.length} total brackets`);
+    console.log(`[ChronoTrack] Found ${allBrackets.length} total brackets (with size=500)`);
   } catch (err) {
     console.error('[ChronoTrack] Failed to fetch brackets for event', eventId, err);
     throw err;
   }
 
-  // Filter brackets (reliable like old working version)
+  // Reliable bracket filtering (like old working version)
   const divisionBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' && ['AGE', 'OTHER'].includes(b.bracket_type)
   );
 
-  // Relaxed gender bracket detection — matches old working version exactly
   const genderBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' &&
     b.bracket_type === 'SEX' &&
@@ -162,7 +164,7 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Processing ${divisionBrackets.length} division brackets`);
   console.log(`[ChronoTrack] Processing ${overallBrackets.length} overall brackets`);
 
-  // Fetch main results first (with pagination)
+  // Fetch main results
   let allResults = [];
   let page = 1;
   const maxPages = 40;
@@ -201,7 +203,7 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // === GENDER PLACES (using max: 50000 like old version) ===
+  // GENDER PLACES
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
@@ -234,7 +236,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // === DIVISION PLACES (AGE + OTHER) ===
+  // DIVISION PLACES
   for (const bracket of divisionBrackets) {
     const name = (bracket.bracket_name || '').trim();
     if (!name) continue;
@@ -274,7 +276,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // === FALLBACK: Overall as division ===
+  // FALLBACK: Overall as division
   for (const bracket of overallBrackets) {
     const name = (bracket.bracket_name || '').trim();
     const raceId = bracket.race_id || 'unknown';
@@ -306,7 +308,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   }
 
-  // === Final Mapping ===
+  // Final Mapping
   const mappedResults = allResults.map(r => {
     const lookupKey = getLookupKey(r);
     const divInfo = lookupKey ? divisionPlaces[lookupKey] : null;
