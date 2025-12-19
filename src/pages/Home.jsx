@@ -1,4 +1,4 @@
-// src/pages/Home.jsx (FINAL — Fixed for new schema: uses start_time only)
+// src/pages/Home.jsx (UPDATED — Fixed Athletes & Events Timed stats)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -6,12 +6,15 @@ import { Link, useNavigate } from 'react-router-dom';
 export default function Home() {
   const {
     events = [],
+    results = [], // ← Now used to calculate totals
     loading,
-    totalAthletesTimed = 0,
-    totalRacesTimed = 0
   } = useContext(RaceContext);
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+
+  // === Calculate Totals ===
+  const totalAthletesTimed = results.length;
+  const totalRacesTimed = events.length;
 
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
   const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
@@ -73,15 +76,12 @@ export default function Home() {
       const displayName = editedEvents[storedKey]?.name || storedKey;
       const eventIds = masterGroups[storedKey] || [];
       const masterEvents = events.filter(e => eventIds.includes(e.id.toString()));
-
       if (masterEvents.length === 0) return null;
-
       // Sort by start_time (newest first)
       const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
       const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
       const masterSlug = slugify(storedKey);
       const year = getYearFromEvent(latestEvent);
-
       return {
         storedKey,
         displayName,
@@ -125,7 +125,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Experience Stats */}
+      {/* Experience Stats — NOW WORKING */}
       <section className="py-16 md:py-24 bg-gemini-light-gray">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gemini-dark-gray mb-12">
@@ -160,7 +160,6 @@ export default function Home() {
           </h2>
           <div className="w-24 h-1 bg-gemini-blue mx-auto"></div>
         </div>
-
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-gemini-blue"></div>
@@ -198,7 +197,6 @@ export default function Home() {
             ))}
           </div>
         )}
-
         <div className="text-center mt-16">
           <Link
             to="/results"
