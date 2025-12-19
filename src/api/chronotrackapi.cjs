@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs
+// src/api/chronotrackapi.cjs (FINAL — Updated with max: 50000 for reliable bracket fetching)
 import axios from 'axios';
 
 // Direct ChronoTrack API — no proxy needed for events
@@ -212,8 +212,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 500,
-          page: 1,
+          max: 50000,  // ← Critical: gets ALL participants in bracket, no pagination issues
         },
       });
       bracketResults = res.data.bracket_results || [];
@@ -252,8 +251,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 500,
-          page: 1,
+          max: 50000,  // ← Critical: gets ALL participants in bracket
         },
       });
       bracketResults = res.data.bracket_results || [];
@@ -285,8 +283,7 @@ export const fetchResultsForEvent = async (eventId) => {
         headers: { Authorization: authHeader },
         params: {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-          size: 500,
-          page: 1,
+          max: 50000,  // ← Also use max here for completeness
         },
       });
       bracketResults = res.data.bracket_results || [];
