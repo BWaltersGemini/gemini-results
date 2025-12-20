@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Full sync with delete+insert, UI updates on admin refresh, background only during race window)
+// src/context/RaceContext.jsx (FINAL — Full sync with delete+insert, UI always updated on admin refresh)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -157,7 +157,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Results loading + full sync during race window (delete + insert) + UI update on admin refresh
+  // Results loading + full sync during race window + UI update on admin refresh
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -259,8 +259,7 @@ export function RaceProvider({ children }) {
               console.log('[RaceContext] No results from ChronoTrack — table cleared');
             }
 
-            // === ALWAYS update UI state when admin forces refresh ===
-            // Also update on initial load
+            // === ALWAYS update UI state when admin forces refresh OR on initial load ===
             if (updateUI || resultsVersion > 0) {
               allResults = deduped;
               const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
@@ -293,6 +292,9 @@ export function RaceProvider({ children }) {
           const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
           if (!aborted) {
             setUniqueDivisions(divisions);
+          }
+          if (updateUI) {
+            setResults(cachedResults);
           }
           console.log(`[RaceContext] Using cached results (${cachedResults.length}) for historical event`);
         }
