@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Fixed fresh fetch on admin publish for past events)
+// src/context/RaceContext.jsx (WORKING BASE + Smart UPSERT + Conditional last_updated)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -20,7 +20,7 @@ export function RaceProvider({ children }) {
   // Trigger for forcing fresh results fetch (used by AdminPage)
   const [resultsVersion, setResultsVersion] = useState(0);
 
-  // Global config — loaded fresh from Supabase
+  // Global config
   const [masterGroups, setMasterGroups] = useState({});
   const [editedEvents, setEditedEvents] = useState({});
   const [eventLogos, setEventLogos] = useState({});
@@ -29,7 +29,7 @@ export function RaceProvider({ children }) {
   const [ads, setAds] = useState([]);
   const [hiddenRaces, setHiddenRaces] = useState({});
 
-  // Load global config fresh from Supabase on mount
+  // Load global config
   useEffect(() => {
     const loadConfig = async () => {
       const config = await loadAppConfig();
@@ -45,7 +45,7 @@ export function RaceProvider({ children }) {
     loadConfig();
   }, []);
 
-  // Persist only selectedEventId in localStorage (user preference)
+  // localStorage persistence
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const savedEventId = localStorage.getItem('selectedEventId');
@@ -68,7 +68,7 @@ export function RaceProvider({ children }) {
     }
   }, [selectedEvent]);
 
-  // Load ALL events from ChronoTrack
+  // Load events
   useEffect(() => {
     const loadEvents = async () => {
       try {
@@ -87,7 +87,7 @@ export function RaceProvider({ children }) {
     loadEvents();
   }, []);
 
-  // === ROBUST RACE LOADING WITH FALLBACK ===
+  // Race loading (unchanged — working perfectly)
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
@@ -127,7 +127,6 @@ export function RaceProvider({ children }) {
           ...prev,
           races: fullRaces,
         }));
-        // Sync to Supabase for future loads
         try {
           await supabase
             .from('chronotrack_events')
@@ -151,7 +150,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results — now forces fresh fetch when resultsVersion changes (admin publish)
+  // Results loading — NOW WITH SMART UPSERT + conditional last_updated
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -169,7 +168,7 @@ export function RaceProvider({ children }) {
         setError(null);
         let allResults = [];
 
-        // === 1. LOAD ALL CACHED RESULTS WITH PAGINATION ===
+        // Load cached results first
         let cachedResults = [];
         let start = 0;
         const pageSize = 1000;
@@ -180,32 +179,29 @@ export function RaceProvider({ children }) {
             .eq('event_id', selectedEvent.id)
             .order('place', { ascending: true })
             .range(start, start + pageSize - 1);
-          if (error) {
-            console.error('[RaceContext] Cache pagination error:', error);
-            break;
-          }
-          if (!data || data.length === 0) break;
+          if (error || !data || data.length === 0) break;
           cachedResults = [...cachedResults, ...data];
           start += data.length;
           if (data.length < pageSize) break;
         }
 
-        // === 2. Determine if race day ===
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        // Check if today is race day
+        const todayStr = new Date().toISOString().split('T')[0];
         const eventDateStr = selectedEvent.start_time
           ? new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0]
           : null;
         const isRaceDay = eventDateStr === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        // === 3. Fetch fresh if: race day, no cache, OR admin forced refresh (resultsVersion changed) ===
+        // Fetch fresh if: race day, no cache, or admin forced
         const shouldFetchFresh = isRaceDay || cachedResults.length === 0 || resultsVersion > 0;
 
         if (shouldFetchFresh) {
-          console.log('[RaceContext] Fetching fresh results from ChronoTrack (forced or race day)...');
+          console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
+
           if (!aborted && fresh.length > 0) {
+            // Dedupe
             const seen = new Map();
             fresh.forEach(r => {
               const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
@@ -214,6 +210,7 @@ export function RaceProvider({ children }) {
             const deduped = Array.from(seen.values());
             console.log(`[RaceContext] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
+            // SMART UPSERT
             const toUpsert = deduped.map(r => ({
               event_id: selectedEvent.id,
               race_id: r.race_id || null,
@@ -237,25 +234,37 @@ export function RaceProvider({ children }) {
               race_name: r.race_name ?? null,
             }));
 
-            const { error: upsertError } = await supabase
+            const { error: upsertError, count } = await supabase
               .from('chronotrack_results')
               .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
 
             if (upsertError) {
               console.error('[RaceContext] Upsert error:', upsertError);
             } else {
-              console.log('[RaceContext] Fresh results upserted');
-              if (!aborted) {
-                allResults = deduped;
-                const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
-                setUniqueDivisions(divisions);
+              console.log(`[RaceContext] Smart upsert complete: ${count || 0} rows affected`);
+
+              // Only bump last_updated if real changes happened
+              if (count && count > 0) {
+                const { error: tsError } = await supabase
+                  .from('chronotrack_events')
+                  .update({ last_updated: new Date().toISOString() })
+                  .eq('id', selectedEvent.id);
+
+                if (tsError) {
+                  console.error('[RaceContext] Failed to update last_updated:', tsError);
+                } else {
+                  console.log('[RaceContext] last_updated bumped due to real changes');
+                }
               }
+              allResults = deduped;
+              const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
+              if (!aborted) setUniqueDivisions(divisions);
             }
           }
         } else {
           allResults = cachedResults;
           const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
-          setUniqueDivisions(divisions);
+          if (!aborted) setUniqueDivisions(divisions);
           console.log(`[RaceContext] Using cached results (${cachedResults.length})`);
         }
 
@@ -286,9 +295,8 @@ export function RaceProvider({ children }) {
       aborted = true;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [selectedEvent, resultsVersion]); // ← Reacts to admin-triggered refresh
+  }, [selectedEvent, resultsVersion]);
 
-  // Function exposed to AdminPage to force refresh
   const refreshResults = () => {
     console.log('[RaceContext] Admin triggered forced refresh');
     setResultsVersion(prev => prev + 1);
@@ -314,7 +322,7 @@ export function RaceProvider({ children }) {
         showAdsPerMaster,
         ads,
         hiddenRaces,
-        refreshResults, // ← Used by AdminPage
+        refreshResults,
       }}
     >
       {children}
