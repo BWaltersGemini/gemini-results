@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Background updates on race day only, no UI disruption)
+// src/context/RaceContext.jsx (FINAL — Background updates ONLY during actual race window using event_start_time & event_end_time)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -45,7 +45,7 @@ export function RaceProvider({ children }) {
     loadConfig();
   }, []);
 
-  // Persist selected event in localStorage
+  // LocalStorage persistence for selected event
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const savedEventId = localStorage.getItem('selectedEventId');
@@ -131,7 +131,7 @@ export function RaceProvider({ children }) {
           races: fullRaces,
         }));
 
-        // Sync to Supabase
+        // Sync to Supabase for future loads
         try {
           await supabase
             .from('chronotrack_events')
@@ -157,7 +157,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Results loading + background updates on race day
+  // Results loading + background updates ONLY during race window
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -167,6 +167,7 @@ export function RaceProvider({ children }) {
     }
 
     let aborted = false;
+    let backgroundInterval = null;
 
     const loadResults = async (updateUI = true) => {
       if (aborted) return;
@@ -179,7 +180,7 @@ export function RaceProvider({ children }) {
 
         let allResults = [];
 
-        // Load cached results (paginated)
+        // Load cached results from Supabase
         let cachedResults = [];
         let start = 0;
         const pageSize = 1000;
@@ -202,19 +203,20 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // Determine if it's race day
-        const todayStr = new Date().toISOString().split('T')[0];
-        const eventDateStr = selectedEvent.start_time
-          ? new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0]
-          : null;
-        const isRaceDay = eventDateStr === todayStr;
-        if (!aborted) setIsLiveRace(isRaceDay);
+        // Determine if currently within the actual race window
+        const now = Math.floor(Date.now() / 1000); // Current time in Unix seconds
+        const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
+        const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
 
-        // Fetch fresh if race day, no cache, or admin forced
-        const shouldFetchFresh = isRaceDay || cachedResults.length === 0 || resultsVersion > 0;
+        const isActiveRaceWindow = startTime && endTime && now >= startTime && now <= endTime;
+
+        if (!aborted) setIsLiveRace(isActiveRaceWindow);
+
+        // Fetch fresh if: active race window, no cache, or admin forced
+        const shouldFetchFresh = isActiveRaceWindow || cachedResults.length === 0 || resultsVersion > 0;
 
         if (shouldFetchFresh) {
-          console.log('[RaceContext] Fetching fresh results from ChronoTrack (background update)');
+          console.log('[RaceContext] Fetching fresh results from ChronoTrack (active race window)');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
@@ -224,7 +226,6 @@ export function RaceProvider({ children }) {
               if (!seen.has(key)) seen.set(key, r);
             });
             const deduped = Array.from(seen.values());
-            console.log(`[RaceContext] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
             const toUpsert = deduped.map(r => ({
               event_id: selectedEvent.id,
@@ -257,7 +258,7 @@ export function RaceProvider({ children }) {
               console.error('[RaceContext] Upsert error:', upsertError);
             } else {
               console.log('[RaceContext] Background update complete — Supabase refreshed');
-              // Only update UI state on initial load or admin force
+              // Only update UI on initial load or admin force
               if (updateUI || resultsVersion > 0) {
                 allResults = deduped;
                 const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
@@ -269,7 +270,6 @@ export function RaceProvider({ children }) {
           allResults = cachedResults;
           const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
           if (!aborted) setUniqueDivisions(divisions);
-          console.log(`[RaceContext] Using cached results (${cachedResults.length})`);
         }
 
         if (updateUI && !aborted) setResults(allResults);
@@ -283,32 +283,30 @@ export function RaceProvider({ children }) {
       }
     };
 
-    // Initial visible load (updates UI)
+    // Initial load — updates UI
     loadResults(true);
 
-    // Background updates ONLY on race day
-    if (selectedEvent.start_time) {
-      const eventDateStr = new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0];
-      const todayStr = new Date().toISOString().split('T')[0];
+    // Background updates ONLY during the actual race window (using event_start_time & event_end_time)
+    const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
+    const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
 
-      if (eventDateStr === todayStr) {
-        const backgroundInterval = setInterval(() => {
-          loadResults(false); // false = background only, no UI state change
-          console.log('[RaceContext] Background refresh triggered (race day)');
-        }, 60000); // Every 60 seconds
+    if (startTime && endTime) {
+      const now = Math.floor(Date.now() / 1000);
+      if (now >= startTime && now <= endTime) {
+        backgroundInterval = setInterval(() => {
+          loadResults(false); // Background only — no UI update
+          console.log('[RaceContext] Background refresh during race window');
+        }, 30000); // Every 30 seconds while race is active
 
-        console.log('[RaceContext] Background updates started (every 60s on race day)');
-
-        return () => {
-          clearInterval(backgroundInterval);
-          aborted = true;
-          console.log('[RaceContext] Background updates stopped');
-        };
+        console.log('[RaceContext] Race window active — aggressive background updates started (every 30s)');
       }
     }
 
+    // Cleanup
     return () => {
       aborted = true;
+      if (backgroundInterval) clearInterval(backgroundInterval);
+      console.log('[RaceContext] Cleanup: background updates stopped');
     };
   }, [selectedEvent, resultsVersion]);
 
