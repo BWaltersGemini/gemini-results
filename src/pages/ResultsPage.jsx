@@ -1,9 +1,9 @@
-// src/pages/ResultsPage.jsx (FULL FIXED VERSION — race_id type coercion + robust rendering)
+// src/pages/ResultsPage.jsx (FINAL — All fixes applied: Division filter + auto-scroll + working Back to Top)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { supabase } from '../supabaseClient';
+import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -22,93 +22,29 @@ export default function ResultsPage() {
     masterGroups = {},
     editedEvents = {},
     hiddenMasters = [],
-    isLiveRace,
-    refreshResults,
   } = useContext(RaceContext);
 
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
-
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const [showFiltersForRace, setShowFiltersForRace] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-
   const prevMasterKeyRef = useRef(masterKey);
 
   // Division filter & highlight from ParticipantPage
   const divisionFilterFromState = location.state?.divisionFilter;
   const highlightBibFromState = location.state?.highlightBib;
+
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
   // Refs for scrolling
   const raceRefs = useRef({});
   const highlightedRowRef = useRef(null);
-  const targetRaceIdRef = useRef(null);
+  const targetRaceIdRef = useRef(null); // Store which race to scroll to
 
-  // Live update detection
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [newResultsAvailable, setNewResultsAvailable] = useState(false);
-  const prevResultsLength = useRef(results.length);
-  const userHasScrolled = useRef(false);
-
-  // Track scroll position for new results banner
-  useEffect(() => {
-    const handleScroll = () => {
-      userHasScrolled.current = window.scrollY > 400;
-    };
-    window.addEventListener('scroll', handleScroll);
-    handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Detect new finishers for banner
-  useEffect(() => {
-    if (results.length > prevResultsLength.current && prevResultsLength.current > 0) {
-      setNewResultsAvailable(true);
-      if (!userHasScrolled.current) {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        setTimeout(() => setNewResultsAvailable(false), 4000);
-      }
-    }
-    prevResultsLength.current = results.length;
-  }, [results.length]);
-
-  // === LIVE POLLING: Check last_updated only during live races ===
-  useEffect(() => {
-    if (!selectedEvent || !isLiveRace) {
-      setLastUpdated(null);
-      setIsRefreshing(false);
-      return;
-    }
-    let pollInterval = null;
-    const checkForUpdates = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('chronotrack_events')
-          .select('last_updated')
-          .eq('id', selectedEvent.id)
-          .single();
-        if (error) return;
-        const newTimestamp = data?.last_updated;
-        if (lastUpdated && newTimestamp && newTimestamp > lastUpdated) {
-          setIsRefreshing(true);
-          refreshResults();
-        }
-        setLastUpdated(newTimestamp);
-      } catch (err) {
-        console.error('[ResultsPage] Poll failed:', err);
-      }
-    };
-    checkForUpdates();
-    pollInterval = setInterval(checkForUpdates, 45000);
-    return () => clearInterval(pollInterval);
-  }, [selectedEvent, isLiveRace, lastUpdated, refreshResults]);
-
-  // Reset filters on master change
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
@@ -118,7 +54,6 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // Helper functions
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -157,28 +92,24 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection from URL
+  // Event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
-
     const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
-
     if (!storedMasterKey) return;
-
     const groupEventIds = masterGroups[storedMasterKey] || [];
     const yearEvents = events
       .filter((e) => groupEventIds.includes(e.id.toString()) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Scroll to highlighted participant
+  // Find which race contains the highlighted participant
   useEffect(() => {
     if (!highlightedBib || !results.length) return;
     const participant = results.find(r => String(r.bib) === String(highlightedBib));
@@ -187,8 +118,10 @@ export default function ResultsPage() {
     }
   }, [highlightedBib, results]);
 
+  // Auto-scroll: first to race section, then to highlighted row
   useEffect(() => {
     if (!highlightedBib || !targetRaceIdRef.current) return;
+
     const scrollToRaceAndRow = () => {
       const raceEl = raceRefs.current[targetRaceIdRef.current];
       if (raceEl) {
@@ -200,11 +133,11 @@ export default function ResultsPage() {
         }, 600);
       }
     };
+
     const timer = setTimeout(scrollToRaceAndRow, 300);
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
 
-  // Year navigation
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -227,7 +160,6 @@ export default function ResultsPage() {
     let targetEvent = selectedEvent;
     let eventMaster = masterKey;
     let eventYear = year;
-
     if (!targetEvent || !eventMaster || !eventYear) {
       const participantEventId = participant.event_id || selectedEvent?.id;
       targetEvent = events.find((e) => e.id === participantEventId);
@@ -236,19 +168,16 @@ export default function ResultsPage() {
       eventYear = getYearFromEvent(targetEvent);
       setSelectedEvent(targetEvent);
     }
-
-    const participantRace = selectedEvent.races?.find((r) => String(r.race_id) === String(participant.race_id));
+    const participantRace = selectedEvent.races?.find((r) => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const masterSlug = slugify(eventMaster);
     const raceSlugPart = slugify(raceName);
-
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
       replace: true,
     });
   };
 
-  // Search and filtering
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -266,22 +195,14 @@ export default function ResultsPage() {
     }
   }, [searchQuery, firstMatchingRaceId]);
 
-  // === CRITICAL FIX: Coerce race_id to string for comparison ===
   const embeddedRaces = selectedEvent?.races || [];
-
   const racesWithFinishers = embeddedRaces.filter((race) =>
-    globalFilteredResults.some((r) =>
-      String(r.race_id) === String(race.race_id) &&
-      r.chip_time && r.chip_time.trim() !== ''
-    )
+    globalFilteredResults.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
   );
 
   let displayedRaces = racesWithFinishers;
-
   if (raceSlug) {
-    displayedRaces = embeddedRaces.filter((race) =>
-      slugify(race.race_name) === raceSlug
-    );
+    displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
   }
 
   const currentMasterKey = Object.keys(masterGroups).find(key =>
@@ -291,15 +212,13 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
+  // Helper to scroll to top of the main container
   const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    if (isRefreshing && !loadingResults) {
-      setIsRefreshing(false);
+    const mainElement = document.querySelector('main');
+    if (mainElement) {
+      mainElement.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [loadingResults, isRefreshing]);
+  };
 
   // MASTER LANDING PAGE
   if (!selectedEvent) {
@@ -355,7 +274,6 @@ export default function ResultsPage() {
           ) : (
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
-          {/* Upcoming Events Section */}
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
@@ -371,7 +289,11 @@ export default function ResultsPage() {
                     className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
                   >
                     {event.image?.url ? (
-                      <img src={event.image.url} alt={event.title.rendered || event.title} className="w-full h-60 object-cover" />
+                      <img
+                        src={event.image.url}
+                        alt={event.title.rendered || event.title}
+                        className="w-full h-60 object-cover"
+                      />
                     ) : (
                       <div className="h-60 bg-gray-200 flex items-center justify-center">
                         <span className="text-gray-500 font-medium">No Image</span>
@@ -398,7 +320,6 @@ export default function ResultsPage() {
     );
   }
 
-  // EVENT RESULTS PAGE
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-32 relative">
       <div className="max-w-7xl mx-auto px-6">
@@ -419,7 +340,7 @@ export default function ResultsPage() {
               {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
             </h1>
             <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
-            {availableYears.length > 1 && (
+            {availableYears.length > 0 && (
               <div className="flex flex-wrap justify-center gap-3 mb-12">
                 <span className="text-xl font-bold text-gray-700 self-center mr-4">Year:</span>
                 {availableYears.map((y) => (
@@ -459,7 +380,6 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Search Bar */}
         <div className={`w-full max-w-2xl mx-auto mb-12 transition-all duration-500 ${searchQuery ? 'fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white shadow-2xl rounded-full px-6 py-4 max-w-full w-11/12' : ''}`}>
           <div className="relative">
             <input
@@ -485,19 +405,10 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Live Refresh Indicator */}
-        {isLiveRace && isRefreshing && (
-          <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 bg-gemini-blue text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-3 text-lg font-bold animate-pulse">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            Updating live results...
-          </div>
-        )}
-
-        {/* Race Cards */}
         {!searchQuery && displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
-              const raceResults = globalFilteredResults.filter((r) => String(r.race_id) === String(race.race_id));
+              const raceResults = globalFilteredResults.filter((r) => r.race_id === race.race_id);
               const finishers = raceResults.filter((r) => r.chip_time && r.chip_time.trim() !== '').length;
               return (
                 <button
@@ -522,7 +433,6 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Loading / No Results */}
         {loadingResults ? (
           <div className="text-center py-32">
             <div className="inline-block animate-spin rounded-full h-20 w-20 border-t-4 border-gemini-blue"></div>
@@ -535,13 +445,12 @@ export default function ResultsPage() {
           </div>
         ) : (
           <>
-            {/* Results Tables */}
             {displayedRaces.map((race) => {
               const raceId = race.race_id;
               const filters = raceFilters[raceId] || { search: '', gender: '', division: '' };
               const showFilters = showFiltersForRace[raceId] || false;
 
-              const raceResults = globalFilteredResults.filter((r) => String(r.race_id) === String(raceId));
+              const raceResults = globalFilteredResults.filter((r) => r.race_id === raceId);
 
               const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
@@ -551,6 +460,7 @@ export default function ResultsPage() {
                 const matchesGender = !filters.gender || r.gender === filters.gender;
                 const matchesDivision = !filters.division || r.age_group_name === filters.division;
                 const matchesGlobalDivision = !activeDivisionFilter || r.age_group_name === activeDivisionFilter;
+
                 return matchesSearch && matchesGender && matchesDivision && matchesGlobalDivision;
               });
 
@@ -707,7 +617,6 @@ export default function ResultsPage() {
               );
             })}
 
-            {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20">
                 <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">Our Sponsors</h3>
@@ -727,30 +636,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* New Results Banner */}
-      {newResultsAvailable && !userHasScrolled.current && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl animate-pulse text-xl font-bold flex items-center gap-3">
-          <span className="text-2xl">✨</span>
-          New finishers just arrived!
-          <span className="text-2xl">✨</span>
-        </div>
-      )}
-
-      {/* Floating button when scrolled */}
-      {newResultsAvailable && userHasScrolled.current && (
-        <button
-          onClick={() => {
-            scrollToTop();
-            setNewResultsAvailable(false);
-          }}
-          className="fixed bottom-40 right-8 bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 text-lg font-bold hover:bg-green-700 hover:scale-105 transition-all z-50 animate-pulse"
-        >
-          <span>↑</span>
-          New Finishers!
-        </button>
-      )}
-
-      {/* Back to Top */}
+      {/* Floating Back to Top — Now correctly scrolls the <main> container */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
