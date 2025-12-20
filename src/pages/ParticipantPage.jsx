@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Mobile-First Reveal + Browser Back Button Fixed + Master Logo)
+// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Card: Updated Footer Text + Extra Space)
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
@@ -64,60 +64,6 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // === BUILD CORRECT BACK URL FOR THIS PARTICIPANT'S RACE ===
-  const getBackToResultsUrl = () => {
-    if (!selectedEvent) return '/results';
-
-    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
-    let masterSlug = 'overall';
-
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
-      ids.includes(selectedEvent.id.toString())
-    );
-
-    if (foundMaster) {
-      masterSlug = slugify(foundMaster[0]);
-    }
-
-    const eventYear = getYearFromEvent(selectedEvent);
-    return `/results/${masterSlug}/${eventYear}`;
-  };
-
-  // === REPLACE BROWSER HISTORY SO BACK BUTTON WORKS CORRECTLY ===
-  useEffect(() => {
-    if (!loading && participant && selectedEvent) {
-      const backUrl = getBackToResultsUrl();
-
-      // Only replace if we're not already coming from the correct results page
-      if (location.state?.fromResults !== backUrl) {
-        window.history.replaceState(
-          { ...window.history.state, fromParticipant: true },
-          '',
-          location.pathname + location.search
-        );
-
-        // Push the correct results page onto history so "back" goes there
-        window.history.pushState(
-          { fromParticipant: true, backTo: backUrl },
-          '',
-          backUrl
-        );
-      }
-    }
-  }, [loading, participant, selectedEvent, location]);
-
-  // Listen for browser back/forward to navigate properly
-  useEffect(() => {
-    const handlePopState = (event) => {
-      if (event.state?.fromParticipant) {
-        navigate(event.state.backTo || '/results', { replace: true });
-      }
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [navigate]);
-
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) return;
@@ -173,9 +119,9 @@ export default function ParticipantPage() {
   const handleTimeComplete = () => {
     setTimeRevealed(true);
     confetti({
-      particleCount: 200,
-      spread: 80,
-      origin: { y: 0.65 },
+      particleCount: 150,
+      spread: 70,
+      origin: { y: 0.6 },
       colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'],
     });
   };
@@ -237,7 +183,22 @@ export default function ParticipantPage() {
   };
 
   const goBackToResults = () => {
-    navigate(getBackToResultsUrl());
+    if (!selectedEvent) {
+      navigate('/results');
+      return;
+    }
+
+    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
+    if (foundMaster) {
+      masterSlug = slugify(foundMaster[0]);
+    }
+
+    const eventYear = getYearFromEvent(selectedEvent);
+    navigate(`/results/${masterSlug}/${eventYear}`);
   };
 
   const handleDivisionClick = () => {
@@ -311,7 +272,7 @@ export default function ParticipantPage() {
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
 
         {/* Header */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
           {eventLogos[selectedEvent.id] ? (
             <img
               src={eventLogos[selectedEvent.id]}
@@ -331,102 +292,95 @@ export default function ParticipantPage() {
         </div>
 
         {/* Participant Name */}
-        <h3 className="text-5xl md:text-6xl font-extrabold mb-12 text-center text-gemini-blue drop-shadow-md leading-tight">
+        <h3 className="text-5xl font-extrabold mb-8 text-center text-gemini-blue drop-shadow-md">
           {participant.first_name} {participant.last_name}
         </h3>
 
-        {/* CHIP TIME REVEAL — Above the fold on mobile */}
-        <div className="text-center my-16">
-          <p className="text-2xl md:text-3xl uppercase text-gray-500 tracking-widest mb-6">Your Finish Time</p>
-          <div className="text-7xl md:text-9xl font-black text-gemini-blue leading-none">
-            {timeRevealed ? (
-              formatChronoTime(participant.chip_time)
-            ) : (
-              <CountUp
-                start={0}
-                end={chipTimeSeconds}
-                duration={3.8}
-                formattingFn={(value) => {
-                  const hours = Math.floor(value / 3600);
-                  const mins = Math.floor((value % 3600) / 60);
-                  const secs = Math.floor(value % 60);
-                  const tenths = Math.round((value % 1) * 10);
-                  return `${hours ? hours + ':' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}${tenths ? '.' + tenths : ''}`;
-                }}
-                onEnd={handleTimeComplete}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Key Placements */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 my-16 max-w-4xl mx-auto">
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl p-8 text-center shadow-lg">
-            <p className="text-lg uppercase text-gray-500 mb-4">Overall Place</p>
-            <p className="text-5xl font-black text-gemini-dark-gray">
-              {participant.place || '—'}
-            </p>
-            <p className="text-xl text-gray-600 mt-2">of {overallTotal}</p>
-          </div>
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl p-8 text-center shadow-lg">
-            <p className="text-lg uppercase text-gray-500 mb-4">Gender Place</p>
-            <p className="text-5xl font-black text-gemini-dark-gray">
-              {participant.gender_place || '—'}
-            </p>
-            <p className="text-xl text-gray-600 mt-2">of {genderTotal}</p>
-          </div>
-          <div className="bg-gradient-to-br from-[#80ccd6]/10 to-[#80ccd6]/5 rounded-3xl p-8 text-center shadow-lg">
-            <p className="text-lg uppercase text-gray-500 mb-4">Division</p>
-            <button
-              onClick={handleDivisionClick}
-              className="text-4xl font-black text-[#80ccd6] hover:underline cursor-pointer"
-            >
-              {participant.age_group_name || '—'}
-            </button>
-            <p className="text-xl text-gray-600 mt-2">
-              {participant.age_group_place || '—'} of {divisionTotal}
-            </p>
-            <p className="text-sm text-gray-500 mt-4">Tap to view division</p>
-          </div>
-        </div>
-
-        {/* Bib + Gun Time + Pace */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 my-12">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
           <div className="flex justify-center">
-            <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-8 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono">
-              <p className="text-lg uppercase tracking-wider font-bold mb-4">BIB</p>
+            <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-6 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono">
+              <p className="text-sm uppercase tracking-wider font-bold mb-2">BIB</p>
               <p className="text-6xl font-black">{participant.bib || '—'}</p>
             </div>
           </div>
-          <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-3xl p-8 text-center shadow-lg">
-            <p className="text-lg uppercase text-gray-500 mb-4">Gun Time</p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Overall</p>
+              <p className="text-4xl font-bold text-gemini-dark-gray">
+                {participant.place || '—'} <span className="text-lg text-gray-600">of {overallTotal}</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender</p>
+              <p className="text-4xl font-bold text-gemini-dark-gray">
+                {participant.gender_place || '—'} <span className="text-lg text-gray-600">of {genderTotal}</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Age</p>
+              <p className="text-2xl font-bold text-gray-800">{participant.age || '—'}</p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-2">Gender</p>
+              <p className="text-2xl font-bold text-gray-800">
+                {participant.gender === 'M' ? 'Male' : participant.gender === 'F' ? 'Female' : '—'}
+              </p>
+            </div>
+
+            <div className="md:col-span-4 mt-8">
+              <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Division</p>
+              <button
+                onClick={handleDivisionClick}
+                className="text-3xl font-bold text-[#80ccd6] hover:underline transition cursor-pointer"
+              >
+                {participant.age_group_name || '—'} ({participant.age_group_place || '—'} of {divisionTotal})
+              </button>
+              <p className="text-base text-gray-600 mt-3">Click to view everyone in your division</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Times */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 text-center">
+          <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Chip Time</p>
+            <p className="text-5xl font-black text-gemini-blue">
+              {timeRevealed ? (
+                formatChronoTime(participant.chip_time)
+              ) : (
+                <CountUp
+                  start={0}
+                  end={chipTimeSeconds}
+                  duration={3.5}
+                  formattingFn={(value) => {
+                    const hours = Math.floor(value / 3600);
+                    const mins = Math.floor((value % 3600) / 60);
+                    const secs = Math.floor(value % 60);
+                    const tenths = Math.round((value % 1) * 10);
+                    return `${hours ? hours + ':' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}${tenths ? '.' + tenths : ''}`;
+                  }}
+                  onEnd={handleTimeComplete}
+                />
+              )}
+            </p>
+          </div>
+          <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gun Time</p>
             <p className="text-5xl font-black text-gray-800">{formatChronoTime(participant.clock_time)}</p>
           </div>
-          <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-3xl p-8 text-center shadow-lg">
-            <p className="text-lg uppercase text-gray-500 mb-4">Pace</p>
+          <div className="bg-gradient-to-br from-green-100 to-green-200 rounded-2xl p-8 shadow-lg">
+            <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Pace</p>
             <p className="text-5xl font-black text-green-700">
               {participant.pace ? formatChronoTime(participant.pace) : '—'}
             </p>
           </div>
         </div>
 
-        {/* Age & Gender */}
-        <div className="grid grid-cols-2 gap-8 max-w-md mx-auto my-12 text-center">
-          <div>
-            <p className="text-lg uppercase text-gray-500 mb-2">Age</p>
-            <p className="text-4xl font-bold text-gray-800">{participant.age || '—'}</p>
-          </div>
-          <div>
-            <p className="text-lg uppercase text-gray-500 mb-2">Gender</p>
-            <p className="text-4xl font-bold text-gray-800">
-              {participant.gender === 'M' ? 'Male' : participant.gender === 'F' ? 'Female' : '—'}
-            </p>
-          </div>
-        </div>
-
         {/* Splits */}
         {participant.splits && participant.splits.length > 0 && (
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 my-16">
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
             <button
               onClick={() => setShowSplits(!showSplits)}
               className="w-full bg-gradient-to-r from-[#80ccd6] to-[#80ccd6]/70 py-6 text-white font-bold text-xl hover:opacity-90 transition"
@@ -461,7 +415,7 @@ export default function ParticipantPage() {
         )}
 
         {/* Create Shareable Card Button */}
-        <div className="text-center my-20">
+        <div className="text-center my-16">
           <button
             onClick={() => setShowCardPreview(true)}
             className="px-16 py-8 bg-gradient-to-r from-gemini-blue to-[#80ccd6] text-white font-bold text-3xl rounded-full hover:scale-105 transition shadow-2xl"
@@ -470,13 +424,14 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden Card for Generation */}
+        {/* Hidden High-Resolution Card */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
             className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-8 pt-8 pb-20"
             style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
+            {/* Smaller Logo Section */}
             <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 mb-8 flex items-center justify-center">
               {masterLogo ? (
                 <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-40 object-contain" crossOrigin="anonymous" />
@@ -489,18 +444,22 @@ export default function ParticipantPage() {
               )}
             </div>
 
+            {/* Race Name */}
             <p className="text-5xl font-black text-[#80ccd6] mb-4 drop-shadow-lg">
               {raceDisplayName}
             </p>
 
+            {/* Date */}
             <p className="text-4xl text-gray-300 mb-8">
               {formatDate(selectedEvent.start_time)}
             </p>
 
+            {/* Runner Name */}
             <h1 className="text-7xl font-black text-white mb-10 drop-shadow-2xl leading-none px-8">
               {participant.first_name}<br />{participant.last_name}
             </h1>
 
+            {/* Finish Time */}
             <div className="mb-12">
               <p className="text-4xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
               <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
@@ -508,6 +467,7 @@ export default function ParticipantPage() {
               </p>
             </div>
 
+            {/* Rankings */}
             <div className="grid grid-cols-3 gap-10 text-white w-full max-w-5xl mb-16">
               <div>
                 <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
@@ -532,6 +492,7 @@ export default function ParticipantPage() {
               </div>
             </div>
 
+            {/* Updated Footer with More Space Above */}
             <p className="absolute bottom-10 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
               Find our next race... www.youkeepmoving.com
             </p>
@@ -592,10 +553,16 @@ export default function ParticipantPage() {
               </div>
 
               <div className="flex justify-center gap-8">
-                <button onClick={generateResultCard} className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition">
+                <button
+                  onClick={generateResultCard}
+                  className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition"
+                >
                   Download
                 </button>
-                <button onClick={shareResultCard} className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition">
+                <button
+                  onClick={shareResultCard}
+                  className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition"
+                >
                   Share
                 </button>
               </div>
@@ -603,8 +570,8 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Back Button */}
-        <div className="text-center my-16">
+        {/* Back Button & Sponsors */}
+        <div className="text-center mb-16">
           <button
             onClick={goBackToResults}
             className="px-12 py-5 bg-gray-800 text-white font-bold text-xl rounded-full hover:bg-gray-700 transition shadow-xl"
@@ -613,7 +580,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Sponsors */}
         {ads.length > 0 && (
           <div>
             <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">Event Sponsors</h3>
