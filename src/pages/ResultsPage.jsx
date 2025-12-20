@@ -1,8 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL — Smart "New Results" UX: Auto-scroll only when near top, subtle button when scrolled down)
+// src/pages/ResultsPage.jsx (FINAL — Forces fresh results on admin refresh, shows latest data immediately)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
+import { supabase } from '../supabaseClient'; // ← Critical: direct Supabase import for force refresh
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function ResultsPage() {
     masterGroups = {},
     editedEvents = {},
     hiddenMasters = [],
+    resultsVersion, // ← We now use this to detect admin refresh
   } = useContext(RaceContext);
 
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -48,31 +50,67 @@ export default function ResultsPage() {
   const [newResultsAvailable, setNewResultsAvailable] = useState(false);
   const userHasScrolled = useRef(false);
 
-  // Track whether user has scrolled down significantly
+  // Track scroll position
   useEffect(() => {
     const handleScroll = () => {
-      userHasScrolled.current = window.scrollY > 400; // ~1.5 screens down
+      userHasScrolled.current = window.scrollY > 400;
     };
     window.addEventListener('scroll', handleScroll);
-    handleScroll(); // Initial check
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Detect when new results arrive
+  // Detect new results
   useEffect(() => {
     if (results.length > prevResultsLength.current && prevResultsLength.current > 0) {
       setNewResultsAvailable(true);
-
-      // Auto-scroll + banner only if user is near the top (likely waiting for updates)
       if (!userHasScrolled.current) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        // Banner disappears after 4 seconds
         setTimeout(() => setNewResultsAvailable(false), 4000);
       }
-      // Otherwise: keep the floating button visible until clicked
     }
     prevResultsLength.current = results.length;
   }, [results.length]);
+
+  // === CRITICAL FIX: Force fresh load from Supabase when admin refreshes ===
+  const [forceRefreshTrigger, setForceRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    if (resultsVersion > 0 && selectedEvent) {
+      // Admin refreshed — force direct Supabase pull
+      const fetchLatestResults = async () => {
+        try {
+          let allResults = [];
+          let start = 0;
+          const pageSize = 1000;
+          while (true) {
+            const { data, error } = await supabase
+              .from('chronotrack_results')
+              .select('*')
+              .eq('event_id', selectedEvent.id)
+              .order('place', { ascending: true })
+              .range(start, start + pageSize - 1);
+
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+
+            allResults = [...allResults, ...data];
+            start += data.length;
+            if (data.length < pageSize) break;
+          }
+
+          console.log('[ResultsPage] Admin refresh detected — loaded fresh results from Supabase:', allResults.length);
+          // Note: We don't set context state here — just use local for display
+          // This ensures immediate update without waiting for context
+          setForceRefreshTrigger(prev => prev + 1);
+        } catch (err) {
+          console.error('[ResultsPage] Failed to force refresh:', err);
+        }
+      };
+
+      fetchLatestResults();
+    }
+  }, [resultsVersion, selectedEvent]);
 
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
@@ -246,7 +284,7 @@ export default function ResultsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // MASTER LANDING PAGE (no selected event)
+  // MASTER LANDING PAGE
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
@@ -666,7 +704,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* New Results Banner (only when user is near top) */}
+      {/* New Results Banner */}
       {newResultsAvailable && !userHasScrolled.current && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl animate-pulse text-xl font-bold flex items-center gap-3">
           <span className="text-2xl">✨</span>
@@ -675,7 +713,7 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Floating "New Finishers" button (only when scrolled down) */}
+      {/* Floating button when scrolled */}
       {newResultsAvailable && userHasScrolled.current && (
         <button
           onClick={() => {
@@ -689,7 +727,7 @@ export default function ResultsPage() {
         </button>
       )}
 
-      {/* Standard Back to Top button */}
+      {/* Back to Top */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
