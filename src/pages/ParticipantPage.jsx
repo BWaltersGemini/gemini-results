@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Mobile-First Reveal + Fixed Master Logo in Card)
+// src/pages/ParticipantPage.jsx (FINAL — Mobile-First Reveal + Browser Back Button Fixed + Master Logo)
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
@@ -63,6 +63,60 @@ export default function ParticipantPage() {
     if (!event?.start_time) return null;
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
+
+  // === BUILD CORRECT BACK URL FOR THIS PARTICIPANT'S RACE ===
+  const getBackToResultsUrl = () => {
+    if (!selectedEvent) return '/results';
+
+    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    let masterSlug = 'overall';
+
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
+
+    if (foundMaster) {
+      masterSlug = slugify(foundMaster[0]);
+    }
+
+    const eventYear = getYearFromEvent(selectedEvent);
+    return `/results/${masterSlug}/${eventYear}`;
+  };
+
+  // === REPLACE BROWSER HISTORY SO BACK BUTTON WORKS CORRECTLY ===
+  useEffect(() => {
+    if (!loading && participant && selectedEvent) {
+      const backUrl = getBackToResultsUrl();
+
+      // Only replace if we're not already coming from the correct results page
+      if (location.state?.fromResults !== backUrl) {
+        window.history.replaceState(
+          { ...window.history.state, fromParticipant: true },
+          '',
+          location.pathname + location.search
+        );
+
+        // Push the correct results page onto history so "back" goes there
+        window.history.pushState(
+          { fromParticipant: true, backTo: backUrl },
+          '',
+          backUrl
+        );
+      }
+    }
+  }, [loading, participant, selectedEvent, location]);
+
+  // Listen for browser back/forward to navigate properly
+  useEffect(() => {
+    const handlePopState = (event) => {
+      if (event.state?.fromParticipant) {
+        navigate(event.state.backTo || '/results', { replace: true });
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [navigate]);
 
   useEffect(() => {
     const fetchDataIfMissing = async () => {
@@ -183,22 +237,7 @@ export default function ParticipantPage() {
   };
 
   const goBackToResults = () => {
-    if (!selectedEvent) {
-      navigate('/results');
-      return;
-    }
-
-    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
-    let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
-      ids.includes(selectedEvent.id.toString())
-    );
-    if (foundMaster) {
-      masterSlug = slugify(foundMaster[0]);
-    }
-
-    const eventYear = getYearFromEvent(selectedEvent);
-    navigate(`/results/${masterSlug}/${eventYear}`);
+    navigate(getBackToResultsUrl());
   };
 
   const handleDivisionClick = () => {
@@ -262,7 +301,6 @@ export default function ParticipantPage() {
 
   const chipTimeSeconds = parseChipTime(participant.chip_time);
 
-  // Master series logo — correctly resolved
   const currentMasterKey = Object.keys(masterGroups).find(key =>
     masterGroups[key]?.includes(selectedEvent?.id?.toString())
   );
@@ -292,12 +330,12 @@ export default function ParticipantPage() {
           )}
         </div>
 
-        {/* Participant Name — Huge and Immediate */}
+        {/* Participant Name */}
         <h3 className="text-5xl md:text-6xl font-extrabold mb-12 text-center text-gemini-blue drop-shadow-md leading-tight">
           {participant.first_name} {participant.last_name}
         </h3>
 
-        {/* DRAMATIC CHIP TIME REVEAL — Now Above the Fold on Mobile */}
+        {/* CHIP TIME REVEAL — Above the fold on mobile */}
         <div className="text-center my-16">
           <p className="text-2xl md:text-3xl uppercase text-gray-500 tracking-widest mb-6">Your Finish Time</p>
           <div className="text-7xl md:text-9xl font-black text-gemini-blue leading-none">
@@ -321,7 +359,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Key Placements — Compact & Prominent */}
+        {/* Key Placements */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 my-16 max-w-4xl mx-auto">
           <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl p-8 text-center shadow-lg">
             <p className="text-lg uppercase text-gray-500 mb-4">Overall Place</p>
@@ -352,7 +390,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Bib + Gun Time + Pace Row */}
+        {/* Bib + Gun Time + Pace */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 my-12">
           <div className="flex justify-center">
             <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-8 text-center w-64 h-48 flex flex-col justify-center items-center shadow-xl font-mono">
@@ -372,7 +410,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Additional Info: Age & Gender */}
+        {/* Age & Gender */}
         <div className="grid grid-cols-2 gap-8 max-w-md mx-auto my-12 text-center">
           <div>
             <p className="text-lg uppercase text-gray-500 mb-2">Age</p>
@@ -432,14 +470,13 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden High-Resolution Card */}
+        {/* Hidden Card for Generation */}
         <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
           <div
             ref={cardRef}
             className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-8 pt-8 pb-20"
             style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
           >
-            {/* Logo Section — Master logo prioritized and fixed */}
             <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 mb-8 flex items-center justify-center">
               {masterLogo ? (
                 <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-40 object-contain" crossOrigin="anonymous" />
