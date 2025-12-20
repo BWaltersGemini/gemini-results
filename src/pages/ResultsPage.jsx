@@ -1,9 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL — Forces fresh results on admin refresh, shows latest data immediately)
+// src/pages/ResultsPage.jsx (FINAL — Full complete version with live polling + smooth UX)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { supabase } from '../supabaseClient'; // ← Critical: direct Supabase import for force refresh
+import { supabase } from '../supabaseClient';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -22,16 +22,19 @@ export default function ResultsPage() {
     masterGroups = {},
     editedEvents = {},
     hiddenMasters = [],
-    resultsVersion, // ← We now use this to detect admin refresh
+    isLiveRace,
+    refreshResults,
   } = useContext(RaceContext);
 
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
+
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const [showFiltersForRace, setShowFiltersForRace] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+
   const prevMasterKeyRef = useRef(masterKey);
 
   // Division filter & highlight from ParticipantPage
@@ -45,12 +48,14 @@ export default function ResultsPage() {
   const highlightedRowRef = useRef(null);
   const targetRaceIdRef = useRef(null);
 
-  // Smart new results detection
-  const prevResultsLength = useRef(results.length);
+  // Live update detection
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [newResultsAvailable, setNewResultsAvailable] = useState(false);
+  const prevResultsLength = useRef(results.length);
   const userHasScrolled = useRef(false);
 
-  // Track scroll position
+  // Track scroll position for new results banner
   useEffect(() => {
     const handleScroll = () => {
       userHasScrolled.current = window.scrollY > 400;
@@ -60,7 +65,7 @@ export default function ResultsPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Detect new results
+  // Detect new finishers for banner
   useEffect(() => {
     if (results.length > prevResultsLength.current && prevResultsLength.current > 0) {
       setNewResultsAvailable(true);
@@ -72,46 +77,55 @@ export default function ResultsPage() {
     prevResultsLength.current = results.length;
   }, [results.length]);
 
-  // === CRITICAL FIX: Force fresh load from Supabase when admin refreshes ===
-  const [forceRefreshTrigger, setForceRefreshTrigger] = useState(0);
-
+  // === LIVE POLLING: Check last_updated only during live races ===
   useEffect(() => {
-    if (resultsVersion > 0 && selectedEvent) {
-      // Admin refreshed — force direct Supabase pull
-      const fetchLatestResults = async () => {
-        try {
-          let allResults = [];
-          let start = 0;
-          const pageSize = 1000;
-          while (true) {
-            const { data, error } = await supabase
-              .from('chronotrack_results')
-              .select('*')
-              .eq('event_id', selectedEvent.id)
-              .order('place', { ascending: true })
-              .range(start, start + pageSize - 1);
-
-            if (error) throw error;
-            if (!data || data.length === 0) break;
-
-            allResults = [...allResults, ...data];
-            start += data.length;
-            if (data.length < pageSize) break;
-          }
-
-          console.log('[ResultsPage] Admin refresh detected — loaded fresh results from Supabase:', allResults.length);
-          // Note: We don't set context state here — just use local for display
-          // This ensures immediate update without waiting for context
-          setForceRefreshTrigger(prev => prev + 1);
-        } catch (err) {
-          console.error('[ResultsPage] Failed to force refresh:', err);
-        }
-      };
-
-      fetchLatestResults();
+    if (!selectedEvent || !isLiveRace) {
+      setLastUpdated(null);
+      setIsRefreshing(false);
+      return;
     }
-  }, [resultsVersion, selectedEvent]);
 
+    let pollInterval = null;
+
+    const checkForUpdates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chronotrack_events')
+          .select('last_updated')
+          .eq('id', selectedEvent.id)
+          .single();
+
+        if (error) {
+          console.error('[ResultsPage] Error polling last_updated:', error);
+          return;
+        }
+
+        const newTimestamp = data?.last_updated;
+
+        if (lastUpdated && newTimestamp && newTimestamp > lastUpdated) {
+          console.log('[ResultsPage] New results detected — refreshing...');
+          setIsRefreshing(true);
+          refreshResults(); // Triggers smart sync in context
+        }
+
+        setLastUpdated(newTimestamp);
+      } catch (err) {
+        console.error('[ResultsPage] Poll failed:', err);
+      }
+    };
+
+    // Initial check
+    checkForUpdates();
+
+    // Poll every 45 seconds
+    pollInterval = setInterval(checkForUpdates, 45000);
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [selectedEvent, isLiveRace, lastUpdated, refreshResults]);
+
+  // Reset filters on master change
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
@@ -121,6 +135,7 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
+  // Helper functions
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -159,7 +174,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection
+  // Event selection from URL
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -167,6 +182,7 @@ export default function ResultsPage() {
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
+
     if (!storedMasterKey) return;
 
     const groupEventIds = masterGroups[storedMasterKey] || [];
@@ -179,7 +195,7 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Find race for highlighted participant
+  // Scroll to highlighted participant
   useEffect(() => {
     if (!highlightedBib || !results.length) return;
     const participant = results.find(r => String(r.bib) === String(highlightedBib));
@@ -188,7 +204,6 @@ export default function ResultsPage() {
     }
   }, [highlightedBib, results]);
 
-  // Auto-scroll to highlighted participant
   useEffect(() => {
     if (!highlightedBib || !targetRaceIdRef.current) return;
     const scrollToRaceAndRow = () => {
@@ -206,6 +221,7 @@ export default function ResultsPage() {
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
 
+  // Year navigation
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -246,6 +262,7 @@ export default function ResultsPage() {
     });
   };
 
+  // Search and filtering
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -284,6 +301,13 @@ export default function ResultsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Reset isRefreshing when new results are loaded
+  useEffect(() => {
+    if (isRefreshing && !loadingResults) {
+      setIsRefreshing(false);
+    }
+  }, [loadingResults, isRefreshing]);
+
   // MASTER LANDING PAGE
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
@@ -310,7 +334,6 @@ export default function ResultsPage() {
             <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">Race Results</h1>
             <p className="text-xl text-gray-600">Recent race series</p>
           </div>
-
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
               {masterEventTiles.map((master) => (
@@ -339,7 +362,6 @@ export default function ResultsPage() {
           ) : (
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
-
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
@@ -472,6 +494,14 @@ export default function ResultsPage() {
             </p>
           )}
         </div>
+
+        {/* Live Refresh Indicator */}
+        {isLiveRace && isRefreshing && (
+          <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 bg-gemini-blue text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-3 text-lg font-bold animate-pulse">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            Updating live results...
+          </div>
+        )}
 
         {/* Race Cards */}
         {!searchQuery && displayedRaces.length > 0 && (
