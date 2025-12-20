@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Accurate sync with ChronoTrack: Delete + Insert during race window to handle DNF/DNS)
+// src/context/RaceContext.jsx (FINAL — Full sync with delete+insert, UI updates on admin refresh, background only during race window)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -157,7 +157,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Results loading + accurate sync during race window (delete + insert)
+  // Results loading + full sync during race window (delete + insert) + UI update on admin refresh
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -181,7 +181,7 @@ export function RaceProvider({ children }) {
         let allResults = [];
 
         // Determine if currently within the actual race window
-        const now = Math.floor(Date.now() / 1000); // Unix seconds
+        const now = Math.floor(Date.now() / 1000);
         const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
         const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
 
@@ -189,7 +189,7 @@ export function RaceProvider({ children }) {
 
         if (!aborted) setIsLiveRace(isActiveRaceWindow);
 
-        // Fetch fresh if: active race window, no cache, or admin forced
+        // Fetch fresh if: active race window OR admin forced refresh
         const shouldFetchFresh = isActiveRaceWindow || resultsVersion > 0;
 
         if (shouldFetchFresh) {
@@ -259,15 +259,19 @@ export function RaceProvider({ children }) {
               console.log('[RaceContext] No results from ChronoTrack — table cleared');
             }
 
-            // Only update UI on initial load or admin force
+            // === ALWAYS update UI state when admin forces refresh ===
+            // Also update on initial load
             if (updateUI || resultsVersion > 0) {
               allResults = deduped;
               const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
-              if (!aborted) setUniqueDivisions(divisions);
+              if (!aborted) {
+                setResults(deduped);
+                setUniqueDivisions(divisions);
+              }
             }
           }
         } else {
-          // Outside race window — load from cache (historical events)
+          // Historical event — load from cache once
           let cachedResults = [];
           let start = 0;
           const pageSize = 1000;
@@ -287,7 +291,9 @@ export function RaceProvider({ children }) {
 
           allResults = cachedResults;
           const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
-          if (!aborted) setUniqueDivisions(divisions);
+          if (!aborted) {
+            setUniqueDivisions(divisions);
+          }
           console.log(`[RaceContext] Using cached results (${cachedResults.length}) for historical event`);
         }
 
