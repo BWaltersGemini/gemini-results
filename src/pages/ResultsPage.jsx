@@ -1,8 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL — All fixes applied: Division filter + auto-scroll + working Back to Top)
+// src/pages/ResultsPage.jsx (FINAL — Live polling + smooth refresh indicator)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
+import { supabase } from '../supabaseClient';
 import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsPage() {
@@ -22,29 +23,37 @@ export default function ResultsPage() {
     masterGroups = {},
     editedEvents = {},
     hiddenMasters = [],
+    isLiveRace,
+    refreshResults,
   } = useContext(RaceContext);
 
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
+
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const [showFiltersForRace, setShowFiltersForRace] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+
   const prevMasterKeyRef = useRef(masterKey);
 
   // Division filter & highlight from ParticipantPage
   const divisionFilterFromState = location.state?.divisionFilter;
   const highlightBibFromState = location.state?.highlightBib;
-
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
   // Refs for scrolling
   const raceRefs = useRef({});
   const highlightedRowRef = useRef(null);
-  const targetRaceIdRef = useRef(null); // Store which race to scroll to
+  const targetRaceIdRef = useRef(null);
 
+  // Live update state
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Reset filters on master change
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
@@ -54,6 +63,62 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
+  // === LIVE POLLING: Only during live races ===
+  useEffect(() => {
+    if (!selectedEvent || !isLiveRace) {
+      setLastUpdated(null);
+      setIsRefreshing(false);
+      return;
+    }
+
+    let pollInterval = null;
+
+    const checkForUpdates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chronotrack_events')
+          .select('last_updated')
+          .eq('id', selectedEvent.id)
+          .single();
+
+        if (error) {
+          console.error('[ResultsPage] Poll error:', error);
+          return;
+        }
+
+        const newTimestamp = data?.last_updated;
+
+        if (lastUpdated && newTimestamp && newTimestamp > lastUpdated) {
+          console.log('[ResultsPage] New results detected — triggering refresh');
+          setIsRefreshing(true);
+          refreshResults(); // Triggers smart sync in RaceContext
+        }
+
+        setLastUpdated(newTimestamp);
+      } catch (err) {
+        console.error('[ResultsPage] Poll failed:', err);
+      }
+    };
+
+    // Initial check
+    checkForUpdates();
+
+    // Poll every 45 seconds
+    pollInterval = setInterval(checkForUpdates, 45000);
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [selectedEvent, isLiveRace, lastUpdated, refreshResults]);
+
+  // Clear refreshing indicator when load completes
+  useEffect(() => {
+    if (isRefreshing && !loadingResults) {
+      setIsRefreshing(false);
+    }
+  }, [loadingResults, isRefreshing]);
+
+  // Helper functions
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
     return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -92,24 +157,28 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection
+  // Event selection from URL
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
+
     const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
+
     if (!storedMasterKey) return;
+
     const groupEventIds = masterGroups[storedMasterKey] || [];
     const yearEvents = events
       .filter((e) => groupEventIds.includes(e.id.toString()) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Find which race contains the highlighted participant
+  // Scroll to highlighted participant
   useEffect(() => {
     if (!highlightedBib || !results.length) return;
     const participant = results.find(r => String(r.bib) === String(highlightedBib));
@@ -118,10 +187,8 @@ export default function ResultsPage() {
     }
   }, [highlightedBib, results]);
 
-  // Auto-scroll: first to race section, then to highlighted row
   useEffect(() => {
     if (!highlightedBib || !targetRaceIdRef.current) return;
-
     const scrollToRaceAndRow = () => {
       const raceEl = raceRefs.current[targetRaceIdRef.current];
       if (raceEl) {
@@ -133,11 +200,11 @@ export default function ResultsPage() {
         }, 600);
       }
     };
-
     const timer = setTimeout(scrollToRaceAndRow, 300);
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
 
+  // Year navigation
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -178,6 +245,7 @@ export default function ResultsPage() {
     });
   };
 
+  // Search and filtering
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -212,7 +280,6 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
-  // Helper to scroll to top of the main container
   const scrollToTop = () => {
     const mainElement = document.querySelector('main');
     if (mainElement) {
@@ -380,6 +447,7 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* Search Bar */}
         <div className={`w-full max-w-2xl mx-auto mb-12 transition-all duration-500 ${searchQuery ? 'fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white shadow-2xl rounded-full px-6 py-4 max-w-full w-11/12' : ''}`}>
           <div className="relative">
             <input
@@ -405,6 +473,15 @@ export default function ResultsPage() {
           )}
         </div>
 
+        {/* Live Refresh Indicator */}
+        {isLiveRace && isRefreshing && (
+          <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 bg-gemini-blue text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-3 text-lg font-bold animate-pulse">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            Updating live results...
+          </div>
+        )}
+
+        {/* Race Cards */}
         {!searchQuery && displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
@@ -433,6 +510,7 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* Loading / No Results */}
         {loadingResults ? (
           <div className="text-center py-32">
             <div className="inline-block animate-spin rounded-full h-20 w-20 border-t-4 border-gemini-blue"></div>
@@ -449,9 +527,7 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const filters = raceFilters[raceId] || { search: '', gender: '', division: '' };
               const showFilters = showFiltersForRace[raceId] || false;
-
               const raceResults = globalFilteredResults.filter((r) => r.race_id === raceId);
-
               const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
                 const bibStr = r.bib ? r.bib.toString() : '';
@@ -460,10 +536,8 @@ export default function ResultsPage() {
                 const matchesGender = !filters.gender || r.gender === filters.gender;
                 const matchesDivision = !filters.division || r.age_group_name === filters.division;
                 const matchesGlobalDivision = !activeDivisionFilter || r.age_group_name === activeDivisionFilter;
-
                 return matchesSearch && matchesGender && matchesDivision && matchesGlobalDivision;
               });
-
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
               const page = currentPages[raceId] || 1;
               const start = (page - 1) * pageSize;
@@ -617,6 +691,7 @@ export default function ResultsPage() {
               );
             })}
 
+            {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20">
                 <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">Our Sponsors</h3>
@@ -636,7 +711,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Floating Back to Top — Now correctly scrolls the <main> container */}
+      {/* Back to Top */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
