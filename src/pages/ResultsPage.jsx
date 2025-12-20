@@ -281,8 +281,8 @@ export default function ResultsPage() {
   }, [searchQuery, firstMatchingRaceId]);
 
   const embeddedRaces = selectedEvent?.races || [];
-  const racesWithFinishers = embeddedRaces.filter((race) =>
-    globalFilteredResults.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
+  const racesWithFinishers = embeddedRaces; // Show all races even if empty    
+  globalFilteredResults.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
   );
 
   let displayedRaces = racesWithFinishers;
