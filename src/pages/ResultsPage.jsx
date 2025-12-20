@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Full complete version with live polling + smooth UX)
+// src/pages/ResultsPage.jsx (FULL FIXED VERSION — race_id type coercion + robust rendering)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -84,9 +84,7 @@ export default function ResultsPage() {
       setIsRefreshing(false);
       return;
     }
-
     let pollInterval = null;
-
     const checkForUpdates = async () => {
       try {
         const { data, error } = await supabase
@@ -94,35 +92,20 @@ export default function ResultsPage() {
           .select('last_updated')
           .eq('id', selectedEvent.id)
           .single();
-
-        if (error) {
-          console.error('[ResultsPage] Error polling last_updated:', error);
-          return;
-        }
-
+        if (error) return;
         const newTimestamp = data?.last_updated;
-
         if (lastUpdated && newTimestamp && newTimestamp > lastUpdated) {
-          console.log('[ResultsPage] New results detected — refreshing...');
           setIsRefreshing(true);
-          refreshResults(); // Triggers smart sync in context
+          refreshResults();
         }
-
         setLastUpdated(newTimestamp);
       } catch (err) {
         console.error('[ResultsPage] Poll failed:', err);
       }
     };
-
-    // Initial check
     checkForUpdates();
-
-    // Poll every 45 seconds
     pollInterval = setInterval(checkForUpdates, 45000);
-
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
+    return () => clearInterval(pollInterval);
   }, [selectedEvent, isLiveRace, lastUpdated, refreshResults]);
 
   // Reset filters on master change
@@ -244,6 +227,7 @@ export default function ResultsPage() {
     let targetEvent = selectedEvent;
     let eventMaster = masterKey;
     let eventYear = year;
+
     if (!targetEvent || !eventMaster || !eventYear) {
       const participantEventId = participant.event_id || selectedEvent?.id;
       targetEvent = events.find((e) => e.id === participantEventId);
@@ -252,10 +236,12 @@ export default function ResultsPage() {
       eventYear = getYearFromEvent(targetEvent);
       setSelectedEvent(targetEvent);
     }
-    const participantRace = selectedEvent.races?.find((r) => r.race_id === participant.race_id);
+
+    const participantRace = selectedEvent.races?.find((r) => String(r.race_id) === String(participant.race_id));
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const masterSlug = slugify(eventMaster);
     const raceSlugPart = slugify(raceName);
+
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
       replace: true,
@@ -280,14 +266,22 @@ export default function ResultsPage() {
     }
   }, [searchQuery, firstMatchingRaceId]);
 
+  // === CRITICAL FIX: Coerce race_id to string for comparison ===
   const embeddedRaces = selectedEvent?.races || [];
-  const racesWithFinishers = embeddedRaces; // Show all races even if empty    
-  globalFilteredResults.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
+
+  const racesWithFinishers = embeddedRaces.filter((race) =>
+    globalFilteredResults.some((r) =>
+      String(r.race_id) === String(race.race_id) &&
+      r.chip_time && r.chip_time.trim() !== ''
+    )
   );
 
   let displayedRaces = racesWithFinishers;
+
   if (raceSlug) {
-    displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
+    displayedRaces = embeddedRaces.filter((race) =>
+      slugify(race.race_name) === raceSlug
+    );
   }
 
   const currentMasterKey = Object.keys(masterGroups).find(key =>
@@ -301,7 +295,6 @@ export default function ResultsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Reset isRefreshing when new results are loaded
   useEffect(() => {
     if (isRefreshing && !loadingResults) {
       setIsRefreshing(false);
@@ -362,6 +355,7 @@ export default function ResultsPage() {
           ) : (
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
+          {/* Upcoming Events Section */}
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
@@ -377,11 +371,7 @@ export default function ResultsPage() {
                     className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
                   >
                     {event.image?.url ? (
-                      <img
-                        src={event.image.url}
-                        alt={event.title.rendered || event.title}
-                        className="w-full h-60 object-cover"
-                      />
+                      <img src={event.image.url} alt={event.title.rendered || event.title} className="w-full h-60 object-cover" />
                     ) : (
                       <div className="h-60 bg-gray-200 flex items-center justify-center">
                         <span className="text-gray-500 font-medium">No Image</span>
@@ -429,7 +419,7 @@ export default function ResultsPage() {
               {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
             </h1>
             <p className="text-xl text-gray-600 mb-12">{formatDate(selectedEvent.start_time)}</p>
-            {availableYears.length > 0 && (
+            {availableYears.length > 1 && (
               <div className="flex flex-wrap justify-center gap-3 mb-12">
                 <span className="text-xl font-bold text-gray-700 self-center mr-4">Year:</span>
                 {availableYears.map((y) => (
@@ -507,7 +497,7 @@ export default function ResultsPage() {
         {!searchQuery && displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
-              const raceResults = globalFilteredResults.filter((r) => r.race_id === race.race_id);
+              const raceResults = globalFilteredResults.filter((r) => String(r.race_id) === String(race.race_id));
               const finishers = raceResults.filter((r) => r.chip_time && r.chip_time.trim() !== '').length;
               return (
                 <button
@@ -550,7 +540,9 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const filters = raceFilters[raceId] || { search: '', gender: '', division: '' };
               const showFilters = showFiltersForRace[raceId] || false;
-              const raceResults = globalFilteredResults.filter((r) => r.race_id === raceId);
+
+              const raceResults = globalFilteredResults.filter((r) => String(r.race_id) === String(raceId));
+
               const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
                 const bibStr = r.bib ? r.bib.toString() : '';
@@ -561,6 +553,7 @@ export default function ResultsPage() {
                 const matchesGlobalDivision = !activeDivisionFilter || r.age_group_name === activeDivisionFilter;
                 return matchesSearch && matchesGender && matchesDivision && matchesGlobalDivision;
               });
+
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
               const page = currentPages[raceId] || 1;
               const start = (page - 1) * pageSize;
