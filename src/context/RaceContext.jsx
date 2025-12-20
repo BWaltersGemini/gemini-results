@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Fixed fresh fetch on admin publish for past events)
+// src/context/RaceContext.jsx (TEST MODE — Non-stop continuous polling for testing)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -151,7 +151,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Load results — now forces fresh fetch when resultsVersion changes (admin publish)
+  // Load results — forces fresh fetch when needed
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -159,11 +159,13 @@ export function RaceProvider({ children }) {
       setIsLiveRace(false);
       return;
     }
+
     let aborted = false;
-    let pollInterval = null;
+    let pollingActive = true;
 
     const loadResults = async () => {
-      if (aborted) return;
+      if (aborted || !pollingActive) return;
+
       try {
         setLoadingResults(true);
         setError(null);
@@ -190,7 +192,7 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // === 2. Determine if race day ===
+        // === 2. Determine if race day (for isLiveRace flag only) ===
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         const eventDateStr = selectedEvent.start_time
@@ -199,11 +201,12 @@ export function RaceProvider({ children }) {
         const isRaceDay = eventDateStr === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        // === 3. Fetch fresh if: race day, no cache, OR admin forced refresh (resultsVersion changed) ===
-        const shouldFetchFresh = isRaceDay || cachedResults.length === 0 || resultsVersion > 0;
+        // === 3. ALWAYS fetch fresh during test period (or admin force) ===
+        const shouldFetchFresh = true || cachedResults.length === 0 || resultsVersion > 0;
+        // Note: `true || ...` forces fresh fetch every time during testing
 
         if (shouldFetchFresh) {
-          console.log('[RaceContext] Fetching fresh results from ChronoTrack (forced or race day)...');
+          console.log('[RaceContext] TEST MODE: Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           if (!aborted && fresh.length > 0) {
             const seen = new Map();
@@ -270,25 +273,38 @@ export function RaceProvider({ children }) {
       }
     };
 
-    loadResults();
+    // === NON-STOP CONTINUOUS POLLING FOR TESTING ===
+    const continuousPoll = async () => {
+      if (!pollingActive) return;
 
-    // Live polling on race day
-    if (selectedEvent.start_time) {
-      const eventDateStr = new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0];
-      const todayStr = new Date().toISOString().split('T')[0];
-      if (eventDateStr === todayStr) {
-        pollInterval = setInterval(() => loadResults(), 120000);
-        console.log('[RaceContext] Live polling started (every 2 minutes)');
+      try {
+        await loadResults();
+        console.log('[RaceContext] TEST MODE: Continuous fetch complete — starting next immediately');
+      } catch (err) {
+        console.error('[RaceContext] Error in continuous test poll:', err);
       }
+
+      // Immediately start next fetch
+      if (pollingActive) {
+        setTimeout(continuousPoll, 100); // Tiny delay to keep UI responsive
+      }
+    };
+
+    // Start non-stop polling as soon as event is selected
+    if (selectedEvent) {
+      continuousPoll();
+      console.log('[RaceContext] TEST MODE: Non-stop continuous polling started (no time restrictions)');
     }
 
+    // Cleanup
     return () => {
       aborted = true;
-      if (pollInterval) clearInterval(pollInterval);
+      pollingActive = false;
+      console.log('[RaceContext] Non-stop polling stopped (component unmount or event change)');
     };
-  }, [selectedEvent, resultsVersion]); // ← Reacts to admin-triggered refresh
+  }, [selectedEvent, resultsVersion]);
 
-  // Function exposed to AdminPage to force refresh
+  // Function exposed to AdminPage to force immediate refresh
   const refreshResults = () => {
     console.log('[RaceContext] Admin triggered forced refresh');
     setResultsVersion(prev => prev + 1);
@@ -314,7 +330,7 @@ export function RaceProvider({ children }) {
         showAdsPerMaster,
         ads,
         hiddenRaces,
-        refreshResults, // ← Used by AdminPage
+        refreshResults,
       }}
     >
       {children}

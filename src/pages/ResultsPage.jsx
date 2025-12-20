@@ -1,9 +1,8 @@
-// src/pages/ResultsPage.jsx (FINAL — All fixes applied: Division filter + auto-scroll + working Back to Top)
+// src/pages/ResultsPage.jsx (FINAL — Smart "New Results" UX: Auto-scroll only when near top, subtle button when scrolled down)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -36,14 +35,44 @@ export default function ResultsPage() {
   // Division filter & highlight from ParticipantPage
   const divisionFilterFromState = location.state?.divisionFilter;
   const highlightBibFromState = location.state?.highlightBib;
-
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
   // Refs for scrolling
   const raceRefs = useRef({});
   const highlightedRowRef = useRef(null);
-  const targetRaceIdRef = useRef(null); // Store which race to scroll to
+  const targetRaceIdRef = useRef(null);
+
+  // Smart new results detection
+  const prevResultsLength = useRef(results.length);
+  const [newResultsAvailable, setNewResultsAvailable] = useState(false);
+  const userHasScrolled = useRef(false);
+
+  // Track whether user has scrolled down significantly
+  useEffect(() => {
+    const handleScroll = () => {
+      userHasScrolled.current = window.scrollY > 400; // ~1.5 screens down
+    };
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Initial check
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Detect when new results arrive
+  useEffect(() => {
+    if (results.length > prevResultsLength.current && prevResultsLength.current > 0) {
+      setNewResultsAvailable(true);
+
+      // Auto-scroll + banner only if user is near the top (likely waiting for updates)
+      if (!userHasScrolled.current) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Banner disappears after 4 seconds
+        setTimeout(() => setNewResultsAvailable(false), 4000);
+      }
+      // Otherwise: keep the floating button visible until clicked
+    }
+    prevResultsLength.current = results.length;
+  }, [results.length]);
 
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
@@ -95,21 +124,24 @@ export default function ResultsPage() {
   // Event selection
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
+
     const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
     if (!storedMasterKey) return;
+
     const groupEventIds = masterGroups[storedMasterKey] || [];
     const yearEvents = events
       .filter((e) => groupEventIds.includes(e.id.toString()) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Find which race contains the highlighted participant
+  // Find race for highlighted participant
   useEffect(() => {
     if (!highlightedBib || !results.length) return;
     const participant = results.find(r => String(r.bib) === String(highlightedBib));
@@ -118,10 +150,9 @@ export default function ResultsPage() {
     }
   }, [highlightedBib, results]);
 
-  // Auto-scroll: first to race section, then to highlighted row
+  // Auto-scroll to highlighted participant
   useEffect(() => {
     if (!highlightedBib || !targetRaceIdRef.current) return;
-
     const scrollToRaceAndRow = () => {
       const raceEl = raceRefs.current[targetRaceIdRef.current];
       if (raceEl) {
@@ -133,7 +164,6 @@ export default function ResultsPage() {
         }, 600);
       }
     };
-
     const timer = setTimeout(scrollToRaceAndRow, 300);
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
@@ -212,15 +242,11 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
-  // Helper to scroll to top of the main container
   const scrollToTop = () => {
-    const mainElement = document.querySelector('main');
-    if (mainElement) {
-      mainElement.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // MASTER LANDING PAGE
+  // MASTER LANDING PAGE (no selected event)
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
@@ -246,6 +272,7 @@ export default function ResultsPage() {
             <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">Race Results</h1>
             <p className="text-xl text-gray-600">Recent race series</p>
           </div>
+
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
               {masterEventTiles.map((master) => (
@@ -274,6 +301,7 @@ export default function ResultsPage() {
           ) : (
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
+
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
@@ -320,6 +348,7 @@ export default function ResultsPage() {
     );
   }
 
+  // EVENT RESULTS PAGE
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-32 relative">
       <div className="max-w-7xl mx-auto px-6">
@@ -380,6 +409,7 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* Search Bar */}
         <div className={`w-full max-w-2xl mx-auto mb-12 transition-all duration-500 ${searchQuery ? 'fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white shadow-2xl rounded-full px-6 py-4 max-w-full w-11/12' : ''}`}>
           <div className="relative">
             <input
@@ -405,6 +435,7 @@ export default function ResultsPage() {
           )}
         </div>
 
+        {/* Race Cards */}
         {!searchQuery && displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
@@ -433,6 +464,7 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* Loading / No Results */}
         {loadingResults ? (
           <div className="text-center py-32">
             <div className="inline-block animate-spin rounded-full h-20 w-20 border-t-4 border-gemini-blue"></div>
@@ -445,13 +477,12 @@ export default function ResultsPage() {
           </div>
         ) : (
           <>
+            {/* Results Tables */}
             {displayedRaces.map((race) => {
               const raceId = race.race_id;
               const filters = raceFilters[raceId] || { search: '', gender: '', division: '' };
               const showFilters = showFiltersForRace[raceId] || false;
-
               const raceResults = globalFilteredResults.filter((r) => r.race_id === raceId);
-
               const filtered = raceResults.filter((r) => {
                 const nameLower = ((r.first_name || '') + ' ' + (r.last_name || '')).toLowerCase();
                 const bibStr = r.bib ? r.bib.toString() : '';
@@ -460,10 +491,8 @@ export default function ResultsPage() {
                 const matchesGender = !filters.gender || r.gender === filters.gender;
                 const matchesDivision = !filters.division || r.age_group_name === filters.division;
                 const matchesGlobalDivision = !activeDivisionFilter || r.age_group_name === activeDivisionFilter;
-
                 return matchesSearch && matchesGender && matchesDivision && matchesGlobalDivision;
               });
-
               const sorted = [...filtered].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
               const page = currentPages[raceId] || 1;
               const start = (page - 1) * pageSize;
@@ -617,6 +646,7 @@ export default function ResultsPage() {
               );
             })}
 
+            {/* Sponsors */}
             {ads.length > 0 && (
               <section className="mt-20">
                 <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">Our Sponsors</h3>
@@ -636,7 +666,30 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Floating Back to Top — Now correctly scrolls the <main> container */}
+      {/* New Results Banner (only when user is near top) */}
+      {newResultsAvailable && !userHasScrolled.current && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl animate-pulse text-xl font-bold flex items-center gap-3">
+          <span className="text-2xl">✨</span>
+          New finishers just arrived!
+          <span className="text-2xl">✨</span>
+        </div>
+      )}
+
+      {/* Floating "New Finishers" button (only when scrolled down) */}
+      {newResultsAvailable && userHasScrolled.current && (
+        <button
+          onClick={() => {
+            scrollToTop();
+            setNewResultsAvailable(false);
+          }}
+          className="fixed bottom-40 right-8 bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 text-lg font-bold hover:bg-green-700 hover:scale-105 transition-all z-50 animate-pulse"
+        >
+          <span>↑</span>
+          New Finishers!
+        </button>
+      )}
+
+      {/* Standard Back to Top button */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
