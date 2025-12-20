@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (TEST MODE — Non-stop continuous polling for testing)
+// src/context/RaceContext.jsx (FINAL PRODUCTION — Continuous polling ONLY on actual race day)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -192,7 +192,7 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // === 2. Determine if race day (for isLiveRace flag only) ===
+        // === 2. Determine if race day ===
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         const eventDateStr = selectedEvent.start_time
@@ -201,12 +201,11 @@ export function RaceProvider({ children }) {
         const isRaceDay = eventDateStr === todayStr;
         if (!aborted) setIsLiveRace(isRaceDay);
 
-        // === 3. ALWAYS fetch fresh during test period (or admin force) ===
-        const shouldFetchFresh = true || cachedResults.length === 0 || resultsVersion > 0;
-        // Note: `true || ...` forces fresh fetch every time during testing
+        // === 3. Fetch fresh if: race day, no cache, OR admin forced refresh ===
+        const shouldFetchFresh = isRaceDay || cachedResults.length === 0 || resultsVersion > 0;
 
         if (shouldFetchFresh) {
-          console.log('[RaceContext] TEST MODE: Fetching fresh results from ChronoTrack...');
+          console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
           if (!aborted && fresh.length > 0) {
             const seen = new Map();
@@ -273,34 +272,45 @@ export function RaceProvider({ children }) {
       }
     };
 
-    // === NON-STOP CONTINUOUS POLLING FOR TESTING ===
-    const continuousPoll = async () => {
-      if (!pollingActive) return;
+    // === CONDITIONAL CONTINUOUS POLLING: ONLY on actual race day ===
+    if (selectedEvent.start_time) {
+      const eventDate = new Date(selectedEvent.start_time * 1000);
+      const eventDateStr = eventDate.toISOString().split('T')[0];
+      const todayStr = new Date().toISOString().split('T')[0];
 
-      try {
-        await loadResults();
-        console.log('[RaceContext] TEST MODE: Continuous fetch complete — starting next immediately');
-      } catch (err) {
-        console.error('[RaceContext] Error in continuous test poll:', err);
+      if (eventDateStr === todayStr) {
+        // RACE DAY → non-stop continuous live updates
+        let pollingActive = true;
+
+        const continuousPoll = async () => {
+          if (!pollingActive) return;
+
+          try {
+            await loadResults();
+            console.log('[RaceContext] Race day: Continuous fetch complete — next immediately');
+          } catch (err) {
+            console.error('[RaceContext] Error in race day poll:', err);
+          }
+
+          if (pollingActive) {
+            setTimeout(continuousPoll, 100); // Tiny delay to keep UI responsive
+          }
+        };
+
+        continuousPoll();
+        console.log('[RaceContext] Race day detected — continuous live polling started');
+      } else {
+        // PAST OR FUTURE EVENT → single load only
+        loadResults();
+        console.log('[RaceContext] Historical/future event — loaded once (no polling)');
       }
-
-      // Immediately start next fetch
-      if (pollingActive) {
-        setTimeout(continuousPoll, 100); // Tiny delay to keep UI responsive
-      }
-    };
-
-    // Start non-stop polling as soon as event is selected
-    if (selectedEvent) {
-      continuousPoll();
-      console.log('[RaceContext] TEST MODE: Non-stop continuous polling started (no time restrictions)');
     }
 
     // Cleanup
     return () => {
       aborted = true;
       pollingActive = false;
-      console.log('[RaceContext] Non-stop polling stopped (component unmount or event change)');
+      console.log('[RaceContext] Polling stopped (component unmount or event change)');
     };
   }, [selectedEvent, resultsVersion]);
 
