@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (COMPLETE — With Personal Photo Upload + Upcoming Events Carousel)
+// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Realistic Bib with GRR Logo + All Features)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -39,8 +39,8 @@ export default function ParticipantPage() {
   const [timeRevealed, setTimeRevealed] = useState(false);
   const [showCardPreview, setShowCardPreview] = useState(false);
 
-  // Photo upload feature
-  const [userPhoto, setUserPhoto] = useState(null); // data URL of cropped square photo
+  // Photo upload
+  const [userPhoto, setUserPhoto] = useState(null);
   const photoInputRef = useRef(null);
 
   // Upcoming events carousel
@@ -49,20 +49,20 @@ export default function ParticipantPage() {
 
   const cardRef = useRef(null);
 
-  // Sync local event with context
+  // Sync with context
   useEffect(() => {
     if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
       setLocalSelectedEvent(contextSelectedEvent);
     }
   }, [contextSelectedEvent]);
 
-  // Fetch upcoming events (same endpoint as ResultsPage)
+  // Fetch upcoming events
   useEffect(() => {
     const fetchUpcoming = async () => {
       try {
         setLoadingUpcoming(true);
         const response = await fetch('https://youkeepmoving.com/wp-json/tribe/events/v1/events?per_page=6&status=publish');
-        if (!response.ok) throw new Error('Failed to fetch');
+        if (!response.ok) throw new Error('Failed');
         const data = await response.json();
         const futureEvents = (data.events || [])
           .filter(event => new Date(event.start_date) > new Date())
@@ -94,7 +94,7 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // ---------- Photo Upload & Cropping ----------
+  // Photo handling
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -130,7 +130,7 @@ export default function ParticipantPage() {
     setUserPhoto(null);
   };
 
-  // ---------- Load Participant Data ----------
+  // Load participant data
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) {
@@ -200,7 +200,7 @@ export default function ParticipantPage() {
 
   const handleTimeComplete = () => setTimeRevealed(true);
 
-  // ---------- Card Generation ----------
+  // Card generation
   const generateResultCard = async () => {
     if (!cardRef.current) return;
     try {
@@ -241,7 +241,7 @@ export default function ParticipantPage() {
           await navigator.share({
             files: [file],
             title: 'My Race Result!',
-            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️ Find our next race at www.youkeepmoving.com`,
+            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️ Find your next race at www.youkeepmoving.com`,
           });
         } else {
           generateResultCard();
@@ -252,7 +252,7 @@ export default function ParticipantPage() {
     }
   };
 
-  // ---------- Social Shares ----------
+  // Social shares
   const shareOnFacebook = () => {
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️`);
@@ -268,7 +268,7 @@ export default function ParticipantPage() {
     alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
   };
 
-  // ---------- Navigation ----------
+  // Navigation
   const goBackToResults = () => {
     if (!selectedEvent) {
       navigate('/results');
@@ -309,7 +309,7 @@ export default function ParticipantPage() {
     navigate(`/results/${masterSlug}/${eventYear}`, { state: { highlightBib: participant.bib } });
   };
 
-  // ---------- Loading / Error States ----------
+  // Loading / Error
   if (loading || contextLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
@@ -335,7 +335,7 @@ export default function ParticipantPage() {
     );
   }
 
-  // ---------- Calculations ----------
+  // Calculations
   const overallTotal = results.length;
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
@@ -348,7 +348,6 @@ export default function ParticipantPage() {
   const isTop10Percent = participant.place && overallTotal > 10 && participant.place <= Math.ceil(overallTotal * 0.1);
   const isAgeGroupWinner = participant.age_group_place === 1;
 
-  // ---------- Render ----------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
@@ -359,7 +358,6 @@ export default function ParticipantPage() {
           <p className="text-3xl font-bold text-gemini-dark-gray mb-4">{participant.first_name} {participant.last_name}</p>
           <p className="text-2xl text-gray-600 italic mb-8">You crushed the {raceDisplayName}!</p>
 
-          {/* Badges */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             {isTop10Percent && (
               <span className="px-6 py-3 bg-yellow-400 text-white text-xl font-bold rounded-full shadow-lg">Top 10% Overall!</span>
@@ -371,7 +369,6 @@ export default function ParticipantPage() {
             )}
           </div>
 
-          {/* Event Header */}
           <div className="mb-8">
             {eventLogos[selectedEvent.id] ? (
               <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="mx-auto max-h-32 mb-6 rounded-full shadow-md" />
@@ -385,15 +382,39 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Grid with New Realistic Bib */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+          {/* Realistic Bib with GRR Logo */}
           <div className="flex justify-center">
-            <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-8 text-center w-72 h-56 flex flex-col justify-center items-center shadow-2xl font-mono">
-              <p className="text-lg uppercase tracking-wider font-bold mb-4">BIB NUMBER</p>
-              <p className="text-7xl font-black">{participant.bib || '—'}</p>
+            <div className="relative bg-white rounded-2xl shadow-2xl border-4 border-gemini-blue overflow-hidden w-72 h-[28rem] flex flex-col items-center justify-between py-10 px-6">
+              {/* Safety pin shadows */}
+              <div className="absolute top-6 left-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+              <div className="absolute top-6 right-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+              <div className="absolute bottom-6 left-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+              <div className="absolute bottom-6 right-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+
+              {/* GRR Logo */}
+              <div className="w-40 h-28 mb-6 flex items-center justify-center">
+                <img 
+                  src="/GRR.png" 
+                  alt="GRR Logo" 
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
+
+              {/* Bib Number */}
+              <p className="text-9xl font-black text-gemini-blue leading-none">
+                {participant.bib || '—'}
+              </p>
+
+              {/* Event Name */}
+              <p className="text-lg uppercase tracking-widest text-gray-600 mt-6">
+                {selectedEvent.name}
+              </p>
             </div>
           </div>
 
+          {/* Official Time */}
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-3xl p-10 shadow-2xl text-center">
             <p className="text-xl uppercase text-gray-600 tracking-wider mb-6">OFFICIAL TIME</p>
             <p className="text-7xl font-black text-gemini-blue leading-tight">
@@ -415,6 +436,7 @@ export default function ParticipantPage() {
             </p>
           </div>
 
+          {/* Rankings */}
           <div className="grid grid-cols-3 gap-6 text-center">
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Overall</p>
@@ -473,7 +495,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Create Shareable Card Button */}
+        {/* Create Shareable Card */}
         <div className="text-center my-20">
           <button
             onClick={() => setShowCardPreview(true)}
@@ -533,7 +555,6 @@ export default function ParticipantPage() {
           ) : upcomingEvents.length > 0 ? (
             <div className="overflow-x-auto pb-4 -mx-6 px-6 scrollbar-hide">
               <div className="flex gap-8 animate-scroll hover:pause">
-                {/* Duplicate array for seamless loop */}
                 {[...upcomingEvents, ...upcomingEvents].map((event, i) => (
                   <a
                     key={`${event.id}-${i}`}
@@ -584,7 +605,7 @@ export default function ParticipantPage() {
         </div>
       </div>
 
-      {/* Hidden File Input for Photo */}
+      {/* Hidden Photo Input */}
       <input
         type="file"
         ref={photoInputRef}
@@ -593,7 +614,7 @@ export default function ParticipantPage() {
         className="hidden"
       />
 
-      {/* Hidden Full-Size Card for html2canvas */}
+      {/* Hidden Full-Size Card */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -613,9 +634,18 @@ export default function ParticipantPage() {
 
           <p className="text-5xl font-black text-[#80ccd6] mb-4 drop-shadow-lg">{raceDisplayName}</p>
           <p className="text-4xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-          <h1 className="text-7xl font-black text-white mb-10 drop-shadow-2xl leading-none px-8">
-            {participant.first_name}<br />{participant.last_name}
-          </h1>
+
+          {/* Photo + Name Side-by-Side */}
+          <div className="flex items-end justify-center gap-12 mb-12">
+            {userPhoto && (
+              <div className="w-80 h-80 rounded-full overflow-hidden border-10 border-white shadow-2xl">
+                <img src={userPhoto} alt="Finisher selfie" className="w-full h-full object-cover" />
+              </div>
+            )}
+            <h1 className="text-7xl font-black text-white drop-shadow-2xl leading-none text-right">
+              {participant.first_name}<br />{participant.last_name}
+            </h1>
+          </div>
 
           <div className="mb-12">
             <p className="text-4xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
@@ -642,33 +672,19 @@ export default function ParticipantPage() {
             </div>
           </div>
 
-          {/* User Photo Overlay (bottom-right circular) */}
-          {userPhoto && (
-            <div className="absolute bottom-16 right-16 w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl">
-              <img src={userPhoto} alt="Finisher selfie" className="w-full h-full object-cover" />
-            </div>
-          )}
-
-          <p className="absolute bottom-10 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
-            Find our next race... www.youkeepmoving.com
+          <p className="absolute bottom-10 left-1/2 -translate-x-1/2 text-3xl text-white italic whitespace-nowrap">
+            Find your next race at www.youkeepmoving.com
           </p>
         </div>
       </div>
 
       {/* Card Preview Modal */}
       {showCardPreview && (
-        <div
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
-          onClick={() => setShowCardPreview(false)}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8 max-h-screen overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8 max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-6">Your Result Card 🎉</h3>
             <p className="text-xl text-center text-gray-600 mb-8">This is exactly what will be shared!</p>
 
-            {/* Preview Card */}
             <div className="flex justify-center mb-10">
               <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl relative">
                 <div className="h-full flex flex-col items-center justify-start p-6 text-white text-center text-sm">
@@ -681,9 +697,21 @@ export default function ParticipantPage() {
                       <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
                     )}
                   </div>
+
                   <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
                   <p className="text-base text-gray-300 mb-3">{formatDate(selectedEvent.start_time)}</p>
-                  <h1 className="text-3xl font-black mb-4 leading-tight">{participant.first_name}<br />{participant.last_name}</h1>
+
+                  <div className="flex items-end justify-center gap-6 mb-6">
+                    {userPhoto && (
+                      <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-xl">
+                        <img src={userPhoto} alt="You" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <h1 className="text-3xl font-black leading-tight text-right">
+                      {participant.first_name}<br />{participant.last_name}
+                    </h1>
+                  </div>
+
                   <p className="text-base text-gray-400 uppercase mb-2">Finish Time</p>
                   <p className="text-5xl font-black text-[#ffd700] mb-6">{formatChronoTime(participant.chip_time)}</p>
 
@@ -705,13 +733,9 @@ export default function ParticipantPage() {
                     </div>
                   </div>
 
-                  {userPhoto && (
-                    <div className="absolute bottom-8 right-8 w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl">
-                      <img src={userPhoto} alt="You" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-
-                  <p className="text-xs text-gray-500 absolute bottom-4 left-1/2 -translate-x-1/2">www.youkeepmoving.com</p>
+                  <p className="text-xs text-white italic absolute bottom-4 left-1/2 -translate-x-1/2">
+                    Find your next race at www.youkeepmoving.com
+                  </p>
                 </div>
               </div>
             </div>
