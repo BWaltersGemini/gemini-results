@@ -1,7 +1,7 @@
 // src/pages/MasterEvents.jsx (FULLY FIXED — Uses start_time only, no more crashes)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.cjs';
+import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.js';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 

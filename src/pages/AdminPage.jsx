@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Build-safe, working "Refresh Event Details" + all features)
+// src/pages/AdminPage.jsx (BRAND NEW — Full features: Start/End Time display + Delete Event button)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -151,7 +151,6 @@ export default function AdminPage() {
     }
   };
 
-  // Helper: Get authenticated header for legacy proxy endpoints
   const getAuthHeader = async () => {
     const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
     const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
@@ -167,7 +166,6 @@ export default function AdminPage() {
     return `Bearer ${tokenRes.data.access_token}`;
   };
 
-  // Bulk fetch event_end_time using legacy proxy
   const fetchAllEventDetails = async () => {
     if (!confirm(`Fetch end times for all ${chronoEvents.length} events? This may take a minute.`)) return;
 
@@ -205,7 +203,6 @@ export default function AdminPage() {
     setSaveStatus(`End times refreshed: ${successCount} succeeded, ${failCount} failed`);
     setTimeout(() => setSaveStatus(''), 8000);
 
-    // Reload events to reflect updates
     const { data } = await supabase.from('chronotrack_events').select('*');
     setChronoEvents(data || []);
   };
@@ -234,6 +231,19 @@ export default function AdminPage() {
     setSaveStatus(`Bulk publish complete: ${successCount} succeeded, ${failCount} failed`);
     setTimeout(() => setSaveStatus(''), 8000);
     if (refreshResults) refreshResults();
+  };
+
+  const formatDateTime = (epoch) => {
+    if (!epoch || isNaN(epoch)) return 'Not set';
+    const date = new Date(epoch * 1000);
+    return date.toLocaleString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
   };
 
   const formatDate = (epoch) => {
@@ -445,6 +455,46 @@ export default function AdminPage() {
     }
   };
 
+  // NEW: Delete Event — removes event + all results (perfect for cleaning test events)
+  const handleDeleteEvent = async (eventId, eventName) => {
+    if (!confirm(`PERMANENTLY delete event "${eventName}" (ID: ${eventId}) and ALL its results? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Delete all results first
+      const { error: resultsError } = await adminSupabase
+        .from('chronotrack_results')
+        .delete()
+        .eq('event_id', eventId);
+
+      if (resultsError) throw resultsError;
+
+      // Then delete the event record
+      const { error: eventError } = await adminSupabase
+        .from('chronotrack_events')
+        .delete()
+        .eq('id', eventId);
+
+      if (eventError) throw eventError;
+
+      // Update local state
+      setChronoEvents(prev => prev.filter(e => e.id !== eventId));
+      setParticipantCounts(prev => {
+        const copy = { ...prev };
+        delete copy[eventId];
+        return copy;
+      });
+
+      setSaveStatus(`Event "${eventName}" and its results permanently deleted`);
+      setTimeout(() => setSaveStatus(''), 6000);
+    } catch (err) {
+      console.error('[Admin] Event deletion failed:', err);
+      setSaveStatus('Deletion failed — see console');
+      setTimeout(() => setSaveStatus(''), 8000);
+    }
+  };
+
   const handleFileUpload = async (e, type) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -616,8 +666,12 @@ export default function AdminPage() {
                     >
                       <div>
                         <h3 className="text-2xl font-bold text-gemini-dark-gray">
-                          {displayName} <span className="text-lg font-normal text-gray-500">({formatDate(event.start_time)})</span>
+                          {displayName}
                         </h3>
+                        <p className="text-gray-600 mt-2">
+                          <strong>Start:</strong> {formatDateTime(event.start_time)} <br />
+                          <strong>End:</strong> {formatDateTime(event.event_end_time)}
+                        </p>
                         <p className="text-gray-600 mt-1">
                           ID: {event.id} • <strong>{count} participants published</strong>
                         </p>
@@ -738,13 +792,20 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        <div className="mt-8 flex justify-center">
+                        <div className="mt-8 flex flex-col sm:flex-row justify-center gap-6">
                           <button
                             onClick={() => refreshAndPublishResults(event.id)}
                             disabled={refreshingEvent === event.id}
                             className="px-10 py-4 bg-green-600 text-white text-xl font-bold rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition shadow-lg"
                           >
                             {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteEvent(event.id, displayName)}
+                            className="px-10 py-4 bg-red-600 text-white text-xl font-bold rounded-xl hover:bg-red-700 transition shadow-lg"
+                          >
+                            Delete Event
                           </button>
                         </div>
 
