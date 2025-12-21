@@ -1,16 +1,15 @@
 // src/api/chronotrackapi.js
-// FINAL — Hybrid approach: Direct param auth for events (working) + Proxy for token + results/races (bypasses CORS)
-// This combines the best of both worlds: reliable event loading + secure results fetching
+// FINAL — Hybrid: Direct param auth for events (no CORS) + Proxy for token/results (bypasses CORS on oauth2/token)
 
 import axios from 'axios';
 
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
-const PROXY_BASE = '/chrono-api'; // Your Vercel serverless proxy endpoint
+const PROXY_BASE = '/chrono-api'; // Your Vercel serverless proxy
 
 let accessToken = null;
 let tokenExpiration = 0;
 
-// Token management via proxy (bypasses CORS)
+// Token management via proxy (avoids CORS on oauth2/token endpoint)
 const fetchAccessToken = async () => {
   const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
   const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
@@ -51,9 +50,9 @@ const getAuthHeader = async () => {
     await fetchAccessToken();
   }
   return `Bearer ${accessToken}`;
-`;
+};
 
-// === EVENTS: Use direct parameter auth (proven working, no CORS) ===
+// EVENTS: Direct parameter authentication (no CORS issues, proven to work)
 export const fetchEvents = async () => {
   const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
   const userId = import.meta.env.VITE_CHRONOTRACK_USER;
@@ -85,7 +84,7 @@ export const fetchEvents = async () => {
   }
 };
 
-// === RACES & RESULTS: Use proxy + Bearer token (bypasses CORS on token endpoint) ===
+// RACES: Via proxy + Bearer token
 export const fetchRacesForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
@@ -103,7 +102,7 @@ export const fetchRacesForEvent = async (eventId) => {
   }
 };
 
-// Helper: fetch all results from a single bracket via proxy
+// Helper: fetch all results from one bracket via proxy
 const fetchAllBracketResults = async (bracketId) => {
   let page = 1;
   const pageSize = 1000;
@@ -139,13 +138,15 @@ const fetchAllBracketResults = async (bracketId) => {
   return allResults;
 };
 
-// Main results fetch via proxy
+// RESULTS: Via proxy + full pagination + gender/division places
 export const fetchResultsForEvent = async (eventId) => {
+  if (!eventId) throw new Error('eventId required');
+
   try {
-    // Get races for bracket lookup
+    // Fetch races (for logging/context)
     const races = await fetchRacesForEvent(eventId);
 
-    // Get all brackets
+    // Fetch all brackets
     const authHeader = await getAuthHeader();
     const bracketsResponse = await axios.get(`${PROXY_BASE}/api/event/${eventId}/bracket`, {
       headers: { Authorization: authHeader },
@@ -155,30 +156,30 @@ export const fetchResultsForEvent = async (eventId) => {
 
     const allBrackets = bracketsResponse.data.event_bracket || [];
 
-    const bracketIds = allBrackets
+    const leaderboardBrackets = allBrackets
       .filter(b => b.bracket_wants_leaderboard === '1')
       .map(b => b.bracket_id)
       .filter(Boolean);
 
-    if (bracketIds.length === 0) {
+    if (leaderboardBrackets.length === 0) {
       console.log(`[ChronoTrack] No leaderboard brackets for event ${eventId}`);
       return [];
     }
 
-    console.log(`[ChronoTrack] Fetching results from ${bracketIds.length} brackets`);
+    console.log(`[ChronoTrack] Fetching results from ${leaderboardBrackets.length} brackets`);
 
-    // Fetch in batches
+    // Batch fetch
     const batchSize = 5;
     const allBracketResults = [];
 
-    for (let i = 0; i < bracketIds.length; i += batchSize) {
-      const batch = bracketIds.slice(i, i + batchSize);
+    for (let i = 0; i < leaderboardBrackets.length; i += batchSize) {
+      const batch = leaderboardBrackets.slice(i, i + batchSize);
       const promises = batch.map(id => fetchAllBracketResults(id));
       const results = await Promise.all(promises);
       results.forEach(res => allBracketResults.push(...res));
     }
 
-    // Deduplicate
+    // Deduplicate by entry_id
     const seen = new Set();
     const deduped = allBracketResults.filter(r => {
       const id = r.results_entry_id || r.entry_id;
@@ -188,7 +189,7 @@ export const fetchResultsForEvent = async (eventId) => {
       return true;
     });
 
-    // Gender & division place mapping
+    // Build gender & division place maps
     const genderPlaces = {};
     const divisionPlaces = {};
 
@@ -201,11 +202,10 @@ export const fetchResultsForEvent = async (eventId) => {
       }
 
       if (r.results_bracket_rank && r.results_primary_bracket_name) {
-        const key = entryId;
         const place = parseInt(r.results_bracket_rank, 10);
-        const existing = divisionPlaces[key];
+        const existing = divisionPlaces[entryId];
         if (!existing || place < existing.place) {
-          divisionPlaces[key] = {
+          divisionPlaces[entryId] = {
             name: r.results_primary_bracket_name.trim(),
             place,
           };
