@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Fixed Mobile Pace Text + Sticky Search Below Navbar)
+// src/pages/ResultsPage.jsx (FINAL — Complete with All Latest Fixes & Enhancements)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -225,7 +225,104 @@ export default function ResultsPage() {
 
   // MASTER LANDING PAGE
   if (!selectedEvent) {
-    // ... (unchanged master landing page)
+    const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
+    const masterEventTiles = visibleMasters
+      .map((storedKey) => {
+        const displayName = editedEvents[storedKey]?.name || storedKey;
+        const eventIds = (masterGroups[storedKey] || []).map(String);
+        const masterEvents = events.filter((e) => e && e.id && eventIds.includes(String(e.id)));
+        if (masterEvents.length === 0) return null;
+        const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
+        const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
+        const masterSlug = slugify(storedKey);
+        const latestYear = getYearFromEvent(latestEvent);
+        return { storedKey, displayName, logo, dateEpoch: latestEvent.start_time, masterSlug, latestYear };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
+      .slice(0, 3);
+
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">Race Results</h1>
+            <p className="text-xl text-gray-600">Recent race series</p>
+          </div>
+
+          {masterEventTiles.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+              {masterEventTiles.map((master) => (
+                <Link
+                  key={master.storedKey}
+                  to={`/results/${master.masterSlug}/${master.latestYear}`}
+                  className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                >
+                  <div className="h-64 bg-gray-50 flex items-center justify-center p-6">
+                    {master.logo ? (
+                      <img src={master.logo} alt={master.displayName} className="max-h-52 max-w-full object-contain" />
+                    ) : (
+                      <span className="text-8xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
+                    )}
+                  </div>
+                  <div className="p-8 text-center">
+                    <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
+                      {master.displayName}
+                    </h3>
+                    <p className="text-lg text-gray-600 mb-6">Latest: {formatDate(master.dateEpoch)}</p>
+                    <span className="text-gemini-blue font-bold text-lg group-hover:underline">View Results →</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
+          )}
+
+          <div className="mt-20">
+            <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
+            {loadingUpcoming ? (
+              <p className="text-center text-gray-600 text-xl">Loading upcoming events...</p>
+            ) : upcomingEvents.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {upcomingEvents.map((event) => (
+                  <a
+                    key={event.id}
+                    href={event.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  >
+                    {event.image?.url ? (
+                      <img
+                        src={event.image.url}
+                        alt={event.title.rendered || event.title}
+                        className="w-full h-60 object-cover"
+                      />
+                    ) : (
+                      <div className="h-60 bg-gray-200 flex items-center justify-center">
+                        <span className="text-gray-500 font-medium">No Image</span>
+                      </div>
+                    )}
+                    <div className="p-6">
+                      <h3 className="text-xl font-bold text-gemini-dark-gray mb-2 line-clamp-2">
+                        {event.title.rendered || event.title}
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        {new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                      <span className="text-gemini-blue font-bold group-hover:underline">Register →</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-600 text-xl">No upcoming events at this time.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // EVENT RESULTS PAGE
@@ -249,9 +346,9 @@ export default function ResultsPage() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-12">
-        {/* Sticky Search Bar — Now starts below navbar (top-20 → top-24 on mobile) */}
-        <div className={`sticky z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''} top-20 md:top-20 lg:top-24`}>
+      <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
+        {/* Sticky Search Bar — Fixed visibility on mobile */}
+        <div className={`sticky z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''} top-24 md:top-20`}>
           <div className="relative max-w-3xl mx-auto">
             <input
               type="text"
