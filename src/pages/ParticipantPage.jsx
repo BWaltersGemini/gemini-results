@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Click Outside to Close + Mobile Card Preview Fix)
+// src/pages/ParticipantPage.jsx (COMPLETE — With Personal Photo Upload + Upcoming Events Carousel)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -39,13 +39,44 @@ export default function ParticipantPage() {
   const [timeRevealed, setTimeRevealed] = useState(false);
   const [showCardPreview, setShowCardPreview] = useState(false);
 
+  // Photo upload feature
+  const [userPhoto, setUserPhoto] = useState(null); // data URL of cropped square photo
+  const photoInputRef = useRef(null);
+
+  // Upcoming events carousel
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(true);
+
   const cardRef = useRef(null);
 
+  // Sync local event with context
   useEffect(() => {
     if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
       setLocalSelectedEvent(contextSelectedEvent);
     }
   }, [contextSelectedEvent]);
+
+  // Fetch upcoming events (same endpoint as ResultsPage)
+  useEffect(() => {
+    const fetchUpcoming = async () => {
+      try {
+        setLoadingUpcoming(true);
+        const response = await fetch('https://youkeepmoving.com/wp-json/tribe/events/v1/events?per_page=6&status=publish');
+        if (!response.ok) throw new Error('Failed to fetch');
+        const data = await response.json();
+        const futureEvents = (data.events || [])
+          .filter(event => new Date(event.start_date) > new Date())
+          .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+        setUpcomingEvents(futureEvents);
+      } catch (err) {
+        console.error('Failed to load upcoming events:', err);
+        setUpcomingEvents([]);
+      } finally {
+        setLoadingUpcoming(false);
+      }
+    };
+    fetchUpcoming();
+  }, []);
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -63,10 +94,46 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
+  // ---------- Photo Upload & Cropping ----------
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = Math.min(img.width, img.height);
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, size, size);
+        setUserPhoto(canvas.toDataURL('image/jpeg', 0.9));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerCamera = () => {
+    photoInputRef.current?.setAttribute('capture', 'environment');
+    photoInputRef.current?.click();
+  };
+
+  const triggerGallery = () => {
+    photoInputRef.current?.removeAttribute('capture');
+    photoInputRef.current?.click();
+  };
+
+  const removePhoto = () => {
+    setUserPhoto(null);
+  };
+
+  // ---------- Load Participant Data ----------
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) {
-        // Trigger confetti on direct load
         if (!timeRevealed && participant.chip_time) {
           confetti({
             particleCount: 200,
@@ -85,7 +152,6 @@ export default function ParticipantPage() {
         if (contextLoading || events.length === 0) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
-
         if (events.length === 0) throw new Error('Events not loaded yet');
 
         let targetEvent = selectedEvent || contextSelectedEvent;
@@ -95,7 +161,6 @@ export default function ParticipantPage() {
             targetEvent = events.find(e => e.id === resultWithBib.event_id);
           }
         }
-
         if (!targetEvent) throw new Error('Event not found');
 
         setLocalSelectedEvent(targetEvent);
@@ -116,7 +181,6 @@ export default function ParticipantPage() {
 
         setParticipant(found);
 
-        // Celebration confetti on load
         confetti({
           particleCount: 250,
           spread: 100,
@@ -134,10 +198,9 @@ export default function ParticipantPage() {
     fetchDataIfMissing();
   }, [bib, events, contextResults, contextLoading, initialState]);
 
-  const handleTimeComplete = () => {
-    setTimeRevealed(true);
-  };
+  const handleTimeComplete = () => setTimeRevealed(true);
 
+  // ---------- Card Generation ----------
   const generateResultCard = async () => {
     if (!cardRef.current) return;
     try {
@@ -189,7 +252,7 @@ export default function ParticipantPage() {
     }
   };
 
-  // Social share functions
+  // ---------- Social Shares ----------
   const shareOnFacebook = () => {
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️`);
@@ -205,6 +268,7 @@ export default function ParticipantPage() {
     alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
   };
 
+  // ---------- Navigation ----------
   const goBackToResults = () => {
     if (!selectedEvent) {
       navigate('/results');
@@ -215,32 +279,22 @@ export default function ParticipantPage() {
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
-    if (foundMaster) {
-      masterSlug = slugify(foundMaster[0]);
-    }
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
 
   const handleDivisionClick = () => {
-    if (!participant?.age_group_name || !selectedEvent) {
-      goBackToResults();
-      return;
-    }
+    if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
-    if (foundMaster) {
-      masterSlug = slugify(foundMaster[0]);
-    }
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`, {
-      state: {
-        divisionFilter: participant.age_group_name,
-        highlightBib: participant.bib,
-      },
+      state: { divisionFilter: participant.age_group_name, highlightBib: participant.bib },
     });
   };
 
@@ -250,17 +304,12 @@ export default function ParticipantPage() {
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
-    if (foundMaster) {
-      masterSlug = slugify(foundMaster[0]);
-    }
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
     const eventYear = getYearFromEvent(selectedEvent);
-    navigate(`/results/${masterSlug}/${eventYear}`, {
-      state: {
-        highlightBib: participant.bib,
-      },
-    });
+    navigate(`/results/${masterSlug}/${eventYear}`, { state: { highlightBib: participant.bib } });
   };
 
+  // ---------- Loading / Error States ----------
   if (loading || contextLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
@@ -278,10 +327,7 @@ export default function ParticipantPage() {
         <div className="text-center max-w-md">
           <p className="text-3xl font-bold text-gemini-red mb-6">Participant Not Found</p>
           <p className="text-xl text-gray-700 mb-8">{fetchError || 'Unable to load participant data.'}</p>
-          <button
-            onClick={goBackToResults}
-            className="px-12 py-5 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl"
-          >
+          <button onClick={goBackToResults} className="px-12 py-5 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl">
             ← Back to Results
           </button>
         </div>
@@ -289,45 +335,34 @@ export default function ParticipantPage() {
     );
   }
 
+  // ---------- Calculations ----------
   const overallTotal = results.length;
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
-
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
-
   const chipTimeSeconds = parseChipTime(participant.chip_time);
-
-  const currentMasterKey = Object.keys(masterGroups).find(key =>
-    masterGroups[key]?.includes(selectedEvent?.id?.toString())
-  );
+  const currentMasterKey = Object.keys(masterGroups).find(key => masterGroups[key]?.includes(selectedEvent?.id?.toString()));
   const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
 
-  // Badges
   const isTop10Percent = participant.place && overallTotal > 10 && participant.place <= Math.ceil(overallTotal * 0.1);
   const isAgeGroupWinner = participant.age_group_place === 1;
 
+  // ---------- Render ----------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
+
         {/* Hero Celebration */}
         <div className="text-center mb-12">
-          <h1 className="text-6xl md:text-7xl font-extrabold text-gemini-blue mb-6 drop-shadow-lg">
-            Congratulations!
-          </h1>
-          <p className="text-3xl font-bold text-gemini-dark-gray mb-4">
-            {participant.first_name} {participant.last_name}
-          </p>
-          <p className="text-2xl text-gray-600 italic mb-8">
-            You crushed the {raceDisplayName}!
-          </p>
+          <h1 className="text-6xl md:text-7xl font-extrabold text-gemini-blue mb-6 drop-shadow-lg">Congratulations!</h1>
+          <p className="text-3xl font-bold text-gemini-dark-gray mb-4">{participant.first_name} {participant.last_name}</p>
+          <p className="text-2xl text-gray-600 italic mb-8">You crushed the {raceDisplayName}!</p>
 
           {/* Badges */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             {isTop10Percent && (
-              <span className="px-6 py-3 bg-yellow-400 text-white text-xl font-bold rounded-full shadow-lg">
-                Top 10% Overall!
-              </span>
+              <span className="px-6 py-3 bg-yellow-400 text-white text-xl font-bold rounded-full shadow-lg">Top 10% Overall!</span>
             )}
             {isAgeGroupWinner && (
               <span className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xl font-bold rounded-full shadow-lg flex items-center gap-2">
@@ -339,11 +374,7 @@ export default function ParticipantPage() {
           {/* Event Header */}
           <div className="mb-8">
             {eventLogos[selectedEvent.id] ? (
-              <img
-                src={eventLogos[selectedEvent.id]}
-                alt="Event Logo"
-                className="mx-auto max-h-32 mb-6 rounded-full shadow-md"
-              />
+              <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="mx-auto max-h-32 mb-6 rounded-full shadow-md" />
             ) : (
               <div className="mx-auto w-40 h-40 bg-gray-200 rounded-full mb-6 flex items-center justify-center">
                 <span className="text-6xl">🏁</span>
@@ -356,7 +387,6 @@ export default function ParticipantPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-          {/* Bib */}
           <div className="flex justify-center">
             <div className="bg-gemini-blue/90 text-white border-4 border-gemini-dark-gray rounded-xl p-8 text-center w-72 h-56 flex flex-col justify-center items-center shadow-2xl font-mono">
               <p className="text-lg uppercase tracking-wider font-bold mb-4">BIB NUMBER</p>
@@ -364,13 +394,10 @@ export default function ParticipantPage() {
             </div>
           </div>
 
-          {/* Time */}
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-3xl p-10 shadow-2xl text-center">
             <p className="text-xl uppercase text-gray-600 tracking-wider mb-6">OFFICIAL TIME</p>
             <p className="text-7xl font-black text-gemini-blue leading-tight">
-              {timeRevealed ? (
-                formatChronoTime(participant.chip_time)
-              ) : (
+              {timeRevealed ? formatChronoTime(participant.chip_time) : (
                 <CountUp
                   start={0}
                   end={chipTimeSeconds}
@@ -388,34 +415,24 @@ export default function ParticipantPage() {
             </p>
           </div>
 
-          {/* Rankings */}
           <div className="grid grid-cols-3 gap-6 text-center">
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Overall</p>
-              <p className="text-5xl font-bold text-gemini-dark-gray">
-                {participant.place || '—'}
-              </p>
+              <p className="text-5xl font-bold text-gemini-dark-gray">{participant.place || '—'}</p>
               <p className="text-lg text-gray-600">of {overallTotal}</p>
             </div>
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gender</p>
-              <p className="text-5xl font-bold text-gemini-dark-gray">
-                {participant.gender_place || '—'}
-              </p>
+              <p className="text-5xl font-bold text-gemini-dark-gray">{participant.gender_place || '—'}</p>
               <p className="text-lg text-gray-600">of {genderTotal}</p>
             </div>
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Division</p>
-              <button
-                onClick={handleDivisionClick}
-                className="text-4xl font-bold text-[#80ccd6] hover:underline transition"
-              >
+              <button onClick={handleDivisionClick} className="text-4xl font-bold text-[#80ccd6] hover:underline transition">
                 {participant.age_group_place || '—'}
               </button>
               <p className="text-lg text-gray-600">of {divisionTotal}</p>
-              <p className="text-sm text-[#80ccd6] mt-2 underline cursor-pointer" onClick={handleDivisionClick}>
-                👥 View Division
-              </p>
+              <p className="text-sm text-[#80ccd6] mt-2 underline cursor-pointer" onClick={handleDivisionClick}>👥 View Division</p>
             </div>
           </div>
         </div>
@@ -456,7 +473,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Create & Share Card */}
+        {/* Create Shareable Card Button */}
         <div className="text-center my-20">
           <button
             onClick={() => setShowCardPreview(true)}
@@ -470,22 +487,13 @@ export default function ParticipantPage() {
         <div className="text-center mb-16">
           <p className="text-2xl font-bold text-gemini-dark-gray mb-8">Share Your Achievement!</p>
           <div className="flex justify-center gap-8 flex-wrap">
-            <button
-              onClick={shareOnFacebook}
-              className="px-8 py-4 bg-[#1877F2] text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3"
-            >
+            <button onClick={shareOnFacebook} className="px-8 py-4 bg-[#1877F2] text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3">
               <span className="text-3xl">f</span> Share on Facebook
             </button>
-            <button
-              onClick={shareOnX}
-              className="px-8 py-4 bg-black text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3"
-            >
+            <button onClick={shareOnX} className="px-8 py-4 bg-black text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3">
               <span className="text-3xl">𝕏</span> Post on X
             </button>
-            <button
-              onClick={shareOnInstagram}
-              className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3"
-            >
+            <button onClick={shareOnInstagram} className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3">
               <span className="text-3xl">📸</span> Instagram (Download First)
             </button>
           </div>
@@ -501,154 +509,72 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden Card for Download/Share */}
-        <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
-          <div ref={cardRef} className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-8 pt-8 pb-20" style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-            {/* Logo */}
-            <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 mb-8 flex items-center justify-center">
-              {masterLogo ? (
-                <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-40 object-contain" crossOrigin="anonymous" />
-              ) : eventLogos[selectedEvent.id] ? (
-                <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-36 object-contain" crossOrigin="anonymous" />
-              ) : (
-                <h2 className="text-5xl font-black text-gemini-dark-gray leading-tight">
-                  {selectedEvent.name}
-                </h2>
-              )}
-            </div>
-
-            {/* Race & Date */}
-            <p className="text-5xl font-black text-[#80ccd6] mb-4 drop-shadow-lg">
-              {raceDisplayName}
-            </p>
-            <p className="text-4xl text-gray-300 mb-8">
-              {formatDate(selectedEvent.start_time)}
-            </p>
-
-            {/* Name */}
-            <h1 className="text-7xl font-black text-white mb-10 drop-shadow-2xl leading-none px-8">
-              {participant.first_name}<br />{participant.last_name}
-            </h1>
-
-            {/* Time */}
-            <div className="mb-12">
-              <p className="text-4xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
-              <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
-                {formatChronoTime(participant.chip_time)}
-              </p>
-            </div>
-
-            {/* Rankings */}
-            <div className="grid grid-cols-3 gap-10 text-white w-full max-w-5xl mb-16">
-              <div>
-                <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
-                <p className="text-7xl font-bold text-[#ffd700] leading-none">
-                  {participant.place || '—'}
-                </p>
-                <p className="text-3xl text-gray-400 mt-3">of {overallTotal}</p>
-              </div>
-              <div>
-                <p className="text-3xl text-gray-400 uppercase mb-3">Gender</p>
-                <p className="text-7xl font-bold text-[#ffd700] leading-none">
-                  {participant.gender_place || '—'}
-                </p>
-                <p className="text-3xl text-gray-400 mt-3">of {genderTotal}</p>
-              </div>
-              <div>
-                <p className="text-3xl text-gray-400 uppercase mb-3">Division</p>
-                <p className="text-7xl font-bold text-[#ffd700] leading-none">
-                  {participant.age_group_place || '—'}
-                </p>
-                <p className="text-3xl text-gray-400 mt-3">of {divisionTotal}</p>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <p className="absolute bottom-10 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
-              Find our next race... www.youkeepmoving.com
-            </p>
-          </div>
-        </div>
-
-        {/* Card Preview Modal — Better mobile sizing */}
-        {showCardPreview && (
-          <div 
-            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
-            onClick={goBackToResults} // ← Click outside to close and return to results
-          >
-            <div 
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8" 
-              onClick={(e) => e.stopPropagation()} // Prevent close when clicking inside
-            >
-              <div className="text-center mb-8">
-                <h3 className="text-4xl font-bold text-gemini-dark-gray">Your Result Card 🎉</h3>
-                <p className="text-xl text-gray-600 mt-4">This is exactly what will be shared!</p>
-              </div>
-
-              {/* Mobile-friendly preview */}
-              <div className="flex justify-center mb-10">
-                <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl">
-                  <div className="h-full flex flex-col items-center justify-start p-6 text-white text-center text-sm">
-                    <div className="w-full bg-white rounded-2xl p-4 mb-4">
-                      {masterLogo ? (
-                        <img src={masterLogo} alt="Logo" className="w-full max-h-20 object-contain mx-auto" />
-                      ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Logo" className="w-full max-h-16 object-contain mx-auto" />
-                      ) : (
-                        <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
-                      )}
-                    </div>
-                    <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
-                    <p className="text-base text-gray-300 mb-3">{formatDate(selectedEvent.start_time)}</p>
-                    <h1 className="text-3xl font-black mb-4 leading-tight">
-                      {participant.first_name}<br />{participant.last_name}
-                    </h1>
-                    <p className="text-base text-gray-400 uppercase mb-2">Finish Time</p>
-                    <p className="text-5xl font-black text-[#ffd700] mb-6">
-                      {formatChronoTime(participant.chip_time)}
-                    </p>
-                    <div className="grid grid-cols-3 gap-3 text-xs w-full mb-6">
-                      <div>
-                        <p className="text-gray-400 uppercase">Overall</p>
-                        <p className="text-3xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
-                        <p className="text-gray-400">of {overallTotal}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 uppercase">Gender</p>
-                        <p className="text-3xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
-                        <p className="text-gray-400">of {genderTotal}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 uppercase">Division</p>
-                        <p className="text-3xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
-                        <p className="text-gray-400">of {divisionTotal}</p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500">Find our next race... www.youkeepmoving.com</p>
-                  </div>
+        {/* Sponsors */}
+        {ads.length > 0 && (
+          <div className="mb-20">
+            <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">Event Sponsors</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+              {ads.map((ad, i) => (
+                <div key={i} className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 hover:shadow-2xl transition">
+                  <img src={ad} alt="Sponsor" className="w-full h-auto" />
                 </div>
-              </div>
-
-              <div className="flex justify-center gap-6">
-                <button
-                  onClick={generateResultCard}
-                  className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl"
-                >
-                  Download
-                </button>
-                <button
-                  onClick={shareResultCard}
-                  className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition shadow-xl"
-                >
-                  Share
-                </button>
-              </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Back & Sponsors */}
-        <div className="text-center mb-16">
+        {/* Upcoming Events Carousel */}
+        <section className="mt-20">
+          <h2 className="text-5xl font-black text-center text-gemini-dark-gray mb-12">Ready for Your Next Adventure?</h2>
+          <p className="text-2xl text-center text-gray-600 mb-12">From 5K to Marathon — we’ve got your next goal.</p>
+
+          {loadingUpcoming ? (
+            <p className="text-center text-gray-600 text-xl">Loading upcoming races...</p>
+          ) : upcomingEvents.length > 0 ? (
+            <div className="overflow-x-auto pb-4 -mx-6 px-6 scrollbar-hide">
+              <div className="flex gap-8 animate-scroll hover:pause">
+                {/* Duplicate array for seamless loop */}
+                {[...upcomingEvents, ...upcomingEvents].map((event, i) => (
+                  <a
+                    key={`${event.id}-${i}`}
+                    href={event.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0 w-80 group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  >
+                    {event.image?.url ? (
+                      <img
+                        src={event.image.url}
+                        alt={event.title.rendered || event.title}
+                        className="w-full h-48 object-cover group-hover:scale-110 transition duration-500"
+                      />
+                    ) : (
+                      <div className="h-48 bg-gray-200 flex items-center justify-center">
+                        <span className="text-gray-500 font-medium">No Image</span>
+                      </div>
+                    )}
+                    <div className="p-6">
+                      <h3 className="text-xl font-bold text-gemini-dark-gray mb-2 line-clamp-2">
+                        {event.title.rendered || event.title}
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        {new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                      <span className="inline-block px-6 py-3 bg-gemini-blue text-white font-bold rounded-full hover:bg-gemini-blue/90 transition">
+                        Register Now →
+                      </span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-gray-600 text-xl">No upcoming events right now — check back soon!</p>
+          )}
+        </section>
+
+        {/* Back Button */}
+        <div className="text-center mt-16">
           <button
             onClick={goBackToResults}
             className="px-12 py-5 bg-gray-800 text-white font-bold text-xl rounded-full hover:bg-gray-700 transition shadow-xl"
@@ -656,23 +582,170 @@ export default function ParticipantPage() {
             ← Back to Results
           </button>
         </div>
+      </div>
 
-        {ads.length > 0 && (
-          <div>
-            <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">Event Sponsors</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-              {ads.map((ad, i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 hover:shadow-2xl transition"
-                >
-                  <img src={ad} alt="Sponsor" className="w-full h-auto" />
-                </div>
-              ))}
+      {/* Hidden File Input for Photo */}
+      <input
+        type="file"
+        ref={photoInputRef}
+        accept="image/*"
+        onChange={handlePhotoUpload}
+        className="hidden"
+      />
+
+      {/* Hidden Full-Size Card for html2canvas */}
+      <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
+        <div
+          ref={cardRef}
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] relative overflow-hidden flex flex-col items-center justify-start text-center px-8 pt-8 pb-20"
+          style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
+        >
+          {/* Logo */}
+          <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 mb-8 flex items-center justify-center">
+            {masterLogo ? (
+              <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-40 object-contain" crossOrigin="anonymous" />
+            ) : eventLogos[selectedEvent.id] ? (
+              <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-36 object-contain" crossOrigin="anonymous" />
+            ) : (
+              <h2 className="text-5xl font-black text-gemini-dark-gray leading-tight">{selectedEvent.name}</h2>
+            )}
+          </div>
+
+          <p className="text-5xl font-black text-[#80ccd6] mb-4 drop-shadow-lg">{raceDisplayName}</p>
+          <p className="text-4xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
+          <h1 className="text-7xl font-black text-white mb-10 drop-shadow-2xl leading-none px-8">
+            {participant.first_name}<br />{participant.last_name}
+          </h1>
+
+          <div className="mb-12">
+            <p className="text-4xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
+            <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
+              {formatChronoTime(participant.chip_time)}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-10 text-white w-full max-w-5xl mb-16">
+            <div>
+              <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
+              <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
+              <p className="text-3xl text-gray-400 mt-3">of {overallTotal}</p>
+            </div>
+            <div>
+              <p className="text-3xl text-gray-400 uppercase mb-3">Gender</p>
+              <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.gender_place || '—'}</p>
+              <p className="text-3xl text-gray-400 mt-3">of {genderTotal}</p>
+            </div>
+            <div>
+              <p className="text-3xl text-gray-400 uppercase mb-3">Division</p>
+              <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.age_group_place || '—'}</p>
+              <p className="text-3xl text-gray-400 mt-3">of {divisionTotal}</p>
             </div>
           </div>
-        )}
+
+          {/* User Photo Overlay (bottom-right circular) */}
+          {userPhoto && (
+            <div className="absolute bottom-16 right-16 w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl">
+              <img src={userPhoto} alt="Finisher selfie" className="w-full h-full object-cover" />
+            </div>
+          )}
+
+          <p className="absolute bottom-10 left-1/2 -translate-x-1/2 text-3xl text-gray-500 whitespace-nowrap">
+            Find our next race... www.youkeepmoving.com
+          </p>
+        </div>
       </div>
+
+      {/* Card Preview Modal */}
+      {showCardPreview && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setShowCardPreview(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8 max-h-screen overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-6">Your Result Card 🎉</h3>
+            <p className="text-xl text-center text-gray-600 mb-8">This is exactly what will be shared!</p>
+
+            {/* Preview Card */}
+            <div className="flex justify-center mb-10">
+              <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl relative">
+                <div className="h-full flex flex-col items-center justify-start p-6 text-white text-center text-sm">
+                  <div className="w-full bg-white rounded-2xl p-4 mb-4">
+                    {masterLogo ? (
+                      <img src={masterLogo} alt="Logo" className="w-full max-h-20 object-contain mx-auto" />
+                    ) : eventLogos[selectedEvent.id] ? (
+                      <img src={eventLogos[selectedEvent.id]} alt="Logo" className="w-full max-h-16 object-contain mx-auto" />
+                    ) : (
+                      <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
+                    )}
+                  </div>
+                  <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
+                  <p className="text-base text-gray-300 mb-3">{formatDate(selectedEvent.start_time)}</p>
+                  <h1 className="text-3xl font-black mb-4 leading-tight">{participant.first_name}<br />{participant.last_name}</h1>
+                  <p className="text-base text-gray-400 uppercase mb-2">Finish Time</p>
+                  <p className="text-5xl font-black text-[#ffd700] mb-6">{formatChronoTime(participant.chip_time)}</p>
+
+                  <div className="grid grid-cols-3 gap-3 text-xs w-full mb-6">
+                    <div>
+                      <p className="text-gray-400 uppercase">Overall</p>
+                      <p className="text-3xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                      <p className="text-gray-400">of {overallTotal}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 uppercase">Gender</p>
+                      <p className="text-3xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                      <p className="text-gray-400">of {genderTotal}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 uppercase">Division</p>
+                      <p className="text-3xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                      <p className="text-gray-400">of {divisionTotal}</p>
+                    </div>
+                  </div>
+
+                  {userPhoto && (
+                    <div className="absolute bottom-8 right-8 w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl">
+                      <img src={userPhoto} alt="You" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500 absolute bottom-4 left-1/2 -translate-x-1/2">www.youkeepmoving.com</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Photo Upload Section */}
+            <div className="mb-10">
+              <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
+              <div className="flex justify-center gap-6 mb-6">
+                <button onClick={triggerCamera} className="px-8 py-4 bg-gemini-blue text-white font-bold rounded-full hover:bg-gemini-blue/90 transition">
+                  📷 Take Photo
+                </button>
+                <button onClick={triggerGallery} className="px-8 py-4 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition">
+                  🖼️ Choose from Gallery
+                </button>
+              </div>
+              {userPhoto && (
+                <div className="text-center">
+                  <img src={userPhoto} alt="Your photo" className="w-32 h-32 object-cover rounded-full mx-auto shadow-xl mb-4" />
+                  <button onClick={removePhoto} className="text-red-600 underline">Remove Photo</button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-center gap-6">
+              <button onClick={generateResultCard} className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl">
+                Download Image
+              </button>
+              <button onClick={shareResultCard} className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition shadow-xl">
+                Share Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

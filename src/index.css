@@ -64,23 +64,55 @@ button:focus-visible {
 }
 
 /* ============================================= */
-/* NEW: Padding for fixed navbar — CRITICAL FIX  */
+/* NEW: Padding for fixed navbar — CRITICAL FIX */
 /* ============================================= */
-
 /* Add top padding to main content so it starts below the fixed navbar */
 main {
   padding-top: 160px; /* Mobile: generous space for search bar + logo */
 }
-
 @media (min-width: 768px) {
   main {
     padding-top: 140px; /* Desktop: slightly less since search bar is inline */
   }
 }
-
 /* Optional: Extra breathing room on very large screens */
 @media (min-width: 1024px) {
   main {
     padding-top: 130px;
   }
+}
+
+/* ============================================= */
+/* NEW: Infinite Horizontal Carousel Animation   */
+/* For the Upcoming Events section on ParticipantPage */
+/* ============================================= */
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  display: flex;
+  animation: scroll 35s linear infinite;
+}
+
+.hover\:pause:hover {
+  animation-play-state: paused;
+}
+
+/* ============================================= */
+/* NEW: Hide Scrollbar (but keep scrolling)     */
+/* Applied to the carousel container            */
+/* ============================================= */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
