@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Complete, Brand New Version with All UX Enhancements)
+// src/pages/ResultsPage.jsx (FINAL — Fixed Participant Navigation + Search Scroll Behavior)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -36,6 +36,9 @@ export default function ResultsPage() {
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
+  // Refs for scrolling
+  const resultsSectionRef = useRef(null);
+
   // Listen for live update toast from RaceContext
   useEffect(() => {
     const handler = (e) => {
@@ -65,6 +68,13 @@ export default function ResultsPage() {
       prevMasterKeyRef.current = masterKey;
     }
   }, [masterKey]);
+
+  // Scroll to results when search starts
+  useEffect(() => {
+    if (searchQuery && resultsSectionRef.current) {
+      resultsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [searchQuery]);
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -153,6 +163,34 @@ export default function ResultsPage() {
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Fixed participant navigation
+  const handleNameClick = (participant) => {
+    if (!participant || !selectedEvent) return;
+
+    const allMasterGroups = masterGroups;
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(allMasterGroups).find(([_, ids]) =>
+      ids.includes(String(selectedEvent.id))
+    );
+    if (foundMaster) {
+      masterSlug = slugify(foundMaster[0]);
+    }
+    const eventYear = getYearFromEvent(selectedEvent);
+    const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
+    const raceName = participantRace?.race_name || participant.race_name || 'overall';
+    const raceSlugPart = slugify(raceName);
+
+    navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
+      state: {
+        participant,
+        selectedEvent,
+        results,
+        eventLogos,
+        ads,
+      },
+    });
   };
 
   // MASTER LANDING PAGE
@@ -333,24 +371,29 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Results Tables */}
-        {displayedRaces.map((race) => {
-          const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
-          const sorted = [...raceResults].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+        {/* Results Section — Scroll target for search */}
+        <div ref={resultsSectionRef}>
+          {displayedRaces.map((race) => {
+            const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
+            const sorted = [...raceResults].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
-          return (
-            <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
-              <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">
-                {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
-              </h2>
-              <ResultsTable
-                data={sorted}
-                totalResults={sorted.length}
-                // Add pagination props as needed
-              />
-            </section>
-          );
-        })}
+            return (
+              <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
+                <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">
+                  {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
+                </h2>
+                <ResultsTable
+                  data={sorted}
+                  totalResults={sorted.length}
+                  onNameClick={handleNameClick}
+                  isMobile={window.innerWidth < 768}
+                  highlightedBib={highlightedBib}
+                  highlightedRowRef={null} // handled in table if needed
+                />
+              </section>
+            );
+          })}
+        </div>
 
         {/* Sponsors */}
         {ads.length > 0 && (
