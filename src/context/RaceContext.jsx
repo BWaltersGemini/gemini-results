@@ -1,10 +1,10 @@
-// src/context/RaceContext.jsx (FINAL — All runtime errors fixed + end_time + precise live window)
+// src/context/RaceContext.jsx (FINAL — All runtime errors fixed + end_time support)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 import axios from 'axios';
-import * as chronotrackapi from '../api/chronotrackapi.cjs'; // ← Namespace import (Vercel-safe)
+import * as chronotrackapi from '../api/chronotrackapi.cjs'; // ← Correct namespace import
 
 export const RaceContext = createContext();
 
@@ -19,7 +19,7 @@ export function RaceProvider({ children }) {
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Trigger for forcing fresh results fetch
+  // Trigger for admin refresh
   const [resultsVersion, setResultsVersion] = useState(0);
 
   // Global config
