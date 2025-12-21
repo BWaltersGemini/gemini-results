@@ -1,9 +1,8 @@
-// src/pages/ResultsPage.jsx (FULLY UPDATED — Optimized live update detection + smooth refresh)
+// src/pages/ResultsPage.jsx (FINAL — Cache-first display, no ChronoTrack fetch on load/refresh)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
-import { supabase } from '../supabaseClient';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -23,7 +22,6 @@ export default function ResultsPage() {
     editedEvents = {},
     hiddenMasters = [],
     isLiveRace,
-    refreshResults,
   } = useContext(RaceContext);
 
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -46,8 +44,7 @@ export default function ResultsPage() {
   const highlightedRowRef = useRef(null);
   const targetRaceIdRef = useRef(null);
 
-  // Live update state
-  const [lastUpdated, setLastUpdated] = useState(null);
+  // Live update indicator (triggered by RaceContext refresh)
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Reset filters on master change
@@ -60,60 +57,14 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // === OPTIMIZED LIVE UPDATE DETECTION ===
+  // Show refresh indicator when loadingResults changes (triggered by RaceContext)
   useEffect(() => {
-    if (!selectedEvent || !isLiveRace) {
-      setLastUpdated(null);
-      setIsRefreshing(false);
-      return;
-    }
-
-    let pollInterval = null;
-
-    const checkForUpdates = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('chronotrack_events')
-          .select('last_updated')
-          .eq('id', selectedEvent.id)
-          .single();
-
-        if (error) {
-          console.error('[ResultsPage] Timestamp poll error:', error);
-          return;
-        }
-
-        const newTimestamp = data?.last_updated;
-
-        if (lastUpdated && newTimestamp && newTimestamp > lastUpdated) {
-          console.log('[ResultsPage] New results detected — triggering refresh');
-          setIsRefreshing(true);
-          refreshResults(); // This triggers RaceContext to pull fresh data
-        }
-
-        setLastUpdated(newTimestamp);
-      } catch (err) {
-        console.error('[ResultsPage] Timestamp poll failed:', err);
-      }
-    };
-
-    // Initial check
-    checkForUpdates();
-
-    // Poll every 15 seconds — fast enough to feel live, light on server
-    pollInterval = setInterval(checkForUpdates, 15000);
-
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  }, [selectedEvent, isLiveRace, lastUpdated, refreshResults]);
-
-  // Clear refreshing indicator when loading completes
-  useEffect(() => {
-    if (isRefreshing && !loadingResults) {
+    if (loadingResults) {
+      setIsRefreshing(true);
+    } else {
       setIsRefreshing(false);
     }
-  }, [loadingResults, isRefreshing]);
+  }, [loadingResults]);
 
   // Helper functions
   const slugify = (text) => {
@@ -247,7 +198,7 @@ export default function ResultsPage() {
     });
   };
 
-  // Search and filtering (client-side on cached results — fast!)
+  // Search and filtering — client-side on cached results (instant)
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -475,7 +426,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Live Refresh Indicator */}
+        {/* Live Refresh Indicator — shows only when background update is happening */}
         {isLiveRace && isRefreshing && (
           <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 bg-gemini-blue text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-3 text-lg font-bold animate-pulse">
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
