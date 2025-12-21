@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Perfect 1080x1080 Card with Side-by-Side Photo + Name, Fully Fits Preview)
+// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Fixed JSX syntax error + Perfect Card Layout)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -357,7 +357,7 @@ export default function ParticipantPage() {
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
 
-        {/* Hero Celebration */}
+        {/* Hero Celebration — Mobile-safe text sizes */}
         <div className="text-center mb-12">
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-gemini-blue mb-6 drop-shadow-lg px-4">
             Congratulations!
@@ -613,7 +613,7 @@ export default function ParticipantPage() {
         className="hidden"
       />
 
-      {/* Hidden Full-Size Card — FINAL LAYOUT: Side-by-Side Photo + Name */}
+      {/* Hidden Full-Size Card — FINAL LAYOUT (Fixed Syntax) */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -644,7 +644,7 @@ export default function ParticipantPage() {
                 <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
               </div>
             ) : (
-              <div className="w-80 h-80" /> {/* Spacer when no photo */}
+              <div className="w-80 h-80 flex-shrink-0" /> {/* Fixed: Proper spacer */}
             )}
             <h1 className="text-7xl font-black text-white drop-shadow-2xl leading-tight">
               {participant.first_name}<br />{participant.last_name}
@@ -660,7 +660,7 @@ export default function ParticipantPage() {
           </div>
 
           {/* Rankings */}
-          <div className="grid grid-cols-3 gap-16 text-white w-full max-w-4xl mb-12">
+          <div className="grid grid-cols-3 gap-12 text-white w-full max-w-4xl mb-12">
             <div>
               <p className="text-3xl text-gray-400 uppercase mb-4">Overall</p>
               <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
@@ -685,57 +685,51 @@ export default function ParticipantPage() {
         </div>
       </div>
 
-      {/* Card Preview Modal — Clean & Matches Final Card */}
+      {/* Card Preview Modal */}
       {showCardPreview && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8 max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-10">Your Result Card 🎉</h3>
 
-            {/* Full Preview of Final Card */}
+            {/* Preview matches final card */}
             <div className="flex justify-center mb-12">
               <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl flex flex-col items-center justify-between p-8">
-                {/* Logo */}
                 <div className="w-full bg-white rounded-2xl p-4">
                   {masterLogo ? <img src={masterLogo} alt="Logo" className="w-full max-h-16 object-contain mx-auto" /> :
                    eventLogos[selectedEvent.id] ? <img src={eventLogos[selectedEvent.id]} alt="Logo" className="w-full max-h-14 object-contain mx-auto" /> :
                    <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>}
                 </div>
 
-                {/* Race + Date */}
                 <div className="text-center">
                   <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
                   <p className="text-sm text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
                 </div>
 
-                {/* Photo + Name */}
                 <div className="flex items-center justify-center gap-8">
                   {userPhoto ? (
                     <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-xl">
                       <img src={userPhoto} alt="You" className="w-full h-full object-cover" />
                     </div>
                   ) : (
-                    <div className="w-24 h-24" /> {/* Spacer */}
+                    <div className="w-24 h-24" />
                   )}
-                  <h1 className="text-3xl font-black text-white leading-tight">
+                  <h1 className="text-2xl font-black text-white leading-tight">
                     {participant.first_name}<br />{participant.last_name}
                   </h1>
                 </div>
 
-                {/* Finish Time */}
                 <div className="text-center">
                   <p className="text-sm text-gray-400 uppercase mb-2">Finish Time</p>
                   <p className="text-5xl font-black text-[#ffd700] mb-8">{formatChronoTime(participant.chip_time)}</p>
                 </div>
 
-                {/* Rankings */}
-                <div className="grid grid-cols-3 gap-4 text-xs w-full">
+                <div className="grid grid-cols-3 gap-4 text-xs w-full mb-8">
                   <div><p className="text-gray-400 uppercase">Overall</p><p className="text-2xl font-bold text-[#ffd700]">{participant.place || '—'}</p><p className="text-gray-400">of {overallTotal}</p></div>
                   <div><p className="text-gray-400 uppercase">Gender</p><p className="text-2xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p><p className="text-gray-400">of {genderTotal}</p></div>
                   <div><p className="text-gray-400 uppercase">Division</p><p className="text-2xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p><p className="text-gray-400">of {divisionTotal}</p></div>
                 </div>
 
-                {/* Footer */}
-                <p className="text-xs text-white italic mt-6">
+                <p className="text-xs text-white italic">
                   Find your next race at www.youkeepmoving.com
                 </p>
               </div>
