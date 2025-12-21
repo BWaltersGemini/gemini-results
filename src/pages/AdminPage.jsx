@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FULLY UPDATED — Fetch Latest Events now includes end_time fetch + Delete Event button + Start/End Time display)
+// src/pages/AdminPage.jsx (FULL & COMPLETE — Per-event "Update End Time" button + all features)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -17,7 +17,6 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  // Global config state
   const [editedEvents, setEditedEvents] = useState({});
   const [masterGroups, setMasterGroups] = useState({});
   const [hiddenRaces, setHiddenRaces] = useState({});
@@ -31,6 +30,7 @@ export default function AdminPage() {
   const [participantCounts, setParticipantCounts] = useState({});
   const [refreshingEvent, setRefreshingEvent] = useState(null);
   const [fetchingEvents, setFetchingEvents] = useState(false);
+  const [updatingEndTime, setUpdatingEndTime] = useState(null);
   const [publishingAll, setPublishingAll] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [activeTab, setActiveTab] = useState('events');
@@ -122,7 +122,6 @@ export default function AdminPage() {
     loadCachedData();
   }, [isLoggedIn]);
 
-  // Helper: Get authenticated header
   const getAuthHeader = async () => {
     const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
     const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
@@ -138,7 +137,7 @@ export default function AdminPage() {
     return `Bearer ${tokenRes.data.access_token}`;
   };
 
-  // Combined fetch: events + end_times
+  // Refresh all events + end times (bulk)
   const fetchLatestFromChronoTrack = async () => {
     setFetchingEvents(true);
     try {
@@ -194,6 +193,43 @@ export default function AdminPage() {
       setTimeout(() => setSaveStatus(''), 6000);
     } finally {
       setFetchingEvents(false);
+    }
+  };
+
+  // Update end_time for a single event (per-event button)
+  const updateEndTimeForEvent = async (eventId) => {
+    setUpdatingEndTime(eventId);
+    try {
+      const authHeader = await getAuthHeader();
+      const response = await axios.get(`/chrono-api/api/event/${eventId}`, {
+        headers: { Authorization: authHeader },
+        params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+      });
+
+      const eventData = response.data.event;
+      if (eventData?.event_end_time) {
+        const endTime = parseInt(eventData.event_end_time, 10);
+
+        const { error } = await adminSupabase
+          .from('chronotrack_events')
+          .update({ event_end_time: endTime })
+          .eq('id', eventId);
+
+        if (error) throw error;
+
+        setChronoEvents(prev => prev.map(e => e.id === eventId ? { ...e, event_end_time: endTime } : e));
+        setSaveStatus(`End time updated for event ${eventId}`);
+        setTimeout(() => setSaveStatus(''), 4000);
+      } else {
+        setSaveStatus(`No end time available for event ${eventId}`);
+        setTimeout(() => setSaveStatus(''), 4000);
+      }
+    } catch (err) {
+      console.error(`[Admin] Failed to update end_time for event ${eventId}`, err);
+      setSaveStatus('Update failed');
+      setTimeout(() => setSaveStatus(''), 6000);
+    } finally {
+      setUpdatingEndTime(null);
     }
   };
 
@@ -445,14 +481,12 @@ export default function AdminPage() {
     }
   };
 
-  // Delete Event — removes event + all results
   const handleDeleteEvent = async (eventId, eventName) => {
     if (!confirm(`PERMANENTLY delete event "${eventName}" (ID: ${eventId}) and ALL its results? This cannot be undone.`)) {
       return;
     }
 
     try {
-      // Delete results first
       const { error: resultsError } = await adminSupabase
         .from('chronotrack_results')
         .delete()
@@ -460,7 +494,6 @@ export default function AdminPage() {
 
       if (resultsError) throw resultsError;
 
-      // Then delete the event record
       const { error: eventError } = await adminSupabase
         .from('chronotrack_events')
         .delete()
@@ -468,7 +501,6 @@ export default function AdminPage() {
 
       if (eventError) throw eventError;
 
-      // Update local state
       setChronoEvents(prev => prev.filter(e => e.id !== eventId));
       setParticipantCounts(prev => {
         const copy = { ...prev };
@@ -651,9 +683,25 @@ export default function AdminPage() {
                         <h3 className="text-2xl font-bold text-gemini-dark-gray">
                           {displayName}
                         </h3>
-                        <p className="text-gray-600 mt-2">
-                          <strong>Start:</strong> {formatDateTime(event.start_time)} <br />
-                          <strong>End:</strong> {formatDateTime(event.event_end_time)}
+                        <p className="text-gray-600 mt-2 flex flex-wrap items-center gap-4">
+                          <span>
+                            <strong>Start:</strong> {formatDateTime(event.start_time)}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <strong>End:</strong> {formatDateTime(event.event_end_time)}
+                            {!event.event_end_time && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateEndTimeForEvent(event.id);
+                                }}
+                                disabled={updatingEndTime === event.id}
+                                className="px-4 py-1 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 transition"
+                              >
+                                {updatingEndTime === event.id ? 'Updating...' : 'Update End Time'}
+                              </button>
+                            )}
+                          </span>
                         </p>
                         <p className="text-gray-600 mt-1">
                           ID: {event.id} • <strong>{count} participants published</strong>
