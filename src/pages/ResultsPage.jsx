@@ -1,10 +1,9 @@
-// src/pages/ResultsPage.jsx (FINAL — Live polling + smooth refresh indicator)
+// src/pages/ResultsPage.jsx (FULLY UPDATED — Optimized live update detection + smooth refresh)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
 import { supabase } from '../supabaseClient';
-import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -29,13 +28,11 @@ export default function ResultsPage() {
 
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
-
   const [pageSize] = useState(10);
   const [currentPages, setCurrentPages] = useState({});
   const [raceFilters, setRaceFilters] = useState({});
   const [showFiltersForRace, setShowFiltersForRace] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-
   const prevMasterKeyRef = useRef(masterKey);
 
   // Division filter & highlight from ParticipantPage
@@ -63,7 +60,7 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // === LIVE POLLING: Only during live races ===
+  // === OPTIMIZED LIVE UPDATE DETECTION ===
   useEffect(() => {
     if (!selectedEvent || !isLiveRace) {
       setLastUpdated(null);
@@ -82,7 +79,7 @@ export default function ResultsPage() {
           .single();
 
         if (error) {
-          console.error('[ResultsPage] Poll error:', error);
+          console.error('[ResultsPage] Timestamp poll error:', error);
           return;
         }
 
@@ -91,27 +88,27 @@ export default function ResultsPage() {
         if (lastUpdated && newTimestamp && newTimestamp > lastUpdated) {
           console.log('[ResultsPage] New results detected — triggering refresh');
           setIsRefreshing(true);
-          refreshResults(); // Triggers smart sync in RaceContext
+          refreshResults(); // This triggers RaceContext to pull fresh data
         }
 
         setLastUpdated(newTimestamp);
       } catch (err) {
-        console.error('[ResultsPage] Poll failed:', err);
+        console.error('[ResultsPage] Timestamp poll failed:', err);
       }
     };
 
     // Initial check
     checkForUpdates();
 
-    // Poll every 45 seconds
-    pollInterval = setInterval(checkForUpdates, 45000);
+    // Poll every 15 seconds — fast enough to feel live, light on server
+    pollInterval = setInterval(checkForUpdates, 15000);
 
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [selectedEvent, isLiveRace, lastUpdated, refreshResults]);
 
-  // Clear refreshing indicator when load completes
+  // Clear refreshing indicator when loading completes
   useEffect(() => {
     if (isRefreshing && !loadingResults) {
       setIsRefreshing(false);
@@ -189,6 +186,7 @@ export default function ResultsPage() {
 
   useEffect(() => {
     if (!highlightedBib || !targetRaceIdRef.current) return;
+
     const scrollToRaceAndRow = () => {
       const raceEl = raceRefs.current[targetRaceIdRef.current];
       if (raceEl) {
@@ -200,6 +198,7 @@ export default function ResultsPage() {
         }, 600);
       }
     };
+
     const timer = setTimeout(scrollToRaceAndRow, 300);
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
@@ -227,6 +226,7 @@ export default function ResultsPage() {
     let targetEvent = selectedEvent;
     let eventMaster = masterKey;
     let eventYear = year;
+
     if (!targetEvent || !eventMaster || !eventYear) {
       const participantEventId = participant.event_id || selectedEvent?.id;
       targetEvent = events.find((e) => e.id === participantEventId);
@@ -235,17 +235,19 @@ export default function ResultsPage() {
       eventYear = getYearFromEvent(targetEvent);
       setSelectedEvent(targetEvent);
     }
+
     const participantRace = selectedEvent.races?.find((r) => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const masterSlug = slugify(eventMaster);
     const raceSlugPart = slugify(raceName);
+
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent: targetEvent, results, eventLogos, ads },
       replace: true,
     });
   };
 
-  // Search and filtering
+  // Search and filtering (client-side on cached results — fast!)
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -555,7 +557,6 @@ export default function ResultsPage() {
                       {editedEvents[selectedEvent.id]?.races?.[raceId] || race.race_name}
                     </h3>
                   </div>
-
                   <div className="p-6 border-b border-gray-200">
                     <button
                       onClick={() => setShowFiltersForRace(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
@@ -623,7 +624,6 @@ export default function ResultsPage() {
                       </div>
                     )}
                   </div>
-
                   <div className="overflow-x-auto">
                     <div className="md:hidden">
                       <ResultsTable
@@ -644,7 +644,6 @@ export default function ResultsPage() {
                       />
                     </div>
                   </div>
-
                   {sorted.length > pageSize && (
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mt-12 p-8 bg-gray-50 rounded-b-3xl">
                       <button
@@ -676,7 +675,6 @@ export default function ResultsPage() {
                       </button>
                     </div>
                   )}
-
                   {sorted.length > 30 && (
                     <div className="text-center py-8">
                       <button
@@ -711,7 +709,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top */}
+      {/* Back to Top Button */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
