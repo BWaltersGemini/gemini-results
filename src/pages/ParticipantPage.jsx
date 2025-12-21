@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Enhanced UX: Hero Celebration + Share Buttons + Track Me + Badges)
+// src/pages/ParticipantPage.jsx (FINAL — Click Outside to Close + Mobile Card Preview Fix)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -570,69 +570,77 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Card Preview Modal */}
+        {/* Card Preview Modal — Better mobile sizing */}
         {showCardPreview && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowCardPreview(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-10" onClick={(e) => e.stopPropagation()}>
-              <div className="text-center mb-10">
-                <h3 className="text-5xl font-bold text-gemini-dark-gray">Your Shareable Result Card 🎉</h3>
-                <p className="text-2xl text-gray-600 mt-4">Ready to share your achievement!</p>
+          <div 
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
+            onClick={goBackToResults} // ← Click outside to close and return to results
+          >
+            <div 
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8" 
+              onClick={(e) => e.stopPropagation()} // Prevent close when clicking inside
+            >
+              <div className="text-center mb-8">
+                <h3 className="text-4xl font-bold text-gemini-dark-gray">Your Result Card 🎉</h3>
+                <p className="text-xl text-gray-600 mt-4">This is exactly what will be shared!</p>
               </div>
 
-              <div className="flex justify-center mb-12">
-                <div className="w-full max-w-lg bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl">
-                  <div className="p-8 text-white text-center">
-                    <div className="bg-white rounded-2xl p-6 mb-6">
+              {/* Mobile-friendly preview */}
+              <div className="flex justify-center mb-10">
+                <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl">
+                  <div className="h-full flex flex-col items-center justify-start p-6 text-white text-center text-sm">
+                    <div className="w-full bg-white rounded-2xl p-4 mb-4">
                       {masterLogo ? (
-                        <img src={masterLogo} alt="Logo" className="w-full max-h-32 object-contain mx-auto" />
+                        <img src={masterLogo} alt="Logo" className="w-full max-h-20 object-contain mx-auto" />
                       ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Logo" className="w-full max-h-28 object-contain mx-auto" />
+                        <img src={eventLogos[selectedEvent.id]} alt="Logo" className="w-full max-h-16 object-contain mx-auto" />
                       ) : (
-                        <h2 className="text-4xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
+                        <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
                       )}
                     </div>
-                    <p className="text-3xl font-bold text-[#80ccd6] mb-3">{raceDisplayName}</p>
-                    <p className="text-2xl text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
-                    <h1 className="text-5xl font-black mb-8 leading-tight">
+                    <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
+                    <p className="text-base text-gray-300 mb-3">{formatDate(selectedEvent.start_time)}</p>
+                    <h1 className="text-3xl font-black mb-4 leading-tight">
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
-                    <p className="text-2xl text-gray-400 uppercase mb-4">Finish Time</p>
-                    <p className="text-7xl font-black text-[#ffd700] mb-10">
+                    <p className="text-base text-gray-400 uppercase mb-2">Finish Time</p>
+                    <p className="text-5xl font-black text-[#ffd700] mb-6">
                       {formatChronoTime(participant.chip_time)}
                     </p>
-                    <div className="grid grid-cols-3 gap-6 text-lg">
+                    <div className="grid grid-cols-3 gap-3 text-xs w-full mb-6">
                       <div>
                         <p className="text-gray-400 uppercase">Overall</p>
-                        <p className="text-5xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.place || '—'}</p>
                         <p className="text-gray-400">of {overallTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Gender</p>
-                        <p className="text-5xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p>
                         <p className="text-gray-400">of {genderTotal}</p>
                       </div>
                       <div>
                         <p className="text-gray-400 uppercase">Division</p>
-                        <p className="text-5xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
+                        <p className="text-3xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p>
                         <p className="text-gray-400">of {divisionTotal}</p>
                       </div>
                     </div>
+                    <p className="text-xs text-gray-500">Find our next race... www.youkeepmoving.com</p>
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-center gap-8">
+              <div className="flex justify-center gap-6">
                 <button
                   onClick={generateResultCard}
-                  className="px-12 py-5 bg-gemini-blue text-white font-bold text-2xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl"
+                  className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl"
                 >
-                  Download Image
+                  Download
                 </button>
                 <button
                   onClick={shareResultCard}
-                  className="px-12 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-2xl rounded-full hover:opacity-90 transition shadow-xl"
+                  className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition shadow-xl"
                 >
-                  Share Now
+                  Share
                 </button>
               </div>
             </div>
@@ -654,7 +662,10 @@ export default function ParticipantPage() {
             <h3 className="text-4xl font-bold text-center mb-12 text-gray-800">Event Sponsors</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
               {ads.map((ad, i) => (
-                <div key={i} className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 hover:shadow-2xl transition">
+                <div
+                  key={i}
+                  className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 hover:shadow-2xl transition"
+                >
                   <img src={ad} alt="Sponsor" className="w-full h-auto" />
                 </div>
               ))}

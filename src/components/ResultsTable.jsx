@@ -1,4 +1,4 @@
-// src/components/ResultsTable.jsx (FINAL — Complete, Enhanced UX: Load More + Correct Ordinals + Pagination)
+// src/components/ResultsTable.jsx (FINAL — Fixed Mobile Pace Text Color + All Features)
 import { useNavigate } from 'react-router-dom';
 import { formatChronoTime } from '../utils/timeUtils';
 
@@ -75,7 +75,7 @@ export default function ResultsTable({
     setCurrentPage(1); // Reset to first page
   };
 
-  // Mobile View
+  // Mobile View — FIXED: Pace text now dark on light gray
   if (isMobile) {
     return (
       <div className="space-y-6">
@@ -107,7 +107,8 @@ export default function ResultsTable({
                   <div className="text-sm text-gray-700">Time</div>
                 </div>
                 <div className="bg-gray-100 rounded-xl py-4">
-                  <div className="text-2xl font-bold">{r.pace || '—'}</div>
+                  {/* FIXED: Pace text now dark gray for readability */}
+                  <div className="text-2xl font-bold text-gray-900">{r.pace || '—'}</div>
                   <div className="text-sm text-gray-700">Pace</div>
                 </div>
               </div>

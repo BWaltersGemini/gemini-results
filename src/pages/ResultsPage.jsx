@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Complete with All Latest Fixes & Enhancements)
+// src/pages/ResultsPage.jsx (FINAL — Fixed Empty Results Display + No Table When No Results)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -179,10 +179,11 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
-  // Calculate stats
-  const totalFinishers = results.length;
-  const maleFinishers = results.filter(r => r.gender === 'M').length;
-  const femaleFinishers = results.filter(r => r.gender === 'F').length;
+  // Calculate stats — only from finishers with chip_time
+  const finishers = results.filter(r => r.chip_time && r.chip_time.trim() !== '');
+  const totalFinishers = finishers.length;
+  const maleFinishers = finishers.filter(r => r.gender === 'M').length;
+  const femaleFinishers = finishers.filter(r => r.gender === 'F').length;
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -347,8 +348,8 @@ export default function ResultsPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
-        {/* Sticky Search Bar — Fixed visibility on mobile */}
-        <div className={`sticky z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''} top-24 md:top-20`}>
+        {/* Sticky Search Bar */}
+        <div className={`sticky top-24 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''}`}>
           <div className="relative max-w-3xl mx-auto">
             <input
               type="text"
@@ -373,7 +374,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Enhanced Header with Stats */}
+        {/* Enhanced Header with Stats — Only finishers with chip_time */}
         {!searchQuery && (
           <div className="text-center mb-16">
             {displayLogo && (
@@ -404,7 +405,7 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {/* Stats Grid */}
+            {/* Stats Grid — Only actual finishers */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-12">
               <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-xl text-center">
                 <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Total Finishers</p>
@@ -439,26 +440,42 @@ export default function ResultsPage() {
 
         {/* Results Section */}
         <div ref={resultsSectionRef}>
-          {displayedRaces.map((race) => {
-            const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
-            const sorted = [...raceResults].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+          {displayedRaces.length === 0 ? (
+            <div className="text-center py-32">
+              <div className="text-6xl mb-8">🏁</div>
+              <h2 className="text-4xl font-bold text-gemini-dark-gray mb-4">No Results Yet</h2>
+              <p className="text-2xl text-gray-600 mb-8">
+                {isLiveRace ? 'The race is live — finishers will appear here soon!' : 'Timing has not started yet.'}
+              </p>
+              {isLiveRace && (
+                <div className="flex items-center justify-center gap-4 text-2xl text-green-600 font-bold">
+                  <div className="w-4 h-4 bg-green-600 rounded-full animate-ping"></div>
+                  Live Updates Active
+                </div>
+              )}
+            </div>
+          ) : (
+            displayedRaces.map((race) => {
+              const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
+              const sorted = [...raceResults].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
-            return (
-              <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
-                <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">
-                  {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
-                </h2>
-                <ResultsTable
-                  data={sorted}
-                  totalResults={sorted.length}
-                  onNameClick={handleNameClick}
-                  isMobile={window.innerWidth < 768}
-                  highlightedBib={highlightedBib}
-                  highlightedRowRef={null}
-                />
-              </section>
-            );
-          })}
+              return (
+                <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
+                  <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">
+                    {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
+                  </h2>
+                  <ResultsTable
+                    data={sorted}
+                    totalResults={sorted.length}
+                    onNameClick={handleNameClick}
+                    isMobile={window.innerWidth < 768}
+                    highlightedBib={highlightedBib}
+                    highlightedRowRef={null}
+                  />
+                </section>
+              );
+            })
+          )}
         </div>
 
         {/* Sponsors */}
