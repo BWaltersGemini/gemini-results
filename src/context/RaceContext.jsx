@@ -1,10 +1,10 @@
-// src/context/RaceContext.jsx (FINAL — All runtime errors fixed + end_time support)
+// src/context/RaceContext.jsx (FINAL — Fixed .cjs import + all features working)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 import axios from 'axios';
-import chronotrackapi from '../api/chronotrackapi.cjs'; // ← Correct import
+import * as chronotrackapi from '../api/chronotrackapi.cjs'; // ← Namespace import — Vercel-safe
 
 export const RaceContext = createContext();
 
@@ -105,19 +105,17 @@ export function RaceProvider({ children }) {
         if (eventData?.event_end_time) {
           const endTime = parseInt(eventData.event_end_time, 10);
 
-          // Update state
           setSelectedEvent(prev => ({
             ...prev,
             event_end_time: endTime,
           }));
 
-          // Sync to Supabase
           await supabase
             .from('chronotrack_events')
             .update({ event_end_time: endTime })
             .eq('id', selectedEvent.id);
 
-          console.log(`[RaceContext] Fetched event_end_time: ${endTime}`);
+          console.log(`[RaceContext] Fetched and saved event_end_time: ${endTime}`);
         }
       } catch (err) {
         console.warn('[RaceContext] Failed to fetch event_end_time:', err);
