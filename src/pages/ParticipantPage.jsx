@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Fixed Card Fit + Accurate Preview + No React Errors)
+// src/pages/ParticipantPage.jsx (FULL COMPLETE — Final Version with Visible X Button)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -39,7 +39,7 @@ export default function ParticipantPage() {
   const photoInputRef = useRef(null);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
-  const cardRef = useRef(null); // For html2canvas capture
+  const cardRef = useRef(null);
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   useEffect(() => {
@@ -124,7 +124,12 @@ export default function ParticipantPage() {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) {
         if (!timeRevealed && participant.chip_time) {
-          confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'] });
+          confetti({
+            particleCount: 200,
+            spread: 80,
+            origin: { y: 0.5 },
+            colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'],
+          });
         }
         return;
       }
@@ -138,7 +143,9 @@ export default function ParticipantPage() {
         let targetEvent = selectedEvent || contextSelectedEvent;
         if (!targetEvent) {
           const resultWithBib = contextResults?.find(r => String(r.bib) === String(bib));
-          if (resultWithBib) targetEvent = events.find(e => e.id === resultWithBib.event_id);
+          if (resultWithBib) {
+            targetEvent = events.find(e => e.id === resultWithBib.event_id);
+          }
         }
         if (!targetEvent) throw new Error('Event not found');
         setLocalSelectedEvent(targetEvent);
@@ -153,7 +160,12 @@ export default function ParticipantPage() {
         const found = allResults.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found with this bib');
         setParticipant(found);
-        confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'] });
+        confetti({
+          particleCount: 250,
+          spread: 100,
+          origin: { y: 0.6 },
+          colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'],
+        });
       } catch (err) {
         console.error('[ParticipantPage] Load error:', err);
         setFetchError(err.message || 'Failed to load participant');
@@ -166,7 +178,7 @@ export default function ParticipantPage() {
 
   const handleTimeComplete = () => setTimeRevealed(true);
 
-  // Card generation functions
+  // Card generation
   const generateResultCard = async () => {
     if (!cardRef.current) return;
     try {
@@ -242,7 +254,9 @@ export default function ParticipantPage() {
     }
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) => ids.includes(selectedEvent.id.toString()));
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`);
@@ -252,7 +266,9 @@ export default function ParticipantPage() {
     if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) => ids.includes(selectedEvent.id.toString()));
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`, {
@@ -263,13 +279,15 @@ export default function ParticipantPage() {
   const trackMe = () => {
     const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) => ids.includes(selectedEvent.id.toString()));
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`, { state: { highlightBib: participant.bib } });
   };
 
-  // Loading / Error States
+  // Loading / Error
   if (loading || contextLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
@@ -378,7 +396,7 @@ export default function ParticipantPage() {
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Overall</p>
               <p className="text-5xl font-bold text-gemini-dark-gray">{participant.place || '—'}</p>
-              <p className="text-lg text-gray-600">of {overallTotal}</p>
+              <p class **ClassName**="text-lg text-gray-600">of {overallTotal}</p>
             </div>
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gender</p>
@@ -482,7 +500,7 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Upcoming Events */}
+        {/* Upcoming Events Carousel */}
         <section className="mt-20">
           <h2 className="text-5xl font-black text-center text-gemini-dark-gray mb-12">Ready for Your Next Adventure?</h2>
           <p className="text-2xl text-center text-gray-600 mb-12">From 5K to Marathon — we’ve got your next goal.</p>
@@ -492,11 +510,19 @@ export default function ParticipantPage() {
             <div className="overflow-x-auto pb-4 -mx-6 px-6 scrollbar-hide">
               <div className="flex gap-8 animate-scroll hover:pause">
                 {[...upcomingEvents, ...upcomingEvents].map((event, i) => (
-                  <a key={`${event.id}-${i}`} href={event.url} target="_blank" rel="noopener noreferrer"
-                    className="flex-shrink-0 w-80 group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300">
+                  <a
+                    key={`${event.id}-${i}`}
+                    href={event.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0 w-80 group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  >
                     {event.image?.url ? (
-                      <img src={event.image.url} alt={event.title.rendered || event.title}
-                        className="w-full h-48 object-cover group-hover:scale-110 transition duration-500" />
+                      <img
+                        src={event.image.url}
+                        alt={event.title.rendered || event.title}
+                        className="w-full h-48 object-cover group-hover:scale-110 transition duration-500"
+                      />
                     ) : (
                       <div className="h-48 bg-gray-200 flex items-center justify-center">
                         <span className="text-gray-500 font-medium">No Image</span>
@@ -524,23 +550,32 @@ export default function ParticipantPage() {
 
         {/* Back Button */}
         <div className="text-center mt-16">
-          <button onClick={goBackToResults}
-            className="px-12 py-5 bg-gray-800 text-white font-bold text-xl rounded-full hover:bg-gray-700 transition shadow-xl">
+          <button
+            onClick={goBackToResults}
+            className="px-12 py-5 bg-gray-800 text-white font-bold text-xl rounded-full hover:bg-gray-700 transition shadow-xl"
+          >
             ← Back to Results
           </button>
         </div>
       </div>
 
       {/* Hidden Photo Input */}
-      <input type="file" ref={photoInputRef} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+      <input
+        type="file"
+        ref={photoInputRef}
+        accept="image/*"
+        onChange={handlePhotoUpload}
+        className="hidden"
+      />
 
       {/* Hidden Full-Size Card for html2canvas */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center text-center px-10 pt-6 overflow-hidden"
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
+          {/* Logo */}
           <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
             {masterLogo ? (
               <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
@@ -550,9 +585,11 @@ export default function ParticipantPage() {
               <h2 className="text-4xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
             )}
           </div>
+
           <p className="text-3xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
           <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-          <div className={`flex items-center justify-center gap-16 mb-10 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
+
+          <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
             {userPhoto && (
               <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
                 <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
@@ -562,48 +599,46 @@ export default function ParticipantPage() {
               {participant.first_name}<br />{participant.last_name}
             </h1>
           </div>
-          <div className="mb-12">
-            <p className="text-3xl text-gray-400 uppercase tracking-widest mb-2">Finish Time</p>
-            <p className="text-7xl font-black text-[#ffd700] drop-shadow-2xl">
+
+          <div className="mb-10">
+            <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
+            <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
               {formatChronoTime(participant.chip_time)}
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-12">
+
+          <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-10">
             <div>
               <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
-              <p className="text-6xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
+              <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
               <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
             </div>
             <div>
               <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
-              <p className="text-6xl font-bold text-[#ffd700] leading-none">{participant.gender_place || '—'}</p>
+              <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.gender_place || '—'}</p>
               <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
             </div>
             <div>
               <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
-              <p className="text-6xl font-bold text-[#ffd700] leading-none">{participant.age_group_place || '—'}</p>
+              <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.age_group_place || '—'}</p>
               <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
             </div>
           </div>
-          <p className="text-2xl text-white italic mt-auto pb-8">
+
+          <p className="text-3xl text-white italic mt-auto">
             Find your next race at www.youkeepmoving.com
           </p>
         </div>
       </div>
 
-      {/* Card Preview Modal - Accurate scaled preview using CSS */}
+      {/* Card Preview Modal */}
       {showCardPreview && (
-        <div
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
-          onClick={() => setShowCardPreview(false)}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8 relative"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
+            {/* Visible Close Button */}
             <button
               onClick={() => setShowCardPreview(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-4xl font-light z-10"
+              className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-gray-800 text-3xl font-light hover:bg-gray-100 transition z-50"
             >
               ×
             </button>
@@ -611,12 +646,9 @@ export default function ParticipantPage() {
             <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-10">Your Result Card 🎉</h3>
 
             <div className="flex justify-center mb-10">
-              <div className="w-96 h-96 rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300">
-                <div className="w-[1080px] h-[1080px] origin-top-left scale-[0.355]" style={{ transformOrigin: 'top left' }}>
-                  <div
-                    className="w-full h-full bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center text-center px-10 pt-6 overflow-hidden"
-                    style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
-                  >
+              <div className="w-96 h-96 rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200">
+                <div className="w-[1080px] h-[1080px] scale-[0.355] origin-top-left" style={{ transformOrigin: 'top left' }}>
+                  <div className="w-full h-full bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden" style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
                     <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
                       {masterLogo ? (
                         <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
@@ -628,7 +660,7 @@ export default function ParticipantPage() {
                     </div>
                     <p className="text-3xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
                     <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-                    <div className={`flex items-center justify-center gap-16 mb-10 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
+                    <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
                       {userPhoto && (
                         <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
                           <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
@@ -638,30 +670,30 @@ export default function ParticipantPage() {
                         {participant.first_name}<br />{participant.last_name}
                       </h1>
                     </div>
-                    <div className="mb-12">
-                      <p className="text-3xl text-gray-400 uppercase tracking-widest mb-2">Finish Time</p>
-                      <p className="text-7xl font-black text-[#ffd700] drop-shadow-2xl">
+                    <div className="mb-10">
+                      <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
+                      <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
                         {formatChronoTime(participant.chip_time)}
                       </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-12">
+                    <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-10">
                       <div>
                         <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
-                        <p className="text-6xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
+                        <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
                         <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
                       </div>
                       <div>
                         <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
-                        <p className="text-6xl font-bold text-[#ffd700] leading-none">{participant.gender_place || '—'}</p>
+                        <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.gender_place || '—'}</p>
                         <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
                       </div>
                       <div>
                         <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
-                        <p className="text-6xl font-bold text-[#ffd700] leading-none">{participant.age_group_place || '—'}</p>
+                        <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.age_group_place || '—'}</p>
                         <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
                       </div>
                     </div>
-                    <p className="text-2xl text-white italic mt-auto pb-8">
+                    <p className="text-3xl text-white italic mt-auto">
                       Find your next race at www.youkeepmoving.com
                     </p>
                   </div>
@@ -669,16 +701,12 @@ export default function ParticipantPage() {
               </div>
             </div>
 
-            {/* Photo Upload Section */}
+            {/* Photo Upload & Buttons */}
             <div className="mb-10">
               <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
               <div className="flex justify-center gap-6 mb-6">
-                <button onClick={triggerCamera} className="px-8 py-4 bg-gemini-blue text-white font-bold rounded-full hover:bg-gemini-blue/90 transition">
-                  📷 Take Photo
-                </button>
-                <button onClick={triggerGallery} className="px-8 py-4 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition">
-                  🖼️ Choose from Gallery
-                </button>
+                <button onClick={triggerCamera} className="px-8 py-4 bg-gemini-blue text-white font-bold rounded-full hover:bg-gemini-blue/90 transition">📷 Take Photo</button>
+                <button onClick={triggerGallery} className="px-8 py-4 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition">🖼️ Choose from Gallery</button>
               </div>
               {userPhoto && (
                 <div className="text-center">
@@ -688,7 +716,6 @@ export default function ParticipantPage() {
               )}
             </div>
 
-            {/* Action Buttons */}
             <div className="flex justify-center gap-6">
               <button onClick={generateResultCard} className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl">
                 {isMobileDevice ? 'Save to Photos' : 'Download Image'}
