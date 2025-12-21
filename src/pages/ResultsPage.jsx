@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Fixed Participant Navigation + Search Scroll Behavior)
+// src/pages/ResultsPage.jsx (FINAL — Complete with Stats Header + Fixed Back-to-Top + All Enhancements)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -36,10 +36,11 @@ export default function ResultsPage() {
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
-  // Refs for scrolling
+  // Refs
   const resultsSectionRef = useRef(null);
+  const backToTopRef = useRef(null);
 
-  // Listen for live update toast from RaceContext
+  // Listen for live update toast
   useEffect(() => {
     const handler = (e) => {
       const count = e.detail?.count || 1;
@@ -69,12 +70,29 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // Scroll to results when search starts
+  // Scroll to results on search
   useEffect(() => {
     if (searchQuery && resultsSectionRef.current) {
       resultsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [searchQuery]);
+
+  // Show/hide back-to-top button on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (backToTopRef.current) {
+        if (window.scrollY > 600) {
+          backToTopRef.current.style.opacity = '1';
+          backToTopRef.current.style.visibility = 'visible';
+        } else {
+          backToTopRef.current.style.opacity = '0';
+          backToTopRef.current.style.visibility = 'hidden';
+        }
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const slugify = (text) => {
     if (!text || typeof text !== 'string') return 'overall';
@@ -114,7 +132,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection from URL — SAFE
+  // Event selection from URL
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -161,11 +179,17 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
+  // Calculate fun stats
+  const totalFinishers = results.length;
+  const maleFinishers = results.filter(r => r.gender === 'M').length;
+  const femaleFinishers = results.filter(r => r.gender === 'F').length;
+  const uniqueDivisionsCount = uniqueDivisions.length;
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Fixed participant navigation
+  // Participant navigation
   const handleNameClick = (participant) => {
     if (!participant || !selectedEvent) return;
 
@@ -183,13 +207,7 @@ export default function ResultsPage() {
     const raceSlugPart = slugify(raceName);
 
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
-      state: {
-        participant,
-        selectedEvent,
-        results,
-        eventLogos,
-        ads,
-      },
+      state: { participant, selectedEvent, results },
     });
   };
 
@@ -343,7 +361,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Event Header */}
+        {/* Enhanced Header with Stats */}
         {!searchQuery && (
           <div className="text-center mb-16">
             {displayLogo && (
@@ -352,7 +370,27 @@ export default function ResultsPage() {
             <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">
               {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
             </h1>
-            <p className="text-2xl text-gray-600">{formatDate(selectedEvent.start_time)}</p>
+            <p className="text-2xl text-gray-600 mb-8">{formatDate(selectedEvent.start_time)}</p>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-5xl mx-auto mb-12">
+              <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-xl text-center">
+                <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Total Finishers</p>
+                <p className="text-6xl font-black text-gemini-blue">{totalFinishers.toLocaleString()}</p>
+              </div>
+              <div className="bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl p-8 shadow-xl text-center">
+                <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Male</p>
+                <p className="text-6xl font-black text-blue-700">{maleFinishers.toLocaleString()}</p>
+              </div>
+              <div className="bg-gradient-to-br from-pink-100 to-pink-200 rounded-2xl p-8 shadow-xl text-center">
+                <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Female</p>
+                <p className="text-6xl font-black text-pink-700">{femaleFinishers.toLocaleString()}</p>
+              </div>
+              <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl p-8 shadow-xl text-center">
+                <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Divisions</p>
+                <p className="text-6xl font-black text-purple-700">{uniqueDivisionsCount}</p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -371,7 +409,7 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Results Section — Scroll target for search */}
+        {/* Results Section */}
         <div ref={resultsSectionRef}>
           {displayedRaces.map((race) => {
             const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
@@ -388,7 +426,7 @@ export default function ResultsPage() {
                   onNameClick={handleNameClick}
                   isMobile={window.innerWidth < 768}
                   highlightedBib={highlightedBib}
-                  highlightedRowRef={null} // handled in table if needed
+                  highlightedRowRef={null}
                 />
               </section>
             );
@@ -413,10 +451,12 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top */}
+      {/* Back to Top Button — Fixed & Smooth */}
       <button
+        ref={backToTopRef}
         onClick={scrollToTop}
-        className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:scale-110 transition-all z-50"
+        className="fixed bottom-8 right-8 bg-gemini-blue text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:scale-110 hover:bg-gemini-blue/90 transition-all duration-300 z-50 opacity-0 invisible"
+        aria-label="Back to top"
       >
         ↑
       </button>
