@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Realistic Bib with GRR Logo + All Features)
+// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Bib moved right, aligned with name + "You crushed" row, perfectly centered)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -49,7 +49,6 @@ export default function ParticipantPage() {
 
   const cardRef = useRef(null);
 
-  // Sync with context
   useEffect(() => {
     if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
       setLocalSelectedEvent(contextSelectedEvent);
@@ -355,9 +354,44 @@ export default function ParticipantPage() {
         {/* Hero Celebration */}
         <div className="text-center mb-12">
           <h1 className="text-6xl md:text-7xl font-extrabold text-gemini-blue mb-6 drop-shadow-lg">Congratulations!</h1>
-          <p className="text-3xl font-bold text-gemini-dark-gray mb-4">{participant.first_name} {participant.last_name}</p>
-          <p className="text-2xl text-gray-600 italic mb-8">You crushed the {raceDisplayName}!</p>
 
+          {/* New Centered Row: Name + "You crushed" + Bib on the right */}
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-8">
+            <div className="text-center md:text-left">
+              <p className="text-3xl font-bold text-gemini-dark-gray">
+                {participant.first_name} {participant.last_name}
+              </p>
+              <p className="text-2xl text-gray-600 italic mt-2">You crushed the {raceDisplayName}!</p>
+            </div>
+
+            {/* Realistic Bib with GRR Logo — Aligned to the right */}
+            <div className="flex justify-center md:justify-end">
+              <div className="relative bg-white rounded-2xl shadow-2xl border-4 border-gemini-blue overflow-hidden w-64 h-80 flex flex-col items-center justify-between py-8 px-4">
+                {/* Safety pin shadows */}
+                <div className="absolute top-4 left-8 w-8 h-8 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+                <div className="absolute top-4 right-8 w-8 h-8 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+                <div className="absolute bottom-4 left-8 w-8 h-8 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+                <div className="absolute bottom-4 right-8 w-8 h-8 bg-gray-300 rounded-full opacity-30 blur-md"></div>
+
+                {/* GRR Logo */}
+                <div className="w-32 h-20 mb-4 flex items-center justify-center">
+                  <img src="/GRR.png" alt="GRR Logo" className="max-w-full max-h-full object-contain" />
+                </div>
+
+                {/* Bib Number */}
+                <p className="text-8xl font-black text-gemini-blue leading-none">
+                  {participant.bib || '—'}
+                </p>
+
+                {/* Event Name */}
+                <p className="text-sm uppercase tracking-widest text-gray-600 mt-4">
+                  {selectedEvent.name}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Badges */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             {isTop10Percent && (
               <span className="px-6 py-3 bg-yellow-400 text-white text-xl font-bold rounded-full shadow-lg">Top 10% Overall!</span>
@@ -369,6 +403,7 @@ export default function ParticipantPage() {
             )}
           </div>
 
+          {/* Event Logo + Name + Date */}
           <div className="mb-8">
             {eventLogos[selectedEvent.id] ? (
               <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="mx-auto max-h-32 mb-6 rounded-full shadow-md" />
@@ -382,38 +417,8 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Stats Grid with New Realistic Bib */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-          {/* Realistic Bib with GRR Logo */}
-          <div className="flex justify-center">
-            <div className="relative bg-white rounded-2xl shadow-2xl border-4 border-gemini-blue overflow-hidden w-72 h-[28rem] flex flex-col items-center justify-between py-10 px-6">
-              {/* Safety pin shadows */}
-              <div className="absolute top-6 left-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
-              <div className="absolute top-6 right-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
-              <div className="absolute bottom-6 left-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
-              <div className="absolute bottom-6 right-10 w-10 h-10 bg-gray-300 rounded-full opacity-30 blur-md"></div>
-
-              {/* GRR Logo */}
-              <div className="w-40 h-28 mb-6 flex items-center justify-center">
-                <img 
-                  src="/GRR.png" 
-                  alt="GRR Logo" 
-                  className="max-w-full max-h-full object-contain"
-                />
-              </div>
-
-              {/* Bib Number */}
-              <p className="text-9xl font-black text-gemini-blue leading-none">
-                {participant.bib || '—'}
-              </p>
-
-              {/* Event Name */}
-              <p className="text-lg uppercase tracking-widest text-gray-600 mt-6">
-                {selectedEvent.name}
-              </p>
-            </div>
-          </div>
-
+        {/* Stats Grid (Time + Rankings) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
           {/* Official Time */}
           <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-3xl p-10 shadow-2xl text-center">
             <p className="text-xl uppercase text-gray-600 tracking-wider mb-6">OFFICIAL TIME</p>
