@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Complete, No Truncations, Optimized Live Polling)
+// src/context/RaceContext.jsx (FINAL — Complete, No Truncations, Optimized Live Polling with Deletion Support)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -147,7 +147,7 @@ export function RaceProvider({ children }) {
     return () => { aborted = true; };
   }, [selectedEvent]);
 
-  // Results loading + optimized background live polling (no UI blocking)
+  // Results loading + optimized background live polling (with deletion of removed participants)
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -170,7 +170,6 @@ export function RaceProvider({ children }) {
 
     const isLive = isActiveWindow || isRaceDayFallback;
 
-    // Per-event toggle — default true
     const isAutoFetchEnabled = liveAutoFetchPerEvent[selectedEvent.id] !== false;
 
     console.log(`[RaceContext] Live detection for event ${selectedEvent.id} (${selectedEvent.name || 'Unknown'}):`,
@@ -189,7 +188,7 @@ export function RaceProvider({ children }) {
       if (aborted) return;
 
       try {
-        // Always load cache first for instant UI
+        // Load cache first for instant UI
         let cachedResults = [];
         let start = 0;
         const pageSize = 1000;
@@ -207,20 +206,39 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // Set cache immediately — UI never blocks
         if (!aborted) {
           setResults(cachedResults);
           console.log(`[RaceContext] Displaying cached results (${cachedResults.length} rows)`);
         }
 
-        // Background fresh fetch only during live poll
         if (forceFresh) {
           console.log('[RaceContext] Starting background live fetch from ChronoTrack...');
-
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (fresh.length > 0) {
-            // Find new or changed records
+            // Build set of fresh entry_ids
+            const freshEntryIds = new Set(fresh.map(r => r.entry_id).filter(Boolean));
+
+            // Find removed participants (DNS/DNF/DQ)
+            const toDelete = cachedResults
+              .filter(r => r.entry_id && !freshEntryIds.has(r.entry_id))
+              .map(r => r.entry_id);
+
+            if (toDelete.length > 0) {
+              console.log(`[RaceContext] Removing ${toDelete.length} participants no longer in ChronoTrack results (DNS/DNF/DQ)`);
+
+              const { error: deleteError } = await supabase
+                .from('chronotrack_results')
+                .delete()
+                .in('entry_id', toDelete)
+                .eq('event_id', selectedEvent.id);
+
+              if (deleteError) {
+                console.error('[RaceContext] Failed to delete removed participants:', deleteError);
+              }
+            }
+
+            // Find new/changed records
             const toUpsert = [];
             fresh.forEach(r => {
               const existing = cachedResults.find(c => c.entry_id === r.entry_id);
@@ -251,9 +269,9 @@ export function RaceProvider({ children }) {
             });
 
             if (toUpsert.length > 0) {
-              console.log(`[RaceContext] ${toUpsert.length} new/changed results detected → preparing upsert`);
+              console.log(`[RaceContext] ${toUpsert.length} new/changed results → preparing upsert`);
 
-              // Final dedup to prevent Supabase conflict error
+              // Final dedup
               const uniqueMap = new Map();
               toUpsert.forEach(record => {
                 const key = record.entry_id || `${record.event_id}-${record.bib}`;
@@ -270,8 +288,8 @@ export function RaceProvider({ children }) {
               if (upsertError) {
                 console.error('[RaceContext] Background upsert failed:', upsertError);
               } else {
-                // Merge into current results
-                const updatedResults = [...cachedResults];
+                // Merge fresh + deletions into current results
+                let updatedResults = cachedResults.filter(r => !toDelete.includes(r.entry_id));
                 finalToUpsert.forEach(newRec => {
                   const index = updatedResults.findIndex(r => r.entry_id === newRec.entry_id);
                   if (index !== -1) {
@@ -286,6 +304,13 @@ export function RaceProvider({ children }) {
                   console.log('[RaceContext] Live update complete — UI refreshed seamlessly');
                 }
               }
+            } else if (toDelete.length > 0) {
+              // Only deletions happened
+              const updatedResults = cachedResults.filter(r => !toDelete.includes(r.entry_id));
+              if (!aborted) {
+                setResults(updatedResults);
+                console.log('[RaceContext] Live update complete — removed participants');
+              }
             } else {
               console.log('[RaceContext] No changes detected');
             }
@@ -294,7 +319,6 @@ export function RaceProvider({ children }) {
           }
         }
 
-        // Update divisions
         const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
         if (!aborted) setUniqueDivisions(divisions);
 
@@ -307,10 +331,8 @@ export function RaceProvider({ children }) {
       }
     };
 
-    // Initial load
     loadResults(resultsVersion > 0);
 
-    // Live polling
     if (isLive && isAutoFetchEnabled) {
       if (isActiveWindow) {
         pollInterval = setInterval(() => loadResults(true), 30000);
