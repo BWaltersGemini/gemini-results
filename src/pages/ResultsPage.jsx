@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Complete, Enhanced UX: Sticky Search + Live Toast + Jump Links + Load More)
+// src/pages/ResultsPage.jsx (FINAL — Complete, Brand New Version with All UX Enhancements)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -346,7 +346,7 @@ export default function ResultsPage() {
               <ResultsTable
                 data={sorted}
                 totalResults={sorted.length}
-                // Add any other props needed for pagination
+                // Add pagination props as needed
               />
             </section>
           );
