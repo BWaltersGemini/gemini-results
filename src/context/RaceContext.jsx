@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Complete, No Truncations, Optimized Live Polling with Deletion Support)
+// src/context/RaceContext.jsx (FINAL — Continuous Auto-Looping Live Polling + Deletion Support)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -147,7 +147,7 @@ export function RaceProvider({ children }) {
     return () => { aborted = true; };
   }, [selectedEvent]);
 
-  // Results loading + optimized background live polling (with deletion of removed participants)
+  // Results loading + continuous auto-looping live polling
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -157,7 +157,6 @@ export function RaceProvider({ children }) {
     }
 
     let aborted = false;
-    let pollInterval = null;
 
     const now = Math.floor(Date.now() / 1000);
     const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
@@ -288,7 +287,6 @@ export function RaceProvider({ children }) {
               if (upsertError) {
                 console.error('[RaceContext] Background upsert failed:', upsertError);
               } else {
-                // Merge fresh + deletions into current results
                 let updatedResults = cachedResults.filter(r => !toDelete.includes(r.entry_id));
                 finalToUpsert.forEach(newRec => {
                   const index = updatedResults.findIndex(r => r.entry_id === newRec.entry_id);
@@ -305,7 +303,6 @@ export function RaceProvider({ children }) {
                 }
               }
             } else if (toDelete.length > 0) {
-              // Only deletions happened
               const updatedResults = cachedResults.filter(r => !toDelete.includes(r.entry_id));
               if (!aborted) {
                 setResults(updatedResults);
@@ -331,23 +328,33 @@ export function RaceProvider({ children }) {
       }
     };
 
+    // Initial load
     loadResults(resultsVersion > 0);
 
-    if (isLive && isAutoFetchEnabled) {
-      if (isActiveWindow) {
-        pollInterval = setInterval(() => loadResults(true), 30000);
-        console.log('[RaceContext] Live polling started — 30s interval (active race window)');
-      } else if (isRaceDayFallback) {
-        pollInterval = setInterval(() => loadResults(true), 60000);
-        console.log('[RaceContext] Race day polling started — 60s interval');
+    // Continuous auto-looping live polling
+    const continuousLiveFetch = async () => {
+      if (!isLive || !isAutoFetchEnabled || aborted) return;
+
+      try {
+        console.log('[RaceContext] Starting next live fetch cycle...');
+        await loadResults(true);
+      } catch (err) {
+        console.error('[RaceContext] Live fetch cycle error:', err);
       }
+
+      // 5-second delay between fetches (adjustable)
+      setTimeout(continuousLiveFetch, 5000);
+    };
+
+    if (isLive && isAutoFetchEnabled) {
+      continuousLiveFetch();
+      console.log('[RaceContext] Continuous live polling started (5s delay between fetches)');
     } else {
       console.log(`[RaceContext] Live polling disabled for event ${selectedEvent.id} (isLive: ${isLive}, auto-fetch: ${isAutoFetchEnabled})`);
     }
 
     return () => {
       aborted = true;
-      if (pollInterval) clearInterval(pollInterval);
     };
   }, [selectedEvent, resultsVersion, liveAutoFetchPerEvent]);
 
