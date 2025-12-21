@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — All errors fixed, clean, robust)
+// src/context/RaceContext.jsx (FINAL — Production-ready, no errors, smart polling)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -17,7 +17,7 @@ export function RaceProvider({ children }) {
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Admin-triggered refresh
+  // Admin-triggered forced refresh
   const [resultsVersion, setResultsVersion] = useState(0);
 
   // Global config — loaded fresh from Supabase
@@ -122,7 +122,6 @@ export function RaceProvider({ children }) {
         const formatted = fullRaces.map(r => ({ race_id: r.race_id, race_name: r.race_name }));
         setRaces(formatted);
 
-        // Update selectedEvent with full races and sync to Supabase
         setSelectedEvent(prev => ({ ...prev, races: fullRaces }));
 
         await supabase
@@ -183,7 +182,7 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // Determine if race is currently live
+        // Determine live status
         const now = Math.floor(Date.now() / 1000);
         const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
         const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
@@ -203,7 +202,6 @@ export function RaceProvider({ children }) {
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // Deduplicate by entry_id or bib+race_id
             const seen = new Map();
             fresh.forEach(r => {
               const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
@@ -245,7 +243,6 @@ export function RaceProvider({ children }) {
               console.log(`[RaceContext] Smart upsert complete (${count || 0} rows affected)`);
               allResults = deduped;
 
-              // Update last_updated only if real changes occurred
               if (count && count > 0) {
                 await supabase
                   .from('chronotrack_events')
@@ -277,12 +274,12 @@ export function RaceProvider({ children }) {
 
     loadResults();
 
-    // Start polling only if race is actively live
+    // Smart polling
     if (isActiveWindow) {
-      pollInterval = setInterval(() => loadResults(), 120000); // every 2 minutes
+      pollInterval = setInterval(() => loadResults(), 120000); // 2 minutes
       console.log('[RaceContext] Live polling started (active window)');
     } else if (isRaceDayFallback) {
-      pollInterval = setInterval(() => loadResults(), 300000); // every 5 minutes on race day fallback
+      pollInterval = setInterval(() => loadResults(), 300000); // 5 minutes on race day
       console.log('[RaceContext] Race day polling started (fallback)');
     }
 
@@ -292,7 +289,6 @@ export function RaceProvider({ children }) {
     };
   }, [selectedEvent, resultsVersion]);
 
-  // Admin function to force refresh
   const refreshResults = () => {
     console.log('[RaceContext] Admin triggered forced refresh');
     setResultsVersion(prev => prev + 1);
@@ -318,7 +314,7 @@ export function RaceProvider({ children }) {
         showAdsPerMaster,
         ads,
         hiddenRaces,
-        refreshResults, // Exposed for AdminPage use
+        refreshResults,
       }}
     >
       {children}
