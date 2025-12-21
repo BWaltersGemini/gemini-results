@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Card Fit + Centered Name When No Photo)
+// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Fit: Minimal Top Padding + Footer Safe)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -613,15 +613,15 @@ export default function ParticipantPage() {
         className="hidden"
       />
 
-      {/* Hidden Full-Size Card — FINAL PERFECT FIT + Centered Name When No Photo */}
+      {/* Hidden Full-Size Card — FINAL PERFECT FIT: Minimal top padding, footer safe */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-between text-center px-16 py-24"
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center text-center px-12 pt-8 pb-16"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
-          {/* Logo */}
-          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-6 mb-6">
+          {/* Logo — Almost at top */}
+          <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl p-6 mb-6">
             {masterLogo ? (
               <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-36 object-contain mx-auto" crossOrigin="anonymous" />
             ) : eventLogos[selectedEvent.id] ? (
@@ -632,25 +632,23 @@ export default function ParticipantPage() {
           </div>
 
           {/* Race + Date */}
-          <div className="mb-6">
-            <p className="text-4xl font-black text-[#80ccd6] mb-3">{raceDisplayName}</p>
-            <p className="text-3xl text-gray-300">{formatDate(selectedEvent.start_time)}</p>
-          </div>
+          <p className="text-4xl font-black text-[#80ccd6] mb-3">{raceDisplayName}</p>
+          <p className="text-3xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
 
-          {/* Photo + Name — Centered when no photo */}
-          <div className={`flex items-center justify-center gap-20 mb-10 ${!userPhoto ? 'w-full' : ''}`}>
-            {userPhoto ? (
+          {/* Photo + Name Side-by-Side */}
+          <div className={`flex items-center justify-center gap-16 mb-10 w-full max-w-5xl ${!userPhoto ? 'justify-center' : ''}`}>
+            {userPhoto && (
               <div className="w-72 h-72 rounded-full overflow-hidden border-10 border-white shadow-2xl flex-shrink-0">
                 <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
               </div>
-            ) : null}
+            )}
             <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-6xl' : 'text-7xl'}`}>
               {participant.first_name}<br />{participant.last_name}
             </h1>
           </div>
 
           {/* Finish Time */}
-          <div className="mb-10">
+          <div className="mb-12">
             <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
             <p className="text-8xl font-black text-[#ffd700] drop-shadow-2xl">
               {formatChronoTime(participant.chip_time)}
@@ -658,7 +656,7 @@ export default function ParticipantPage() {
           </div>
 
           {/* Rankings */}
-          <div className="grid grid-cols-3 gap-12 text-white w-full max-w-4xl mb-10">
+          <div className="grid grid-cols-3 gap-12 text-white w-full max-w-4xl mb-12">
             <div>
               <p className="text-3xl text-gray-400 uppercase mb-4">Overall</p>
               <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
@@ -676,49 +674,45 @@ export default function ParticipantPage() {
             </div>
           </div>
 
-          {/* Footer */}
+          {/* Footer — Now safely visible */}
           <p className="text-3xl text-white italic">
             Find your next race at www.youkeepmoving.com
           </p>
         </div>
       </div>
 
-      {/* Card Preview Modal — Matches Final Layout */}
+      {/* Card Preview Modal — Matches Final Layout Exactly */}
       {showCardPreview && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8 max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-10">Your Result Card 🎉</h3>
 
             <div className="flex justify-center mb-12">
-              <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl flex flex-col items-center justify-between p-8">
-                <div className="w-full bg-white rounded-2xl p-4">
+              <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl flex flex-col items-center px-8 pt-6 pb-8">
+                <div className="w-full bg-white rounded-2xl p-4 mb-4">
                   {masterLogo ? <img src={masterLogo} alt="Logo" className="w-full max-h-16 object-contain mx-auto" /> :
                    eventLogos[selectedEvent.id] ? <img src={eventLogos[selectedEvent.id]} alt="Logo" className="w-full max-h-14 object-contain mx-auto" /> :
                    <h2 className="text-2xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>}
                 </div>
 
-                <div className="text-center">
-                  <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
-                  <p className="text-sm text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
-                </div>
+                <p className="text-xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
+                <p className="text-sm text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
 
-                <div className={`flex items-center justify-center gap-8 ${!userPhoto ? 'w-full' : ''}`}>
-                  {userPhoto ? (
-                    <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-xl">
+                <div className={`flex items-center justify-center gap-8 mb-6 ${!userPhoto ? 'w-full justify-center' : ''}`}>
+                  {userPhoto && (
+                    <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-white shadow-xl">
                       <img src={userPhoto} alt="You" className="w-full h-full object-cover" />
                     </div>
-                  ) : null}
+                  )}
                   <h1 className={`font-black text-white leading-tight ${userPhoto ? 'text-2xl' : 'text-3xl'}`}>
                     {participant.first_name}<br />{participant.last_name}
                   </h1>
                 </div>
 
-                <div className="text-center">
-                  <p className="text-sm text-gray-400 uppercase mb-2">Finish Time</p>
-                  <p className="text-5xl font-black text-[#ffd700] mb-8">{formatChronoTime(participant.chip_time)}</p>
-                </div>
+                <p className="text-sm text-gray-400 uppercase mb-2">Finish Time</p>
+                <p className="text-5xl font-black text-[#ffd700] mb-8">{formatChronoTime(participant.chip_time)}</p>
 
-                <div className="grid grid-cols-3 gap-4 text-xs w-full mb-8">
+                <div className="grid grid-cols-3 gap-4 text-xs w-full mb-6">
                   <div><p className="text-gray-400 uppercase">Overall</p><p className="text-2xl font-bold text-[#ffd700]">{participant.place || '—'}</p><p className="text-gray-400">of {overallTotal}</p></div>
                   <div><p className="text-gray-400 uppercase">Gender</p><p className="text-2xl font-bold text-[#ffd700]">{participant.gender_place || '—'}</p><p className="text-gray-400">of {genderTotal}</p></div>
                   <div><p className="text-gray-400 uppercase">Division</p><p className="text-2xl font-bold text-[#ffd700]">{participant.age_group_place || '—'}</p><p className="text-gray-400">of {divisionTotal}</p></div>
