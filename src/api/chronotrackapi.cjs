@@ -1,4 +1,4 @@
-// src/api/chronotrackapi.cjs (FINAL — Fully paginated bracket results for gender/division >1000 finishers)
+// src/api/chronotrackapi.cjs (FINAL — Fully paginated bracket results for gender/division >1000 finisher)
 import axios from 'axios';
 
 // Direct ChronoTrack API — no proxy needed for events
