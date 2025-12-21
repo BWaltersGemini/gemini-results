@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Supabase Storage logos + Delete Master Event)
+// src/pages/AdminPage.jsx (FINAL — Added "Refresh Event Details" button for event_end_time)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -6,10 +6,12 @@ import { supabase } from '../supabaseClient';
 import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 import { RaceContext } from '../context/RaceContext';
+import axios from 'axios';
+import { getAuthHeader, PROXY_BASE } from '../api/chronotrackapi'; // Import needed for auth
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const { refreshResults } = useContext(RaceContext);
+  const { refreshResults } from useContext(RaceContext);
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
@@ -29,6 +31,7 @@ export default function AdminPage() {
   const [participantCounts, setParticipantCounts] = useState({});
   const [refreshingEvent, setRefreshingEvent] = useState(null);
   const [fetchingEvents, setFetchingEvents] = useState(false);
+  const [fetchingDetails, setFetchingDetails] = useState(false); // New: for end_time fetch
   const [publishingAll, setPublishingAll] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [activeTab, setActiveTab] = useState('events');
@@ -98,7 +101,6 @@ export default function AdminPage() {
           .order('start_time', { ascending: false });
         if (eventsError) throw eventsError;
         setChronoEvents(cachedEvents || []);
-
         const counts = {};
         for (const event of cachedEvents || []) {
           const { count: adminCount, error: countError } = await adminSupabase
@@ -145,6 +147,51 @@ export default function AdminPage() {
     } finally {
       setFetchingEvents(false);
     }
+  };
+
+  // NEW: Bulk fetch event_end_time for all events
+  const fetchAllEventDetails = async () => {
+    if (!confirm(`Fetch end times for all ${chronoEvents.length} events? This may take a minute.`)) {
+      return;
+    }
+    setFetchingDetails(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const event of chronoEvents) {
+      try {
+        const authHeader = await getAuthHeader();
+        const response = await axios.get(`${PROXY_BASE}/api/event/${event.id}`, {
+          headers: { Authorization: authHeader },
+          params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+        });
+
+        const eventData = response.data.event;
+        if (eventData?.event_end_time) {
+          const endTime = parseInt(eventData.event_end_time, 10);
+          const { error } = await adminSupabase
+            .from('chronotrack_events')
+            .update({ event_end_time: endTime })
+            .eq('id', event.id);
+
+          if (!error) successCount++;
+          else failCount++;
+        } else {
+          failCount++;
+        }
+      } catch (err) {
+        console.warn(`[Admin] Failed to fetch end_time for event ${event.id}`, err);
+        failCount++;
+      }
+    }
+
+    setFetchingDetails(false);
+    setSaveStatus(`End times refreshed: ${successCount} succeeded, ${failCount} failed`);
+    setTimeout(() => setSaveStatus(''), 8000);
+
+    // Reload events to reflect updated end times
+    const { data } = await supabase.from('chronotrack_events').select('*');
+    setChronoEvents(data || []);
   };
 
   const publishAllEvents = async () => {
@@ -253,25 +300,21 @@ export default function AdminPage() {
     });
   };
 
-  // NEW: Upload logo to Supabase Storage
+  // Upload logo to Supabase Storage
   const handleLogoUpload = async (e, masterKey) => {
     const file = e.target.files[0];
     if (!file) return;
-
     try {
       const { data, error: uploadError } = await adminSupabase.storage
-        .from('logos') // Make sure this bucket exists in Supabase
+        .from('logos')
         .upload(`public/${masterKey}`, file, {
           upsert: true,
           contentType: file.type,
         });
-
       if (uploadError) throw uploadError;
-
       const { data: { publicUrl } } = adminSupabase.storage
         .from('logos')
         .getPublicUrl(`public/${masterKey}`);
-
       const updatedLogos = { ...eventLogos, [masterKey]: publicUrl };
       setEventLogos(updatedLogos);
       await autoSaveConfig('eventLogos', updatedLogos);
@@ -290,9 +333,7 @@ export default function AdminPage() {
       const { error } = await adminSupabase.storage
         .from('logos')
         .remove([`public/${masterKey}`]);
-
       if (error && error.message !== 'Object not found') throw error;
-
       const updatedLogos = { ...eventLogos };
       delete updatedLogos[masterKey];
       setEventLogos(updatedLogos);
@@ -306,21 +347,17 @@ export default function AdminPage() {
     }
   };
 
-  // NEW: Delete entire master event
+  // Delete entire master event
   const handleDeleteMaster = async (masterKey) => {
     if (!confirm(`Delete master event "${masterKey}"? This will unlink all events and remove its logo.`)) {
       return;
     }
-
     try {
       const updatedGroups = { ...masterGroups };
       delete updatedGroups[masterKey];
       setMasterGroups(updatedGroups);
       await autoSaveConfig('masterGroups', updatedGroups);
-
-      // Remove logo
       await handleRemoveLogo(masterKey);
-
       setSaveStatus(`Master "${masterKey}" deleted`);
       setTimeout(() => setSaveStatus(''), 5000);
     } catch (err) {
@@ -505,6 +542,14 @@ export default function AdminPage() {
                 >
                   {fetchingEvents ? 'Fetching...' : 'Fetch Latest Events'}
                 </button>
+                {/* NEW: Refresh Event Details button */}
+                <button
+                  onClick={fetchAllEventDetails}
+                  disabled={fetchingDetails}
+                  className="px-6 py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition"
+                >
+                  {fetchingDetails ? 'Fetching Details...' : 'Refresh Event Details (End Times)'}
+                </button>
                 <button
                   onClick={publishAllEvents}
                   disabled={publishingAll}
@@ -531,7 +576,6 @@ export default function AdminPage() {
                 const currentMaster = getCurrentMasterForEvent(event.id);
                 const displayName = editedEvents[event.id]?.name || event.name;
                 const count = participantCounts[event.id] || 0;
-
                 return (
                   <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     <div
@@ -553,7 +597,6 @@ export default function AdminPage() {
                       </div>
                       <span className="text-2xl text-gray-400">{expandedEvents[event.id] ? '−' : '+'}</span>
                     </div>
-
                     {expandedEvents[event.id] && (
                       <div className="px-6 pb-6 border-t border-gray-200">
                         {/* Master Management */}
@@ -570,7 +613,6 @@ export default function AdminPage() {
                                 Delete Master
                               </button>
                             </div>
-
                             {/* Logo Upload */}
                             <div className="mb-6">
                               <h5 className="text-lg font-semibold text-gray-700 mb-3">Master Logo</h5>
@@ -597,7 +639,6 @@ export default function AdminPage() {
                                 />
                               )}
                             </div>
-
                             {/* Ads Toggle */}
                             <div>
                               <h5 className="text-lg font-semibold text-gray-700 mb-3">Ads Visibility</h5>
@@ -605,7 +646,11 @@ export default function AdminPage() {
                                 <input
                                   type="checkbox"
                                   checked={!!showAdsPerMaster[currentMaster]}
-                                  onChange={() => toggleAdsForMaster(currentMaster)}
+                                  onChange={() => {
+                                    const updated = { ...showAdsPerMaster, [currentMaster]: !showAdsPerMaster[currentMaster] };
+                                    setShowAdsPerMaster(updated);
+                                    autoSaveConfig('showAdsPerMaster', updated);
+                                  }}
                                   className="h-6 w-6 text-gemini-blue rounded focus:ring-gemini-blue"
                                 />
                                 <span className="text-lg font-medium text-gray-800">
@@ -615,7 +660,6 @@ export default function AdminPage() {
                             </div>
                           </div>
                         )}
-
                         {/* Standard Controls */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                           <div>
@@ -660,7 +704,6 @@ export default function AdminPage() {
                             />
                           </div>
                         </div>
-
                         {/* Publish Button */}
                         <div className="mt-8 flex justify-center">
                           <button
@@ -671,7 +714,6 @@ export default function AdminPage() {
                             {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
                           </button>
                         </div>
-
                         {/* Races */}
                         {event.races && event.races.length > 0 && (
                           <div className="mt-8">
@@ -703,7 +745,6 @@ export default function AdminPage() {
                             </div>
                           </div>
                         )}
-
                         {(!event.races || event.races.length === 0) && (
                           <div className="mt-8 text-center text-gray-500 italic">
                             No races embedded for this event.

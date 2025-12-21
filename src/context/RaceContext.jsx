@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (WORKING BASE + Smart UPSERT + Conditional last_updated)
+// src/context/RaceContext.jsx (FINAL — Smart UPSERT + event_end_time support + precise live window)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -87,6 +87,44 @@ export function RaceProvider({ children }) {
     loadEvents();
   }, []);
 
+  // Fetch event_end_time when an event is selected (if missing)
+  useEffect(() => {
+    if (!selectedEvent || selectedEvent.event_end_time) return;
+
+    const fetchEndTime = async () => {
+      try {
+        const authHeader = await getAuthHeader(); // Reuse from chronotrackapi if needed, or direct
+        const response = await axios.get(`${PROXY_BASE}/api/event/${selectedEvent.id}`, {
+          headers: { Authorization: authHeader },
+          params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+        });
+
+        const eventData = response.data.event;
+        if (eventData && eventData.event_end_time) {
+          const endTime = parseInt(eventData.event_end_time, 10);
+
+          // Update in-memory selectedEvent
+          setSelectedEvent(prev => ({
+            ...prev,
+            event_end_time: endTime,
+          }));
+
+          // Sync to Supabase
+          await supabase
+            .from('chronotrack_events')
+            .update({ event_end_time: endTime })
+            .eq('id', selectedEvent.id);
+
+          console.log(`[RaceContext] Fetched and saved event_end_time: ${endTime} for event ${selectedEvent.id}`);
+        }
+      } catch (err) {
+        console.warn('[RaceContext] Failed to fetch event_end_time:', err);
+      }
+    };
+
+    fetchEndTime();
+  }, [selectedEvent?.id, selectedEvent?.event_end_time]);
+
   // Race loading (unchanged — working perfectly)
   useEffect(() => {
     if (!selectedEvent) {
@@ -150,7 +188,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Results loading — NOW WITH SMART UPSERT + conditional last_updated
+  // Results loading — SMART UPSERT + precise live window using event_end_time
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -185,23 +223,28 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // Check if today is race day
-        const todayStr = new Date().toISOString().split('T')[0];
-        const eventDateStr = selectedEvent.start_time
-          ? new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0]
-          : null;
-        const isRaceDay = eventDateStr === todayStr;
-        if (!aborted) setIsLiveRace(isRaceDay);
+        // Precise live window check using start_time and end_time
+        const now = Math.floor(Date.now() / 1000);
+        const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
+        const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
+        const isActiveWindow = startTime && endTime && now >= startTime && now <= endTime;
 
-        // Fetch fresh if: race day, no cache, or admin forced
-        const shouldFetchFresh = isRaceDay || cachedResults.length === 0 || resultsVersion > 0;
+        // Fallback to full day if no end_time
+        const isRaceDayFallback = !endTime && startTime
+          ? new Date(startTime * 1000).toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
+          : false;
+
+        const isLive = isActiveWindow || isRaceDayFallback;
+        if (!aborted) setIsLiveRace(isLive);
+
+        // Fetch fresh if: active window, no cache, or admin forced
+        const shouldFetchFresh = isLive || cachedResults.length === 0 || resultsVersion > 0;
 
         if (shouldFetchFresh) {
           console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (!aborted && fresh.length > 0) {
-            // Dedupe
             const seen = new Map();
             fresh.forEach(r => {
               const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
@@ -210,7 +253,6 @@ export function RaceProvider({ children }) {
             const deduped = Array.from(seen.values());
             console.log(`[RaceContext] Deduplicated: ${fresh.length} → ${deduped.length}`);
 
-            // SMART UPSERT
             const toUpsert = deduped.map(r => ({
               event_id: selectedEvent.id,
               race_id: r.race_id || null,
@@ -243,7 +285,6 @@ export function RaceProvider({ children }) {
             } else {
               console.log(`[RaceContext] Smart upsert complete: ${count || 0} rows affected`);
 
-              // Only bump last_updated if real changes happened
               if (count && count > 0) {
                 const { error: tsError } = await supabase
                   .from('chronotrack_events')
@@ -281,14 +322,10 @@ export function RaceProvider({ children }) {
 
     loadResults();
 
-    // Live polling on race day
-    if (selectedEvent.start_time) {
-      const eventDateStr = new Date(selectedEvent.start_time * 1000).toISOString().split('T')[0];
-      const todayStr = new Date().toISOString().split('T')[0];
-      if (eventDateStr === todayStr) {
-        pollInterval = setInterval(() => loadResults(), 120000);
-        console.log('[RaceContext] Live polling started (every 2 minutes)');
-      }
+    // Background polling only during active race window
+    if (isActiveWindow) {
+      pollInterval = setInterval(() => loadResults(), 120000); // every 2 minutes
+      console.log('[RaceContext] Precise live window active — background polling started');
     }
 
     return () => {
