@@ -1,10 +1,10 @@
-// src/context/RaceContext.jsx (FINAL — Fixed .cjs import + all features working)
+// src/context/RaceContext.jsx (FINAL — All runtime errors fixed + end_time + precise live window)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 import axios from 'axios';
-import * as chronotrackapi from '../api/chronotrackapi.cjs'; // ← Namespace import — Vercel-safe
+import * as chronotrackapi from '../api/chronotrackapi.cjs'; // ← Namespace import (Vercel-safe)
 
 export const RaceContext = createContext();
 
@@ -19,7 +19,7 @@ export function RaceProvider({ children }) {
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
 
-  // Trigger for forcing fresh results fetch (used by AdminPage)
+  // Trigger for forcing fresh results fetch
   const [resultsVersion, setResultsVersion] = useState(0);
 
   // Global config
@@ -115,7 +115,7 @@ export function RaceProvider({ children }) {
             .update({ event_end_time: endTime })
             .eq('id', selectedEvent.id);
 
-          console.log(`[RaceContext] Fetched and saved event_end_time: ${endTime}`);
+          console.log(`[RaceContext] Fetched event_end_time: ${endTime}`);
         }
       } catch (err) {
         console.warn('[RaceContext] Failed to fetch event_end_time:', err);
