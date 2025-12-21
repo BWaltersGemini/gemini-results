@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Added "Refresh Event Details" button for event_end_time)
+// src/pages/AdminPage.jsx (FINAL — Fixed .cjs import + working "Refresh Event Details" button)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -7,12 +7,12 @@ import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 import { RaceContext } from '../context/RaceContext';
 import axios from 'axios';
-import { getAuthHeader, PROXY_BASE } from '../api/chronotrackapi'; // Import needed for auth
+import chronotrackapi from '../api/chronotrackapi.cjs'; // ← Fixed: import as default
 
 export default function AdminPage() {
   const navigate = useNavigate();
   const { refreshResults } = useContext(RaceContext);
-  
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +31,7 @@ export default function AdminPage() {
   const [participantCounts, setParticipantCounts] = useState({});
   const [refreshingEvent, setRefreshingEvent] = useState(null);
   const [fetchingEvents, setFetchingEvents] = useState(false);
-  const [fetchingDetails, setFetchingDetails] = useState(false); // New: for end_time fetch
+  const [fetchingDetails, setFetchingDetails] = useState(false); // For end_time fetch
   const [publishingAll, setPublishingAll] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [activeTab, setActiveTab] = useState('events');
@@ -160,8 +160,8 @@ export default function AdminPage() {
 
     for (const event of chronoEvents) {
       try {
-        const authHeader = await getAuthHeader();
-        const response = await axios.get(`${PROXY_BASE}/api/event/${event.id}`, {
+        const authHeader = await chronotrackapi.getAuthHeader();
+        const response = await axios.get(`${chronotrackapi.PROXY_BASE}/api/event/${event.id}`, {
           headers: { Authorization: authHeader },
           params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
         });
