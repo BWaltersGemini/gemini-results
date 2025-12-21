@@ -170,7 +170,7 @@ export function RaceProvider({ children }) {
     if (!aborted) setIsLiveRace(isLive);
 
     // Always fetch fresh on initial load during live race
-    const shouldFetchFreshOnStart = isLive || results.length === 0 || resultsVersion > 0;
+    const shouldFetchFreshOnStart = results.length === 0 || resultsVersion > 0;
 
     const loadResults = async (forceFresh = false) => {
       if (aborted) return;
