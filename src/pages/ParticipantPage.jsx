@@ -419,7 +419,7 @@ export default function ParticipantPage() {
                   <tbody className="divide-y divide-gray-200">
                     {participant.splits.map((split, i) => (
                       <tr key={i} className="hover:bg-gray-50 transition">
-                        <td className="px-8 py-5 font-medium">{split.name || `Split ${i + 1}`}</</td>
+                        <td className="px-8 py-5 font-medium">{split.name || `Split ${i + 1}`}</td>
                         <td className="px-8 py-5">{formatChronoTime(split.time) || '—'}</td>
                         <td className="px-8 py-5">{split.pace || '—'}</td>
                         <td className="px-8 py-5">{split.place || '—'}</td>
