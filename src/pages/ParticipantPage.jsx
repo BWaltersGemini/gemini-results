@@ -396,7 +396,7 @@ export default function ParticipantPage() {
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Overall</p>
               <p className="text-5xl font-bold text-gemini-dark-gray">{participant.place || '—'}</p>
-              <p class **ClassName**="text-lg text-gray-600">of {overallTotal}</p>
+              <p className="text-lg text-gray-600">of {overallTotal}</p>
             </div>
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Gender</p>
