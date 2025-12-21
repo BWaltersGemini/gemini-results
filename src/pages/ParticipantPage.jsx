@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FULL COMPLETE — Final Version)
+// src/pages/ParticipantPage.jsx (UPDATED — Splits section only shown when splits exist AND contain meaningful data)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -14,6 +14,7 @@ export default function ParticipantPage() {
   const navigate = useNavigate();
   const params = useParams();
   const { bib } = params;
+
   const {
     events,
     selectedEvent: contextSelectedEvent,
@@ -24,8 +25,10 @@ export default function ParticipantPage() {
     setSelectedEvent,
     masterGroups = {},
   } = useContext(RaceContext);
+
   const [masterGroupsLocal] = useLocalStorage('masterGroups', {});
   const [editedEventsLocal] = useLocalStorage('editedEvents', {});
+
   const initialState = location.state || {};
   const [participant, setParticipant] = useState(initialState.participant || null);
   const [selectedEvent, setLocalSelectedEvent] = useState(initialState.selectedEvent || contextSelectedEvent);
@@ -306,6 +309,16 @@ export default function ParticipantPage() {
   const isAgeGroupWinner = participant.age_group_place === 1;
   const bibLogo = eventLogos[selectedEvent.id] || '/GRR.png';
 
+  // Determine if we should show the splits section
+  const hasMeaningfulSplits = participant.splits && 
+    Array.isArray(participant.splits) && 
+    participant.splits.length > 0 && 
+    participant.splits.some(split => 
+      (split.time && split.time.trim() !== '') || 
+      (split.pace && split.pace.trim() !== '') || 
+      split.place
+    );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
@@ -394,13 +407,14 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Splits */}
-        {participant.splits && participant.splits.length > 0 && (
+        {/* Splits Section — Only shown when meaningful splits exist */}
+        {hasMeaningfulSplits && (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
             <button
               onClick={() => setShowSplits(!showSplits)}
-              className="w-full bg-gradient-to-r from-[#80ccd6] to-[#80ccd6]/70 py-6 text-white font-bold text-2xl hover:opacity-90 transition"
+              className="w-full bg-gradient-to-r from-[#80ccd6] to-[#80ccd6]/70 py-6 text-white font-bold text-2xl hover:opacity-90 transition flex items-center justify-center gap-3"
             >
+              <span>{showSplits ? '▼' : '▶'}</span>
               {showSplits ? 'Hide' : 'Show'} Split Times ({participant.splits.length})
             </button>
             {showSplits && (
@@ -599,7 +613,7 @@ export default function ParticipantPage() {
         </div>
       </div>
 
-      {/* Card Preview Modal - Perfectly Centered on All Devices */}
+      {/* Card Preview Modal */}
       {showCardPreview && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
@@ -609,9 +623,7 @@ export default function ParticipantPage() {
             >
               ×
             </button>
-
             <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-10">Your Result Card 🎉</h3>
-
             <div className="flex justify-center mb-10">
               <div className="relative w-96 h-96 rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200">
                 <div className="absolute inset-0 flex items-start justify-center">
@@ -669,7 +681,6 @@ export default function ParticipantPage() {
                 </div>
               </div>
             </div>
-
             <div className="mb-10">
               <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
               <div className="flex justify-center gap-6 mb-6">
@@ -683,7 +694,6 @@ export default function ParticipantPage() {
                 </div>
               )}
             </div>
-
             <div className="flex justify-center gap-6">
               <button onClick={generateResultCard} className="px-10 py-4 bg-gemini-blue text-white font-bold text-xl rounded-full hover:bg-gemini-blue/90 transition shadow-xl">
                 {isMobileDevice ? 'Save to Photos' : 'Download Image'}
