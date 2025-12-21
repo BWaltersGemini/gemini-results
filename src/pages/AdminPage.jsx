@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (BRAND NEW — Full features: Start/End Time display + Delete Event button)
+// src/pages/AdminPage.jsx (FULLY UPDATED — Fetch Latest Events now includes end_time fetch + Delete Event button + Start/End Time display)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -31,7 +31,6 @@ export default function AdminPage() {
   const [participantCounts, setParticipantCounts] = useState({});
   const [refreshingEvent, setRefreshingEvent] = useState(null);
   const [fetchingEvents, setFetchingEvents] = useState(false);
-  const [fetchingDetails, setFetchingDetails] = useState(false);
   const [publishingAll, setPublishingAll] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [activeTab, setActiveTab] = useState('events');
@@ -123,34 +122,7 @@ export default function AdminPage() {
     loadCachedData();
   }, [isLoggedIn]);
 
-  const fetchLatestFromChronoTrack = async () => {
-    setFetchingEvents(true);
-    try {
-      const freshEvents = await fetchChronoEvents();
-      const sorted = freshEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-      const toUpsert = sorted.map(event => ({
-        id: event.id,
-        name: event.name,
-        start_time: event.start_time,
-        races: event.races || [],
-      }));
-
-      const { error } = await adminSupabase
-        .from('chronotrack_events')
-        .upsert(toUpsert, { onConflict: 'id' });
-
-      if (error) throw error;
-      setChronoEvents(sorted);
-      setSaveStatus('Events refreshed and cached!');
-      setTimeout(() => setSaveStatus(''), 4000);
-    } catch (err) {
-      console.error('[Admin] ChronoTrack fetch failed:', err);
-      setSaveStatus('Fetch failed');
-    } finally {
-      setFetchingEvents(false);
-    }
-  };
-
+  // Helper: Get authenticated header
   const getAuthHeader = async () => {
     const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
     const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
@@ -166,45 +138,63 @@ export default function AdminPage() {
     return `Bearer ${tokenRes.data.access_token}`;
   };
 
-  const fetchAllEventDetails = async () => {
-    if (!confirm(`Fetch end times for all ${chronoEvents.length} events? This may take a minute.`)) return;
+  // Combined fetch: events + end_times
+  const fetchLatestFromChronoTrack = async () => {
+    setFetchingEvents(true);
+    try {
+      const freshEvents = await fetchChronoEvents();
+      const sorted = freshEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
-    setFetchingDetails(true);
-    let successCount = 0;
-    let failCount = 0;
+      const authHeader = await getAuthHeader();
 
-    for (const event of chronoEvents) {
-      try {
-        const authHeader = await getAuthHeader();
-        const response = await axios.get(`/chrono-api/api/event/${event.id}`, {
-          headers: { Authorization: authHeader },
-          params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
-        });
+      const updatedEvents = [];
+      let endTimeSuccess = 0;
+      let endTimeFail = 0;
 
-        const eventData = response.data.event;
-        if (eventData?.event_end_time) {
-          const endTime = parseInt(eventData.event_end_time, 10);
-          const { error } = await adminSupabase
-            .from('chronotrack_events')
-            .update({ event_end_time: endTime })
-            .eq('id', event.id);
-
-          error ? failCount++ : successCount++;
-        } else {
-          failCount++;
+      for (const event of sorted) {
+        let endTime = null;
+        try {
+          const response = await axios.get(`/chrono-api/api/event/${event.id}`, {
+            headers: { Authorization: authHeader },
+            params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
+          });
+          const eventData = response.data.event;
+          if (eventData?.event_end_time) {
+            endTime = parseInt(eventData.event_end_time, 10);
+            endTimeSuccess++;
+          } else {
+            endTimeFail++;
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch end_time for event ${event.id}`, err);
+          endTimeFail++;
         }
-      } catch (err) {
-        console.warn(`[Admin] Failed to fetch end_time for event ${event.id}`, err);
-        failCount++;
+
+        updatedEvents.push({
+          id: event.id,
+          name: event.name,
+          start_time: event.start_time,
+          event_end_time: endTime,
+          races: event.races || [],
+        });
       }
+
+      const { error } = await adminSupabase
+        .from('chronotrack_events')
+        .upsert(updatedEvents, { onConflict: 'id' });
+
+      if (error) throw error;
+
+      setChronoEvents(updatedEvents);
+      setSaveStatus(`Events refreshed! End times: ${endTimeSuccess} fetched, ${endTimeFail} missing`);
+      setTimeout(() => setSaveStatus(''), 6000);
+    } catch (err) {
+      console.error('[Admin] Refresh failed:', err);
+      setSaveStatus('Refresh failed');
+      setTimeout(() => setSaveStatus(''), 6000);
+    } finally {
+      setFetchingEvents(false);
     }
-
-    setFetchingDetails(false);
-    setSaveStatus(`End times refreshed: ${successCount} succeeded, ${failCount} failed`);
-    setTimeout(() => setSaveStatus(''), 8000);
-
-    const { data } = await supabase.from('chronotrack_events').select('*');
-    setChronoEvents(data || []);
   };
 
   const publishAllEvents = async () => {
@@ -455,14 +445,14 @@ export default function AdminPage() {
     }
   };
 
-  // NEW: Delete Event — removes event + all results (perfect for cleaning test events)
+  // Delete Event — removes event + all results
   const handleDeleteEvent = async (eventId, eventName) => {
     if (!confirm(`PERMANENTLY delete event "${eventName}" (ID: ${eventId}) and ALL its results? This cannot be undone.`)) {
       return;
     }
 
     try {
-      // Delete all results first
+      // Delete results first
       const { error: resultsError } = await adminSupabase
         .from('chronotrack_results')
         .delete()
@@ -622,14 +612,7 @@ export default function AdminPage() {
                   disabled={fetchingEvents}
                   className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition"
                 >
-                  {fetchingEvents ? 'Fetching...' : 'Fetch Latest Events'}
-                </button>
-                <button
-                  onClick={fetchAllEventDetails}
-                  disabled={fetchingDetails}
-                  className="px-6 py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition"
-                >
-                  {fetchingDetails ? 'Fetching Details...' : 'Refresh Event Details (End Times)'}
+                  {fetchingEvents ? 'Refreshing...' : 'Refresh Events & End Times'}
                 </button>
                 <button
                   onClick={publishAllEvents}
@@ -650,7 +633,7 @@ export default function AdminPage() {
                     ? 'All events assigned to masters or no events available.'
                     : 'No events cached yet.'}
                 </p>
-                <p className="text-gray-500 mt-2">Click "Fetch Latest Events" to load from ChronoTrack.</p>
+                <p className="text-gray-500 mt-2">Click "Refresh Events & End Times" to load from ChronoTrack.</p>
               </div>
             ) : (
               displayedEvents.map((event) => {
