@@ -1,3 +1,5 @@
+// FORCED NEW BUILD — 2025-12-20  — FIX isActiveWindow ReferenceError FOREVER
+// This line forces Git to see a change and triggers a fresh Vercel deploy
 // src/context/RaceContext.jsx (FINAL — Production-ready, no errors, smart polling)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
