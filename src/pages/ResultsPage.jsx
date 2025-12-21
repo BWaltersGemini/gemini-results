@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Complete with Stats Header + Fixed Back-to-Top + All Enhancements)
+// src/pages/ResultsPage.jsx (FINAL — Fixed Mobile Search + Stats Cleanup + Year Selector + Better Search UX)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -77,7 +77,7 @@ export default function ResultsPage() {
     }
   }, [searchQuery]);
 
-  // Show/hide back-to-top button on scroll
+  // Show/hide back-to-top button
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
@@ -179,11 +179,10 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
-  // Calculate fun stats
+  // Calculate stats
   const totalFinishers = results.length;
   const maleFinishers = results.filter(r => r.gender === 'M').length;
   const femaleFinishers = results.filter(r => r.gender === 'F').length;
-  const uniqueDivisionsCount = uniqueDivisions.length;
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -209,6 +208,19 @@ export default function ResultsPage() {
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent, results },
     });
+  };
+
+  // Available years for this master event
+  let availableYears = [];
+  if (currentMasterKey) {
+    const linkedEventIds = (masterGroups[currentMasterKey] || []).map(String);
+    const linkedEvents = events.filter(e => e && e.id && linkedEventIds.includes(String(e.id)));
+    availableYears = [...new Set(linkedEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
+  }
+
+  const handleYearChange = (newYear) => {
+    if (newYear === year) return;
+    navigate(`/results/${masterKey}/${newYear}${raceSlug ? '/' + raceSlug : ''}`);
   };
 
   // MASTER LANDING PAGE
@@ -335,7 +347,7 @@ export default function ResultsPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
-        {/* Sticky Search Bar */}
+        {/* Sticky Search Bar — Fixed mobile text color */}
         <div className={`sticky top-20 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''}`}>
           <div className="relative max-w-3xl mx-auto">
             <input
@@ -343,7 +355,7 @@ export default function ResultsPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by bib or name..."
-              className="w-full px-6 py-4 text-xl placeholder-gray-500 border-0 focus:outline-none"
+              className="w-full px-6 py-4 text-xl placeholder-gray-500 border-0 focus:outline-none text-gray-900"
             />
             {searchQuery && (
               <button
@@ -361,7 +373,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Enhanced Header with Stats */}
+        {/* Enhanced Header with Stats (Removed Divisions) */}
         {!searchQuery && (
           <div className="text-center mb-16">
             {displayLogo && (
@@ -372,8 +384,28 @@ export default function ResultsPage() {
             </h1>
             <p className="text-2xl text-gray-600 mb-8">{formatDate(selectedEvent.start_time)}</p>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-5xl mx-auto mb-12">
+            {/* Year Selector */}
+            {availableYears.length > 1 && (
+              <div className="flex flex-wrap justify-center gap-4 mb-12">
+                <span className="text-2xl font-bold text-gray-700 self-center mr-4">Year:</span>
+                {availableYears.map((y) => (
+                  <button
+                    key={y}
+                    onClick={() => handleYearChange(y)}
+                    className={`px-8 py-4 rounded-full font-bold text-xl transition ${
+                      y === year
+                        ? 'bg-gemini-blue text-white shadow-xl'
+                        : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-gemini-blue hover:text-gemini-blue'
+                    }`}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Stats Grid — Removed Divisions */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-12">
               <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-xl text-center">
                 <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Total Finishers</p>
                 <p className="text-6xl font-black text-gemini-blue">{totalFinishers.toLocaleString()}</p>
@@ -385,10 +417,6 @@ export default function ResultsPage() {
               <div className="bg-gradient-to-br from-pink-100 to-pink-200 rounded-2xl p-8 shadow-xl text-center">
                 <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Female</p>
                 <p className="text-6xl font-black text-pink-700">{femaleFinishers.toLocaleString()}</p>
-              </div>
-              <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl p-8 shadow-xl text-center">
-                <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Divisions</p>
-                <p className="text-6xl font-black text-purple-700">{uniqueDivisionsCount}</p>
               </div>
             </div>
           </div>
@@ -451,7 +479,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top Button — Fixed & Smooth */}
+      {/* Back to Top Button */}
       <button
         ref={backToTopRef}
         onClick={scrollToTop}
