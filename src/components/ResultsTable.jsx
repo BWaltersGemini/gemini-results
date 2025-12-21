@@ -1,27 +1,26 @@
-// src/components/ResultsTable.jsx (FINAL — Fixed Mobile Pace Text Color + All Features)
+// src/components/ResultsTable.jsx (FINAL — Clickable names with subtle hint + Mobile pace fix)
 import { useNavigate } from 'react-router-dom';
 import { formatChronoTime } from '../utils/timeUtils';
 
-export default function ResultsTable({ 
-  data = [], 
-  onNameClick, 
-  isMobile, 
-  highlightedBib, 
+export default function ResultsTable({
+  data = [],
+  onNameClick,
+  isMobile,
+  highlightedBib,
   highlightedRowRef,
   currentPage = 1,
   setCurrentPage,
   pageSize = 50,
   setPageSize,
-  totalResults = 0 
+  totalResults = 0
 }) {
   const navigate = useNavigate();
 
-  // CORRECT ordinal suffix (1st, 2nd, 3rd, 4th, 11th, 21st, 31st, etc.)
+  // CORRECT ordinal suffix (1st, 2nd, 3rd, 4th, 11th, etc.)
   const formatPlace = (place) => {
     if (!place || place < 1) return '—';
     const num = Number(place);
     if (isNaN(num)) return '—';
-
     if (num % 100 >= 11 && num % 100 <= 13) {
       return `${num}th`;
     }
@@ -59,7 +58,6 @@ export default function ResultsTable({
   const safePageSize = Number(pageSize) || 50;
   const totalPages = safePageSize > 0 ? Math.ceil(safeTotalResults / safePageSize) : 1;
   const safeCurrentPage = Math.max(1, Math.min(currentPage, totalPages));
-
   const startIdx = (safeCurrentPage - 1) * safePageSize;
   const endIdx = Math.min(startIdx + safePageSize, safeTotalResults);
   const displayedData = data.slice(startIdx, endIdx);
@@ -68,14 +66,13 @@ export default function ResultsTable({
 
   const goToFirstPage = () => setCurrentPage(1);
   const goToLastPage = () => setCurrentPage(totalPages);
-
   const handlePageSizeChange = (e) => {
     const newSize = Number(e.target.value);
     setPageSize(newSize);
-    setCurrentPage(1); // Reset to first page
+    setCurrentPage(1);
   };
 
-  // Mobile View — FIXED: Pace text now dark on light gray
+  // Mobile View
   if (isMobile) {
     return (
       <div className="space-y-6">
@@ -85,8 +82,8 @@ export default function ResultsTable({
             <div
               key={getRowKey(r)}
               ref={isHighlighted ? highlightedRowRef : null}
-              className={`bg-white rounded-3xl shadow-xl border-2 p-6 cursor-pointer transition-all ${
-                isHighlighted ? 'border-gemini-blue shadow-2xl scale-105' : 'border-gray-200'
+              className={`bg-white rounded-3xl shadow-xl border-2 p-6 cursor-pointer transition-all duration-200 active:scale-98 ${
+                isHighlighted ? 'border-gemini-blue shadow-2xl ring-4 ring-gemini-blue/20' : 'border-gray-200'
               }`}
               onClick={() => handleRowClick(r)}
             >
@@ -98,16 +95,19 @@ export default function ResultsTable({
                   <div className="text-2xl font-bold">Bib {r.bib || '—'}</div>
                 </div>
               </div>
-              <h3 className="text-3xl font-bold text-gemini-dark-gray mb-3">
+
+              {/* Name with subtle right arrow hint */}
+              <h3 className="text-3xl font-bold text-gemini-dark-gray mb-3 flex items-center gap-2">
                 {r.first_name} {r.last_name}
+                <span className="text-xl text-gray-400">→</span>
               </h3>
+
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div className="bg-gemini-blue/10 rounded-xl py-4">
                   <div className="text-2xl font-bold text-gemini-blue">{formatChronoTime(r.chip_time)}</div>
                   <div className="text-sm text-gray-700">Time</div>
                 </div>
                 <div className="bg-gray-100 rounded-xl py-4">
-                  {/* FIXED: Pace text now dark gray for readability */}
                   <div className="text-2xl font-bold text-gray-900">{r.pace || '—'}</div>
                   <div className="text-sm text-gray-700">Pace</div>
                 </div>
@@ -169,7 +169,6 @@ export default function ResultsTable({
             Last
           </button>
         </div>
-
         <div className="flex items-center gap-3">
           <span className="text-gray-700 font-medium">Show:</span>
           <select
@@ -208,8 +207,8 @@ export default function ResultsTable({
                 <tr
                   key={getRowKey(r)}
                   ref={isHighlighted ? highlightedRowRef : null}
-                  className={`hover:bg-gemini-blue/5 cursor-pointer transition duration-150 ${
-                    isHighlighted ? 'bg-gemini-blue/10 font-bold' : ''
+                  className={`hover:bg-gemini-blue/5 cursor-pointer transition duration-200 group ${
+                    isHighlighted ? 'bg-gemini-blue/10 font-bold ring-2 ring-gemini-blue/30' : ''
                   }`}
                   onClick={() => handleRowClick(r)}
                 >
@@ -217,8 +216,11 @@ export default function ResultsTable({
                     {r.place ? formatPlace(r.place) : '—'}
                   </td>
                   <td className="px-6 py-5 font-semibold text-lg text-gray-900">{r.bib || '—'}</td>
-                  <td className="px-6 py-5 font-semibold text-gemini-dark-gray">
-                    {r.first_name} {r.last_name}
+                  <td className="px-6 py-5 font-semibold text-gemini-dark-gray group-hover:text-gemini-blue group-hover:underline transition">
+                    <span className="flex items-center gap-2">
+                      {r.first_name} {r.last_name}
+                      <span className="text-gray-400 text-sm opacity-0 group-hover:opacity-100 transition">→</span>
+                    </span>
                   </td>
                   <td className="px-6 py-5 font-medium text-gray-900">
                     {r.gender_place ? formatPlace(r.gender_place) : '—'}
@@ -250,7 +252,6 @@ export default function ResultsTable({
         <div className="text-lg text-gray-700">
           Showing {startIdx + 1}–{endIdx} of {safeTotalResults} results
         </div>
-
         <div className="flex items-center gap-3">
           <button
             onClick={goToFirstPage}
@@ -284,7 +285,6 @@ export default function ResultsTable({
             Last
           </button>
         </div>
-
         <div className="flex items-center gap-3">
           <span className="text-gray-700 font-medium">Show:</span>
           <select

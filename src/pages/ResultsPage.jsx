@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Fixed Empty Results Display + No Table When No Results)
+// src/pages/ResultsPage.jsx (COMPLETE FINAL — Sticky search lowered + Clickable names with subtle hint)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -140,10 +140,10 @@ export default function ResultsPage() {
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
+
     if (!storedMasterKey) return;
 
     const groupEventIds = (masterGroups[storedMasterKey] || []).map(String);
-
     const yearEvents = events
       .filter((e) => e && e.id && groupEventIds.includes(String(e.id)) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
@@ -348,8 +348,8 @@ export default function ResultsPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
-        {/* Sticky Search Bar */}
-        <div className={`sticky top-24 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''}`}>
+        {/* Sticky Search Bar — Moved down slightly for navbar clearance */}
+        <div className={`sticky top-32 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''}`}>
           <div className="relative max-w-3xl mx-auto">
             <input
               type="text"
@@ -374,7 +374,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Enhanced Header with Stats — Only finishers with chip_time */}
+        {/* Enhanced Header with Stats */}
         {!searchQuery && (
           <div className="text-center mb-16">
             {displayLogo && (
@@ -405,7 +405,7 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {/* Stats Grid — Only actual finishers */}
+            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-12">
               <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-xl text-center">
                 <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Total Finishers</p>
@@ -464,6 +464,8 @@ export default function ResultsPage() {
                   <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">
                     {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
                   </h2>
+
+                  {/* Updated ResultsTable with subtle clickable hint */}
                   <ResultsTable
                     data={sorted}
                     totalResults={sorted.length}
