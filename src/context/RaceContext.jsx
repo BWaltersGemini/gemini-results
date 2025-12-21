@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FINAL — Optimized Live Polling: Cache-first + Background Diff + No UI Blocking)
+// src/context/RaceContext.jsx (FINAL — Complete, No Truncations, Optimized Live Polling)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -220,13 +220,7 @@ export function RaceProvider({ children }) {
           const fresh = await fetchResultsForEvent(selectedEvent.id);
 
           if (fresh.length > 0) {
-            // Build fast lookup map by entry_id
-            const freshMap = new Map();
-            fresh.forEach(r => {
-              if (r.entry_id) freshMap.set(r.entry_id, r);
-            });
-
-            // Find only new or changed records
+            // Find new or changed records
             const toUpsert = [];
             fresh.forEach(r => {
               const existing = cachedResults.find(c => c.entry_id === r.entry_id);
@@ -257,25 +251,33 @@ export function RaceProvider({ children }) {
             });
 
             if (toUpsert.length > 0) {
-              console.log(`[RaceContext] ${toUpsert.length} new/changed results detected → upserting`);
+              console.log(`[RaceContext] ${toUpsert.length} new/changed results detected → preparing upsert`);
+
+              // Final dedup to prevent Supabase conflict error
+              const uniqueMap = new Map();
+              toUpsert.forEach(record => {
+                const key = record.entry_id || `${record.event_id}-${record.bib}`;
+                uniqueMap.set(key, record);
+              });
+              const finalToUpsert = Array.from(uniqueMap.values());
+
+              console.log(`[RaceContext] Final upsert batch: ${finalToUpsert.length} unique records`);
 
               const { error: upsertError } = await supabase
                 .from('chronotrack_results')
-                .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
+                .upsert(finalToUpsert, { onConflict: 'event_id,entry_id' });
 
               if (upsertError) {
                 console.error('[RaceContext] Background upsert failed:', upsertError);
               } else {
-                // Merge fresh changes into current results
-                const updatedResults = cachedResults.map(c => {
-                  const freshMatch = fresh.find(f => f.entry_id === c.entry_id);
-                  return freshMatch || c;
-                });
-
-                // Add completely new finishers
-                fresh.forEach(f => {
-                  if (!updatedResults.find(u => u.entry_id === f.entry_id)) {
-                    updatedResults.push(f);
+                // Merge into current results
+                const updatedResults = [...cachedResults];
+                finalToUpsert.forEach(newRec => {
+                  const index = updatedResults.findIndex(r => r.entry_id === newRec.entry_id);
+                  if (index !== -1) {
+                    updatedResults[index] = { ...updatedResults[index], ...newRec };
+                  } else {
+                    updatedResults.push(newRec);
                   }
                 });
 
@@ -285,32 +287,30 @@ export function RaceProvider({ children }) {
                 }
               }
             } else {
-              console.log('[RaceContext] No changes — skipping upsert');
+              console.log('[RaceContext] No changes detected');
             }
           } else {
             console.warn('[RaceContext] Fresh fetch returned 0 results');
           }
         }
 
-        // Update divisions from current results
+        // Update divisions
         const divisions = [...new Set(cachedResults.map(r => r.age_group_name).filter(Boolean))].sort();
         if (!aborted) setUniqueDivisions(divisions);
 
       } catch (err) {
         if (!aborted) {
           console.error('[RaceContext] Background fetch error:', err);
-          // Do not show error to user — cache is still valid
         }
       } finally {
-        // Only show loading on initial load
         if (!forceFresh && !aborted) setLoadingResults(false);
       }
     };
 
-    // Initial load — may show loading spinner
+    // Initial load
     loadResults(resultsVersion > 0);
 
-    // Live polling — background only, no UI block
+    // Live polling
     if (isLive && isAutoFetchEnabled) {
       if (isActiveWindow) {
         pollInterval = setInterval(() => loadResults(true), 30000);
@@ -329,7 +329,6 @@ export function RaceProvider({ children }) {
     };
   }, [selectedEvent, resultsVersion, liveAutoFetchPerEvent]);
 
-  // Admin manual refresh
   const refreshResults = () => {
     console.log('[RaceContext] Admin triggered forced refresh');
     setResultsVersion(prev => prev + 1);
