@@ -1,46 +1,44 @@
 // src/api/chronotrackapi.js
-// FINAL — Robust OAuth2 password grant (direct, no proxy) + Full pagination + Detailed logging
+// FINAL — Hybrid approach: Direct param auth for events (working) + Proxy for token + results/races (bypasses CORS)
+// This combines the best of both worlds: reliable event loading + secure results fetching
+
 import axios from 'axios';
 
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
+const PROXY_BASE = '/chrono-api'; // Your Vercel serverless proxy endpoint
 
-// Credentials from .env
-const CLIENT_ID = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
-const CLIENT_SECRET = import.meta.env.VITE_CHRONOTRACK_SECRET;
-const USERNAME = import.meta.env.VITE_CHRONOTRACK_USER;
-const PASSWORD = import.meta.env.VITE_CHRONOTRACK_PASS;
-
-// Token management
 let accessToken = null;
 let tokenExpiration = 0;
 
+// Token management via proxy (bypasses CORS)
 const fetchAccessToken = async () => {
-  if (!CLIENT_ID || !CLIENT_SECRET || !USERNAME || !PASSWORD) {
-    throw new Error('Missing ChronoTrack credentials. Check .env: VITE_CHRONOTRACK_CLIENT_ID, CLIENT_SECRET, USER, PASS');
+  const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
+  const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
+  const username = import.meta.env.VITE_CHRONOTRACK_USER;
+  const password = import.meta.env.VITE_CHRONOTRACK_PASS;
+
+  if (!clientId || !clientSecret || !username || !password) {
+    throw new Error('Missing ChronoTrack credentials in .env');
   }
 
   try {
-    const basicAuth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
-    const response = await axios.get(`${CHRONOTRACK_API}/oauth2/token`, {
+    const basicAuth = btoa(`${clientId}:${clientSecret}`);
+    const response = await axios.get(`${PROXY_BASE}/oauth2/token`, {
+      headers: { Authorization: `Basic ${basicAuth}` },
       params: {
         grant_type: 'password',
-        username: USERNAME,
-        password: PASSWORD,
-      },
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
+        username,
+        password,
       },
       timeout: 20000,
     });
 
     const { access_token, expires_in } = response.data;
-    if (!access_token) {
-      throw new Error('No access_token returned from ChronoTrack');
-    }
+    if (!access_token) throw new Error('No access_token returned');
 
     accessToken = access_token;
-    tokenExpiration = Date.now() + (expires_in || 3600) * 1000 - 60000; // Refresh 1 min early
-    console.log('[ChronoTrack] Access token acquired successfully');
+    tokenExpiration = Date.now() + (expires_in || 3600) * 1000;
+    console.log('[ChronoTrack] Token acquired successfully via proxy');
     return access_token;
   } catch (err) {
     console.error('[ChronoTrack] Token fetch failed:', err.response?.data || err.message);
@@ -53,60 +51,59 @@ const getAuthHeader = async () => {
     await fetchAccessToken();
   }
   return `Bearer ${accessToken}`;
-};
+`;
 
-// Fetch ALL events (max size 600)
+// === EVENTS: Use direct parameter auth (proven working, no CORS) ===
 export const fetchEvents = async () => {
+  const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
+  const userId = import.meta.env.VITE_CHRONOTRACK_USER;
+  const userPass = import.meta.env.VITE_CHRONOTRACK_PASS;
+
+  if (!clientId || !userId || !userPass) {
+    throw new Error('Missing direct auth credentials for events');
+  }
+
   try {
-    const authHeader = await getAuthHeader();
     const response = await axios.get(`${CHRONOTRACK_API}/event`, {
       params: {
         format: 'json',
+        client_id: clientId,
+        user_id: userId,
+        user_pass: userPass,
         size: 600,
+        include_test_events: true,
       },
-      headers: { Authorization: authHeader },
       timeout: 30000,
     });
 
-    const data = response.data;
-    if (!data?.events || data.events.length === 0) {
-      console.warn('[ChronoTrack] No events returned — check credentials or account access');
-      return [];
-    }
-
-    console.log(`[ChronoTrack] Successfully fetched ${data.events.length} events`);
-    return data.events;
+    const events = response.data.events || response.data.event || [];
+    console.log(`[ChronoTrack Direct] Fetched ${events.length} events`);
+    return events;
   } catch (err) {
-    console.error('[ChronoTrack] fetchEvents failed:', err.response?.data || err.message);
+    console.error('[ChronoTrack Direct] fetchEvents failed:', err.response?.data || err.message);
     throw err;
   }
 };
 
-// Fetch races for a specific event
+// === RACES & RESULTS: Use proxy + Bearer token (bypasses CORS on token endpoint) ===
 export const fetchRacesForEvent = async (eventId) => {
   try {
     const authHeader = await getAuthHeader();
-    const response = await axios.get(`${CHRONOTRACK_API}/event/${eventId}/races`, {
-      params: { format: 'json' },
+    const response = await axios.get(`${PROXY_BASE}/api/event/${eventId}/races`, {
       headers: { Authorization: authHeader },
       timeout: 20000,
     });
 
-    const data = response.data;
-    if (!data?.races || data.races.length === 0) {
-      console.warn(`[ChronoTrack] No races found for event ${eventId}`);
-      return [];
-    }
-
-    console.log(`[ChronoTrack] Fetched ${data.races.length} races for event ${eventId}`);
-    return data.races;
+    const races = response.data.races || response.data.event_race || [];
+    console.log(`[ChronoTrack Proxy] Fetched ${races.length} races for event ${eventId}`);
+    return races;
   } catch (err) {
-    console.error(`[ChronoTrack] fetchRacesForEvent failed for ${eventId}:`, err.response?.data || err.message);
+    console.error(`[ChronoTrack Proxy] fetchRacesForEvent failed:`, err.response?.data || err.message);
     throw err;
   }
 };
 
-// Helper: Fetch all results from a single bracket (full pagination)
+// Helper: fetch all results from a single bracket via proxy
 const fetchAllBracketResults = async (bracketId) => {
   let page = 1;
   const pageSize = 1000;
@@ -115,28 +112,26 @@ const fetchAllBracketResults = async (bracketId) => {
   while (true) {
     try {
       const authHeader = await getAuthHeader();
-      const response = await axios.get(`${CHRONOTRACK_API}/bracket/${bracketId}/results`, {
+      const response = await axios.get(`${PROXY_BASE}/api/bracket/${bracketId}/results`, {
+        headers: { Authorization: authHeader },
         params: {
           format: 'json',
           page,
           size: pageSize,
         },
-        headers: { Authorization: authHeader },
         timeout: 30000,
       });
 
-      const data = response.data;
-      if (!data?.results || data.results.length === 0) {
-        break;
-      }
+      const results = response.data.results || response.data.bracket_results || [];
+      if (results.length === 0) break;
 
-      allResults = allResults.concat(data.results);
-      console.log(`[ChronoTrack] Bracket ${bracketId} — page ${page}: ${data.results.length} results (total: ${allResults.length})`);
+      allResults = allResults.concat(results);
+      console.log(`[ChronoTrack Proxy] Bracket ${bracketId} page ${page}: +${results.length} (total: ${allResults.length})`);
 
-      if (data.results.length < pageSize) break; // Last page
+      if (results.length < pageSize) break;
       page++;
     } catch (err) {
-      console.error(`[ChronoTrack] Bracket ${bracketId} page ${page} failed:`, err.response?.data || err.message);
+      console.error(`[ChronoTrack Proxy] Bracket ${bracketId} page ${page} failed:`, err.response?.data || err.message);
       break;
     }
   }
@@ -144,67 +139,75 @@ const fetchAllBracketResults = async (bracketId) => {
   return allResults;
 };
 
-// Main: Fetch complete results for an event
+// Main results fetch via proxy
 export const fetchResultsForEvent = async (eventId) => {
-  if (!eventId) throw new Error('eventId required');
-
   try {
+    // Get races for bracket lookup
     const races = await fetchRacesForEvent(eventId);
-    if (races.length === 0) {
-      console.log(`[ChronoTrack] No races found for event ${eventId}`);
-      return [];
-    }
 
-    const bracketIds = races
-      .filter(race => race.brackets && race.brackets.length > 0)
-      .flatMap(race => race.brackets.map(b => b.bracket_id))
+    // Get all brackets
+    const authHeader = await getAuthHeader();
+    const bracketsResponse = await axios.get(`${PROXY_BASE}/api/event/${eventId}/bracket`, {
+      headers: { Authorization: authHeader },
+      params: { size: 500 },
+      timeout: 20000,
+    });
+
+    const allBrackets = bracketsResponse.data.event_bracket || [];
+
+    const bracketIds = allBrackets
+      .filter(b => b.bracket_wants_leaderboard === '1')
+      .map(b => b.bracket_id)
       .filter(Boolean);
 
     if (bracketIds.length === 0) {
-      console.log(`[ChronoTrack] No brackets found for event ${eventId}`);
+      console.log(`[ChronoTrack] No leaderboard brackets for event ${eventId}`);
       return [];
     }
 
-    console.log(`[ChronoTrack] Fetching results from ${bracketIds.length} brackets for event ${eventId}`);
+    console.log(`[ChronoTrack] Fetching results from ${bracketIds.length} brackets`);
 
-    // Parallel batch fetching
+    // Fetch in batches
     const batchSize = 5;
     const allBracketResults = [];
 
     for (let i = 0; i < bracketIds.length; i += batchSize) {
       const batch = bracketIds.slice(i, i + batchSize);
-      const batchPromises = batch.map(id => fetchAllBracketResults(id));
-      const batchResults = await Promise.all(batchPromises);
-      batchResults.forEach(results => allBracketResults.push(...results));
+      const promises = batch.map(id => fetchAllBracketResults(id));
+      const results = await Promise.all(promises);
+      results.forEach(res => allBracketResults.push(...res));
     }
 
-    // Deduplicate by entry_id
+    // Deduplicate
     const seen = new Set();
     const deduped = allBracketResults.filter(r => {
-      if (!r.results_entry_id) return true;
-      if (seen.has(r.results_entry_id)) return false;
-      seen.add(r.results_entry_id);
+      const id = r.results_entry_id || r.entry_id;
+      if (!id) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
       return true;
     });
 
-    // Build gender and division place lookups
+    // Gender & division place mapping
     const genderPlaces = {};
     const divisionPlaces = {};
 
     deduped.forEach(r => {
-      const genderKey = `${r.results_race_id}-${r.results_sex}-${r.results_entry_id}`;
+      const entryId = r.results_entry_id || r.entry_id;
+      if (!entryId) return;
+
       if (r.results_gender_rank) {
-        genderPlaces[genderKey] = parseInt(r.results_gender_rank, 10);
+        genderPlaces[entryId] = parseInt(r.results_gender_rank, 10);
       }
 
-      if (r.results_primary_bracket_id && r.results_bracket_rank) {
-        const divKey = `${r.results_race_id}-${r.results_primary_bracket_id}-${r.results_entry_id}`;
-        const existing = divisionPlaces[divKey];
-        const newPlace = parseInt(r.results_bracket_rank, 10);
-        if (!existing || newPlace < existing.place) {
-          divisionPlaces[divKey] = {
-            name: r.results_primary_bracket_name || '',
-            place: newPlace,
+      if (r.results_bracket_rank && r.results_primary_bracket_name) {
+        const key = entryId;
+        const place = parseInt(r.results_bracket_rank, 10);
+        const existing = divisionPlaces[key];
+        if (!existing || place < existing.place) {
+          divisionPlaces[key] = {
+            name: r.results_primary_bracket_name.trim(),
+            place,
           };
         }
       }
@@ -212,9 +215,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
     // Final mapping
     const mappedResults = deduped.map(r => {
-      const genderKey = r.results_entry_id ? `${r.results_race_id}-${r.results_sex}-${r.results_entry_id}` : null;
-      const divKey = r.results_entry_id ? `${r.results_race_id}-${r.results_primary_bracket_id}-${r.results_entry_id}` : null;
-      const divInfo = divKey ? divisionPlaces[divKey] : null;
+      const entryId = r.results_entry_id || r.entry_id;
 
       let city = r.results_city || null;
       let state = r.results_state || r.results_state_code || null;
@@ -229,11 +230,11 @@ export const fetchResultsForEvent = async (eventId) => {
 
       const rawSplits = r.splits || r.interval_results || r.results_splits || [];
       const splits = Array.isArray(rawSplits)
-        ? rawSplits.map(split => ({
-            name: split.interval_name || split.split_name || 'Split',
-            time: split.interval_time || split.split_time || null,
-            pace: split.interval_pace || split.split_pace || null,
-            place: split.interval_place || split.split_place || null,
+        ? rawSplits.map(s => ({
+            name: s.interval_name || s.split_name || 'Split',
+            time: s.interval_time || s.split_time,
+            pace: s.interval_pace || s.split_pace,
+            place: s.interval_place || s.split_place,
           }))
         : [];
 
@@ -243,9 +244,9 @@ export const fetchResultsForEvent = async (eventId) => {
         chip_time: r.results_time || '',
         clock_time: r.results_gun_time || '',
         place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-        gender_place: genderKey ? genderPlaces[genderKey] || null : null,
-        age_group_name: divInfo ? divInfo.name : (r.results_primary_bracket_name || ''),
-        age_group_place: divInfo ? divInfo.place : null,
+        gender_place: entryId ? genderPlaces[entryId] : null,
+        age_group_name: entryId && divisionPlaces[entryId] ? divisionPlaces[entryId].name : (r.results_primary_bracket_name || ''),
+        age_group_place: entryId && divisionPlaces[entryId] ? divisionPlaces[entryId].place : null,
         pace: r.results_pace || '',
         age: r.results_age ? parseInt(r.results_age, 10) : null,
         gender: r.results_sex || '',
@@ -256,14 +257,14 @@ export const fetchResultsForEvent = async (eventId) => {
         state,
         country,
         splits,
-        entry_id: r.results_entry_id || null,
+        entry_id: entryId || null,
       };
     });
 
-    console.log(`[ChronoTrack] Final: ${mappedResults.length} unique results processed for event ${eventId}`);
+    console.log(`[ChronoTrack] Final: ${mappedResults.length} unique results for event ${eventId}`);
     return mappedResults;
   } catch (err) {
-    console.error(`[ChronoTrack] fetchResultsForEvent failed for ${eventId}:`, err);
+    console.error(`[ChronoTrack] fetchResultsForEvent failed:`, err);
     throw err;
   }
 };
