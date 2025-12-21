@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Fixed JSX syntax + Perfect Card Layout)
+// src/pages/ParticipantPage.jsx (FINAL — Perfect 1080x1080 Card Fit + Centered Name When No Photo)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -613,15 +613,15 @@ export default function ParticipantPage() {
         className="hidden"
       />
 
-      {/* Hidden Full-Size Card — FINAL LAYOUT (Fixed JSX Syntax) */}
+      {/* Hidden Full-Size Card — FINAL PERFECT FIT + Centered Name When No Photo */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-between text-center px-16 py-20"
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-between text-center px-16 py-24"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
           {/* Logo */}
-          <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl p-8 mb-8">
+          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-6 mb-6">
             {masterLogo ? (
               <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-36 object-contain mx-auto" crossOrigin="anonymous" />
             ) : eventLogos[selectedEvent.id] ? (
@@ -632,27 +632,25 @@ export default function ParticipantPage() {
           </div>
 
           {/* Race + Date */}
-          <div className="mb-8">
-            <p className="text-4xl font-black text-[#80ccd6] mb-4">{raceDisplayName}</p>
+          <div className="mb-6">
+            <p className="text-4xl font-black text-[#80ccd6] mb-3">{raceDisplayName}</p>
             <p className="text-3xl text-gray-300">{formatDate(selectedEvent.start_time)}</p>
           </div>
 
-          {/* Photo + Name Side-by-Side */}
-          <div className="flex items-center justify-center gap-20 mb-12 w-full max-w-5xl">
+          {/* Photo + Name — Centered when no photo */}
+          <div className={`flex items-center justify-center gap-20 mb-10 ${!userPhoto ? 'w-full' : ''}`}>
             {userPhoto ? (
-              <div className="w-80 h-80 rounded-full overflow-hidden border-12 border-white shadow-2xl flex-shrink-0">
+              <div className="w-72 h-72 rounded-full overflow-hidden border-10 border-white shadow-2xl flex-shrink-0">
                 <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
               </div>
-            ) : (
-              <div className="w-80 h-80 flex-shrink-0"></div>
-            )}
-            <h1 className="text-7xl font-black text-white drop-shadow-2xl leading-tight">
+            ) : null}
+            <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-6xl' : 'text-7xl'}`}>
               {participant.first_name}<br />{participant.last_name}
             </h1>
           </div>
 
           {/* Finish Time */}
-          <div className="mb-12">
+          <div className="mb-10">
             <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
             <p className="text-8xl font-black text-[#ffd700] drop-shadow-2xl">
               {formatChronoTime(participant.chip_time)}
@@ -660,7 +658,7 @@ export default function ParticipantPage() {
           </div>
 
           {/* Rankings */}
-          <div className="grid grid-cols-3 gap-12 text-white w-full max-w-4xl mb-12">
+          <div className="grid grid-cols-3 gap-12 text-white w-full max-w-4xl mb-10">
             <div>
               <p className="text-3xl text-gray-400 uppercase mb-4">Overall</p>
               <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
@@ -685,7 +683,7 @@ export default function ParticipantPage() {
         </div>
       </div>
 
-      {/* Card Preview Modal */}
+      {/* Card Preview Modal — Matches Final Layout */}
       {showCardPreview && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8 max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -704,15 +702,13 @@ export default function ParticipantPage() {
                   <p className="text-sm text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
                 </div>
 
-                <div className="flex items-center justify-center gap-8">
+                <div className={`flex items-center justify-center gap-8 ${!userPhoto ? 'w-full' : ''}`}>
                   {userPhoto ? (
                     <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-xl">
                       <img src={userPhoto} alt="You" className="w-full h-full object-cover" />
                     </div>
-                  ) : (
-                    <div className="w-24 h-24"></div>
-                  )}
-                  <h1 className="text-2xl font-black text-white leading-tight">
+                  ) : null}
+                  <h1 className={`font-black text-white leading-tight ${userPhoto ? 'text-2xl' : 'text-3xl'}`}>
                     {participant.first_name}<br />{participant.last_name}
                   </h1>
                 </div>
