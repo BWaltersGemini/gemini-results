@@ -642,7 +642,21 @@ export default function AdminPage() {
                 const count = participantCounts[event.id] || 0;
 
                 // Per-event live auto-fetch status — default ON
-                const isAutoFetchEnabled = liveAutoFetchPerEvent[event.id] !== false;
+                const now = Math.floor(Date.now() / 1000);
+                const startTime = event.start_time ? parseInt(event.start_time, 10) : null;
+		const endTime = event.event_end_time ? parseInt(event.event_end_time, 10) : null;
+
+		const isRaceWindowActive = startTime && endTime && now >= startTime && now <= endTime;
+		const isRaceDayToday = !endTime && startTime
+  		  ? new Date(startTime * 1000).toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
+  		  : false;
+
+		const isCurrentlyLive = isRaceWindowActive || isRaceDayToday;
+
+		// Auto-disable if race is over AND admin hasn't manually overridden
+		const isAutoFetchEnabled = isCurrentlyLive 
+  		  ? (liveAutoFetchPerEvent[event.id] !== false) // default ON during race
+  		  : false; // force OFF after race ends
 
                 return (
                   <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
