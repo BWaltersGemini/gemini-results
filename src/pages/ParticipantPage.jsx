@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Fixed JSX syntax error + Perfect Card Layout)
+// src/pages/ParticipantPage.jsx (COMPLETE FINAL — Fixed JSX syntax + Perfect Card Layout)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -613,7 +613,7 @@ export default function ParticipantPage() {
         className="hidden"
       />
 
-      {/* Hidden Full-Size Card — FINAL LAYOUT (Fixed Syntax) */}
+      {/* Hidden Full-Size Card — FINAL LAYOUT (Fixed JSX Syntax) */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -644,7 +644,7 @@ export default function ParticipantPage() {
                 <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
               </div>
             ) : (
-              <div className="w-80 h-80 flex-shrink-0" /> {/* Fixed: Proper spacer */}
+              <div className="w-80 h-80 flex-shrink-0"></div>
             )}
             <h1 className="text-7xl font-black text-white drop-shadow-2xl leading-tight">
               {participant.first_name}<br />{participant.last_name}
@@ -691,7 +691,6 @@ export default function ParticipantPage() {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto my-8 p-8 max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-10">Your Result Card 🎉</h3>
 
-            {/* Preview matches final card */}
             <div className="flex justify-center mb-12">
               <div className="w-full max-w-sm aspect-square bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] rounded-3xl overflow-hidden shadow-2xl flex flex-col items-center justify-between p-8">
                 <div className="w-full bg-white rounded-2xl p-4">
@@ -711,7 +710,7 @@ export default function ParticipantPage() {
                       <img src={userPhoto} alt="You" className="w-full h-full object-cover" />
                     </div>
                   ) : (
-                    <div className="w-24 h-24" />
+                    <div className="w-24 h-24"></div>
                   )}
                   <h1 className="text-2xl font-black text-white leading-tight">
                     {participant.first_name}<br />{participant.last_name}
