@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FULLY UPDATED — With permanent Live Results Indicator + All Existing Features)
+// src/pages/ResultsPage.jsx (FULLY UPDATED & FIXED — Safe event handling + Live indicator + No crashes)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -57,7 +57,7 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // Show refresh indicator when loadingResults changes (triggered by RaceContext)
+  // Show refresh indicator when loadingResults changes
   useEffect(() => {
     if (loadingResults) {
       setIsRefreshing(true);
@@ -79,7 +79,7 @@ export default function ResultsPage() {
   };
 
   const getYearFromEvent = (event) => {
-    if (!event?.start_time) return null;
+    if (!event || !event.start_time) return null;
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
@@ -105,7 +105,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection from URL
+  // SAFE Event selection from URL — prevents crash on invalid/missing event.id
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -115,9 +115,13 @@ export default function ResultsPage() {
     );
     if (!storedMasterKey) return;
 
-    const groupEventIds = masterGroups[storedMasterKey] || [];
+    const groupEventIds = (masterGroups[storedMasterKey] || []).map(String); // Ensure strings
+
     const yearEvents = events
-      .filter((e) => groupEventIds.includes(e.id.toString()) && getYearFromEvent(e) === year)
+      .filter((e) => {
+        if (!e || !e.id) return false; // Skip malformed events
+        return groupEventIds.includes(String(e.id)) && getYearFromEvent(e) === year;
+      })
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
@@ -151,7 +155,7 @@ export default function ResultsPage() {
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
 
-  // Year navigation
+  // Year navigation — safe handling
   let availableYears = [];
   if (masterKey && Object.keys(masterGroups).length > 0) {
     const urlSlug = slugify(decodeURIComponent(masterKey));
@@ -159,8 +163,8 @@ export default function ResultsPage() {
       (key) => slugify(key) === urlSlug
     );
     if (storedMasterKey) {
-      const linkedEventIds = masterGroups[storedMasterKey] || [];
-      const linkedEvents = events.filter(e => linkedEventIds.includes(e.id.toString()));
+      const linkedEventIds = (masterGroups[storedMasterKey] || []).map(String);
+      const linkedEvents = events.filter(e => e && e.id && linkedEventIds.includes(String(e.id)));
       availableYears = [...new Set(linkedEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
     }
   }
@@ -177,9 +181,9 @@ export default function ResultsPage() {
 
     if (!targetEvent || !eventMaster || !eventYear) {
       const participantEventId = participant.event_id || selectedEvent?.id;
-      targetEvent = events.find((e) => e.id === participantEventId);
+      targetEvent = events.find((e) => e && e.id && e.id === participantEventId);
       if (!targetEvent) return;
-      eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(targetEvent.id.toString()))?.[0] || targetEvent.name;
+      eventMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(String(targetEvent.id)))?.[0] || targetEvent.name;
       eventYear = getYearFromEvent(targetEvent);
       setSelectedEvent(targetEvent);
     }
@@ -195,7 +199,7 @@ export default function ResultsPage() {
     });
   };
 
-  // Search and filtering — client-side on cached results (instant)
+  // Search and filtering
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -224,7 +228,7 @@ export default function ResultsPage() {
   }
 
   const currentMasterKey = Object.keys(masterGroups).find(key =>
-    masterGroups[key]?.includes(selectedEvent?.id?.toString())
+    masterGroups[key]?.includes(String(selectedEvent?.id))
   );
   const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
@@ -243,8 +247,8 @@ export default function ResultsPage() {
     const masterEventTiles = visibleMasters
       .map((storedKey) => {
         const displayName = editedEvents[storedKey]?.name || storedKey;
-        const eventIds = masterGroups[storedKey] || [];
-        const masterEvents = events.filter((e) => eventIds.includes(e.id.toString()));
+        const eventIds = (masterGroups[storedKey] || []).map(String);
+        const masterEvents = events.filter((e) => e && e.id && eventIds.includes(String(e.id)));
         if (masterEvents.length === 0) return null;
         const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
         const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
@@ -343,7 +347,7 @@ export default function ResultsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-32 relative">
       <div className="max-w-7xl mx-auto px-6">
-        {/* Permanent Live Results Indicator (only when race is live) */}
+        {/* Permanent Live Results Indicator */}
         {isLiveRace && (
           <div className="fixed top-20 right-4 md:right-8 z-50">
             <div className="bg-green-600 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-pulse">
@@ -353,7 +357,7 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Temporary refreshing spinner (only during background fetch) */}
+        {/* Temporary refreshing spinner */}
         {isLiveRace && isRefreshing && (
           <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 bg-gemini-blue text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-3 text-lg font-bold animate-pulse">
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -444,7 +448,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Race Cards (navigation when not searching) */}
+        {/* Race Cards */}
         {!searchQuery && displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
