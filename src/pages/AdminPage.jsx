@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FULL & COMPLETE — Per-event "Update End Time" button + all features)
+// src/pages/AdminPage.jsx (FULL & COMPLETE — With Per-Event Live Auto-Fetch Toggle)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -38,6 +38,9 @@ export default function AdminPage() {
   const [saveStatus, setSaveStatus] = useState('');
   const [hideMasteredEvents, setHideMasteredEvents] = useState(true);
 
+  // NEW: Per-event live auto-fetch toggle (default ON)
+  const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
+
   const adminSupabase = createAdminSupabaseClient();
 
   const loadGlobalConfig = async () => {
@@ -49,6 +52,9 @@ export default function AdminPage() {
     setShowAdsPerMaster(config.showAdsPerMaster || {});
     setAds(config.ads || []);
     setHiddenRaces(config.hiddenRaces || {});
+
+    // Load per-event live auto-fetch settings — defaults to true if not set
+    setLiveAutoFetchPerEvent(config.liveAutoFetchPerEvent || {});
   };
 
   const autoSaveConfig = async (key, value) => {
@@ -76,6 +82,7 @@ export default function AdminPage() {
         autoSaveConfig('showAdsPerMaster', showAdsPerMaster),
         autoSaveConfig('ads', ads),
         autoSaveConfig('hiddenRaces', hiddenRaces),
+        autoSaveConfig('liveAutoFetchPerEvent', liveAutoFetchPerEvent),
       ]);
       setSaveStatus('All changes saved!');
       setTimeout(() => setSaveStatus(''), 4000);
@@ -92,24 +99,20 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-
     const loadCachedData = async () => {
       try {
         const { data: cachedEvents, error: eventsError } = await supabase
           .from('chronotrack_events')
           .select('*')
           .order('start_time', { ascending: false });
-
         if (eventsError) throw eventsError;
         setChronoEvents(cachedEvents || []);
-
         const counts = {};
         for (const event of cachedEvents || []) {
           const { count: adminCount, error: countError } = await adminSupabase
             .from('chronotrack_results')
             .select('id', { count: 'exact', head: true })
             .eq('event_id', event.id);
-
           counts[event.id] = countError ? 0 : (adminCount || 0);
         }
         setParticipantCounts(counts);
@@ -118,7 +121,6 @@ export default function AdminPage() {
         setChronoEvents([]);
       }
     };
-
     loadCachedData();
   }, [isLoggedIn]);
 
@@ -127,29 +129,23 @@ export default function AdminPage() {
     const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
     const username = import.meta.env.VITE_CHRONOTRACK_USER;
     const password = import.meta.env.VITE_CHRONOTRACK_PASS;
-
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     const tokenRes = await axios.get('/chrono-api/oauth2/token', {
       headers: { Authorization: `Basic ${basicAuth}` },
       params: { grant_type: 'password', username, password },
     });
-
     return `Bearer ${tokenRes.data.access_token}`;
   };
 
-  // Refresh all events + end times (bulk)
   const fetchLatestFromChronoTrack = async () => {
     setFetchingEvents(true);
     try {
       const freshEvents = await fetchChronoEvents();
       const sorted = freshEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
       const authHeader = await getAuthHeader();
-
       const updatedEvents = [];
       let endTimeSuccess = 0;
       let endTimeFail = 0;
-
       for (const event of sorted) {
         let endTime = null;
         try {
@@ -168,7 +164,6 @@ export default function AdminPage() {
           console.warn(`Failed to fetch end_time for event ${event.id}`, err);
           endTimeFail++;
         }
-
         updatedEvents.push({
           id: event.id,
           name: event.name,
@@ -177,13 +172,10 @@ export default function AdminPage() {
           races: event.races || [],
         });
       }
-
       const { error } = await adminSupabase
         .from('chronotrack_events')
         .upsert(updatedEvents, { onConflict: 'id' });
-
       if (error) throw error;
-
       setChronoEvents(updatedEvents);
       setSaveStatus(`Events refreshed! End times: ${endTimeSuccess} fetched, ${endTimeFail} missing`);
       setTimeout(() => setSaveStatus(''), 6000);
@@ -196,7 +188,6 @@ export default function AdminPage() {
     }
   };
 
-  // Update end_time for a single event (per-event button)
   const updateEndTimeForEvent = async (eventId) => {
     setUpdatingEndTime(eventId);
     try {
@@ -205,18 +196,14 @@ export default function AdminPage() {
         headers: { Authorization: authHeader },
         params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
       });
-
       const eventData = response.data.event;
       if (eventData?.event_end_time) {
         const endTime = parseInt(eventData.event_end_time, 10);
-
         const { error } = await adminSupabase
           .from('chronotrack_events')
           .update({ event_end_time: endTime })
           .eq('id', eventId);
-
         if (error) throw error;
-
         setChronoEvents(prev => prev.map(e => e.id === eventId ? { ...e, event_end_time: endTime } : e));
         setSaveStatus(`End time updated for event ${eventId}`);
         setTimeout(() => setSaveStatus(''), 4000);
@@ -235,12 +222,10 @@ export default function AdminPage() {
 
   const publishAllEvents = async () => {
     if (!confirm(`Publish results for ALL ${chronoEvents.length} events? This may take several minutes.`)) return;
-
     setPublishingAll(true);
     setBulkProgress({ current: 0, total: chronoEvents.length });
     let successCount = 0;
     let failCount = 0;
-
     for (let i = 0; i < chronoEvents.length; i++) {
       const event = chronoEvents[i];
       try {
@@ -252,7 +237,6 @@ export default function AdminPage() {
       }
       setBulkProgress({ current: i + 1, total: chronoEvents.length });
     }
-
     setPublishingAll(false);
     setSaveStatus(`Bulk publish complete: ${successCount} succeeded, ${failCount} failed`);
     setTimeout(() => setSaveStatus(''), 8000);
@@ -287,18 +271,15 @@ export default function AdminPage() {
 
   const assignToMaster = async (eventId, masterKey) => {
     if (!masterKey) return;
-
     const updated = { ...masterGroups };
     Object.keys(updated).forEach(key => {
       updated[key] = updated[key].filter(id => id !== eventId.toString());
       if (updated[key].length === 0) delete updated[key];
     });
-
     if (!updated[masterKey]) updated[masterKey] = [];
     if (!updated[masterKey].includes(eventId.toString())) {
       updated[masterKey].push(eventId.toString());
     }
-
     setMasterGroups(updated);
     setNewMasterKeys(prev => ({ ...prev, [eventId]: '' }));
     await autoSaveConfig('masterGroups', updated);
@@ -307,7 +288,6 @@ export default function AdminPage() {
   const unlinkFromMaster = async (eventId) => {
     const updated = { ...masterGroups };
     let changed = false;
-
     Object.keys(updated).forEach(key => {
       const filtered = updated[key].filter(id => id !== eventId.toString());
       if (filtered.length !== updated[key].length) {
@@ -316,7 +296,6 @@ export default function AdminPage() {
         if (updated[key].length === 0) delete updated[key];
       }
     });
-
     if (changed) {
       setMasterGroups(updated);
       await autoSaveConfig('masterGroups', updated);
@@ -361,7 +340,6 @@ export default function AdminPage() {
   const handleLogoUpload = async (e, masterKey) => {
     const file = e.target.files[0];
     if (!file) return;
-
     try {
       const { data, error: uploadError } = await adminSupabase.storage
         .from('logos')
@@ -369,13 +347,10 @@ export default function AdminPage() {
           upsert: true,
           contentType: file.type,
         });
-
       if (uploadError) throw uploadError;
-
       const { data: { publicUrl } } = adminSupabase.storage
         .from('logos')
         .getPublicUrl(`public/${masterKey}`);
-
       const updatedLogos = { ...eventLogos, [masterKey]: publicUrl };
       setEventLogos(updatedLogos);
       await autoSaveConfig('eventLogos', updatedLogos);
@@ -393,9 +368,7 @@ export default function AdminPage() {
       const { error } = await adminSupabase.storage
         .from('logos')
         .remove([`public/${masterKey}`]);
-
       if (error && error.message !== 'Object not found') throw error;
-
       const updatedLogos = { ...eventLogos };
       delete updatedLogos[masterKey];
       setEventLogos(updatedLogos);
@@ -411,7 +384,6 @@ export default function AdminPage() {
 
   const handleDeleteMaster = async (masterKey) => {
     if (!confirm(`Delete master event "${masterKey}"? This will unlink all events and remove its logo.`)) return;
-
     try {
       const updatedGroups = { ...masterGroups };
       delete updatedGroups[masterKey];
@@ -435,14 +407,12 @@ export default function AdminPage() {
         console.log(`No results for event ${eventId}`);
         return;
       }
-
       const seen = new Map();
       fresh.forEach(r => {
         const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
         if (!seen.has(key)) seen.set(key, r);
       });
       const deduped = Array.from(seen.values());
-
       const toUpsert = deduped.map(r => ({
         event_id: eventId,
         race_id: r.race_id || null,
@@ -465,13 +435,10 @@ export default function AdminPage() {
         entry_id: r.entry_id ?? null,
         race_name: r.race_name ?? null,
       }));
-
       const { error } = await adminSupabase
         .from('chronotrack_results')
         .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
-
       if (error) throw error;
-
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
     } catch (err) {
       console.error('[Admin] Publish failed:', err);
@@ -485,29 +452,23 @@ export default function AdminPage() {
     if (!confirm(`PERMANENTLY delete event "${eventName}" (ID: ${eventId}) and ALL its results? This cannot be undone.`)) {
       return;
     }
-
     try {
       const { error: resultsError } = await adminSupabase
         .from('chronotrack_results')
         .delete()
         .eq('event_id', eventId);
-
       if (resultsError) throw resultsError;
-
       const { error: eventError } = await adminSupabase
         .from('chronotrack_events')
         .delete()
         .eq('id', eventId);
-
       if (eventError) throw eventError;
-
       setChronoEvents(prev => prev.filter(e => e.id !== eventId));
       setParticipantCounts(prev => {
         const copy = { ...prev };
         delete copy[eventId];
         return copy;
       });
-
       setSaveStatus(`Event "${eventName}" and its results permanently deleted`);
       setTimeout(() => setSaveStatus(''), 6000);
     } catch (err) {
@@ -520,13 +481,11 @@ export default function AdminPage() {
   const handleFileUpload = async (e, type) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-
     const urls = [];
     for (const file of files) {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', type);
-
       try {
         const res = await fetch('/api/upload', {
           method: 'POST',
@@ -538,10 +497,17 @@ export default function AdminPage() {
         console.error('Upload failed:', err);
       }
     }
-
     if (type === 'ad') {
       setAds(prev => [...prev, ...urls]);
     }
+  };
+
+  // Toggle per-event live auto-fetch
+  const toggleLiveAutoFetch = (eventId) => {
+    setLiveAutoFetchPerEvent(prev => ({
+      ...prev,
+      [eventId]: !prev[eventId],
+    }));
   };
 
   if (!isLoggedIn) {
@@ -639,6 +605,7 @@ export default function AdminPage() {
                   />
                   <span className="text-gray-700 font-medium">Hide Events with Masters</span>
                 </label>
+
                 <button
                   onClick={fetchLatestFromChronoTrack}
                   disabled={fetchingEvents}
@@ -646,6 +613,7 @@ export default function AdminPage() {
                 >
                   {fetchingEvents ? 'Refreshing...' : 'Refresh Events & End Times'}
                 </button>
+
                 <button
                   onClick={publishAllEvents}
                   disabled={publishingAll}
@@ -672,6 +640,9 @@ export default function AdminPage() {
                 const currentMaster = getCurrentMasterForEvent(event.id);
                 const displayName = editedEvents[event.id]?.name || event.name;
                 const count = participantCounts[event.id] || 0;
+
+                // Per-event live auto-fetch status — default ON
+                const isAutoFetchEnabled = liveAutoFetchPerEvent[event.id] !== false;
 
                 return (
                   <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
@@ -730,7 +701,6 @@ export default function AdminPage() {
                                 Delete Master
                               </button>
                             </div>
-
                             <div className="mb-6">
                               <h5 className="text-lg font-semibold text-gray-700 mb-3">Master Logo</h5>
                               {eventLogos[currentMaster] ? (
@@ -756,7 +726,6 @@ export default function AdminPage() {
                                 />
                               )}
                             </div>
-
                             <div>
                               <h5 className="text-lg font-semibold text-gray-700 mb-3">Ads Visibility</h5>
                               <label className="flex items-center gap-4 cursor-pointer">
@@ -811,7 +780,6 @@ export default function AdminPage() {
                               )}
                             </div>
                           </div>
-
                           <div>
                             <label className="block text-lg font-semibold text-gray-700 mb-2">Display Name</label>
                             <input
@@ -823,7 +791,20 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        <div className="mt-8 flex flex-col sm:flex-row justify-center gap-6">
+                        <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-6">
+                          {/* Per-event Live Auto-Fetch Toggle */}
+                          <label className="flex items-center gap-4 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isAutoFetchEnabled}
+                              onChange={() => toggleLiveAutoFetch(event.id)}
+                              className="h-7 w-7 text-green-600 rounded focus:ring-green-500"
+                            />
+                            <span className="text-xl font-bold text-gray-800">
+                              Live Auto-Fetch {isAutoFetchEnabled ? 'ON' : 'OFF'}
+                            </span>
+                          </label>
+
                           <button
                             onClick={() => refreshAndPublishResults(event.id)}
                             disabled={refreshingEvent === event.id}
