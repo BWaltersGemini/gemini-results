@@ -1,10 +1,9 @@
 // src/api/chronotrackapi.js
-// FINAL — Corrected event_end_time mapping + Full working logic
+// FINAL — Fixed gender/division place bug in triathlons (only use full course rank)
 import axios from 'axios';
 
 // Direct ChronoTrack API
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
-
 // Proxy endpoint (must be deployed at /api/chrono-api on Vercel)
 const PROXY_BASE = '/chrono-api';
 
@@ -83,7 +82,7 @@ export const fetchEvents = async () => {
       id: event.event_id,
       name: event.event_name,
       start_time: event.event_start_time ? parseInt(event.event_start_time, 10) : null,
-      event_end_time: event.event_end_time ? parseInt(event.event_end_time, 10) : null, // ← Critical fix!
+      event_end_time: event.event_end_time ? parseInt(event.event_end_time, 10) : null,
     }));
   } catch (err) {
     console.error('[ChronoTrack Direct] Failed to fetch events:', err.response?.data || err.message);
@@ -98,6 +97,7 @@ export const fetchRacesForEvent = async (eventId) => {
     headers: { Authorization: authHeader },
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
+
   return (response.data.event_race || []).map(race => ({
     race_id: race.race_id,
     race_name: race.race_name,
@@ -137,6 +137,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
       break;
     }
   }
+
   return allResults;
 };
 
@@ -151,12 +152,14 @@ export const fetchResultsForEvent = async (eventId) => {
       headers: { Authorization: authHeader },
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
+
     races = (racesResponse.data.event_race || []).map(race => ({
       race_id: race.race_id,
       race_name: race.race_name,
       distance: race.race_distance,
       distance_unit: race.race_distance_unit,
     }));
+
     console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races:`);
     races.forEach(race => {
       console.log(` - Race ID: ${race.race_id} | Name: ${race.race_name} | Distance: ${race.distance}${race.distance_unit || ''}`);
@@ -175,6 +178,7 @@ export const fetchResultsForEvent = async (eventId) => {
         size: 500,
       },
     });
+
     allBrackets = bracketsResponse.data.event_bracket || [];
     console.log(`[ChronoTrack] Found ${allBrackets.length} total brackets`);
   } catch (err) {
@@ -186,11 +190,13 @@ export const fetchResultsForEvent = async (eventId) => {
   const divisionBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' && ['AGE', 'OTHER'].includes(b.bracket_type)
   );
+
   const genderBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' &&
     b.bracket_type === 'SEX' &&
     /^(Male|Female)$/i.test(b.bracket_name?.trim() || '')
   );
+
   const overallBrackets = allBrackets.filter(b => {
     const name = (b.bracket_name || '').toLowerCase();
     return b.bracket_wants_leaderboard === '1' && (name.includes('overall') || name.includes('all participants'));
@@ -204,6 +210,7 @@ export const fetchResultsForEvent = async (eventId) => {
   let allResults = [];
   let page = 1;
   const maxPages = 40;
+
   try {
     while (page <= maxPages) {
       const res = await axios.get(`${PROXY_BASE}/api/event/${eventId}/results`, {
@@ -214,12 +221,15 @@ export const fetchResultsForEvent = async (eventId) => {
           size: 500,
         },
       });
+
       const results = res.data.event_results || [];
       if (results.length === 0) break;
+
       allResults = [...allResults, ...results];
       if (results.length < 500) break;
       page++;
     }
+
     console.log(`[ChronoTrack] Fetched ${allResults.length} overall results for event ${eventId}`);
   } catch (err) {
     console.error('[ChronoTrack] Failed to fetch overall results', err);
@@ -237,49 +247,63 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // Process gender brackets
+  // Process gender brackets — ONLY use full course rank
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
     console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName})`);
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `GENDER "${name}"`, raceName);
-    console.log(`[ChronoTrack] GENDER "${name}" FINAL: ${bracketResults.length} ranked participants`);
+    console.log(`[ChronoTrack] GENDER "${name}" FINAL: ${bracketResults.length} ranked entries (including splits)`);
+
     bracketResults.forEach(r => {
       const key = getLookupKey(r);
       if (key && r.results_rank) {
-        genderPlaces[key] = parseInt(r.results_rank, 10);
+        // Only record rank if this is the full course interval
+        if (r.results_interval_full === '1') {
+          genderPlaces[key] = parseInt(r.results_rank, 10);
+        }
       }
     });
   }
 
-  // Process division brackets
+  // Process division brackets — ONLY use full course rank
   for (const bracket of divisionBrackets) {
     const name = (bracket.bracket_name || '').trim();
     if (!name) continue;
+
     const lowerName = name.toLowerCase();
     const isOverallLike = lowerName.includes('overall') || lowerName.includes('all participants');
     if (isOverallLike) continue;
+
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
     console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName})`);
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `DIVISION "${name}"`, raceName);
-    console.log(`[ChronoTrack] DIVISION "${name}" FINAL: ${bracketResults.length} ranked participants`);
+    console.log(`[ChronoTrack] DIVISION "${name}" FINAL: ${bracketResults.length} ranked entries (including splits)`);
+
     bracketResults.forEach(r => {
       const key = getLookupKey(r);
       if (key && r.results_rank) {
         const rank = parseInt(r.results_rank, 10);
-        divisionPlaces[key] = { name, place: rank };
+        // Only record if full course
+        if (r.results_interval_full === '1') {
+          divisionPlaces[key] = { name, place: rank };
+        }
       }
     });
   }
 
-  // Overall fallback
+  // Overall fallback (unchanged — should only have full course anyway)
   for (const bracket of overallBrackets) {
     const name = (bracket.bracket_name || '').trim();
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `OVERALL "${name}"`, raceName);
+
     bracketResults.forEach(r => {
       const key = getLookupKey(r);
       if (key && r.results_rank) {
