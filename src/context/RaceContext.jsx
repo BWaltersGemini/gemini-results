@@ -1,4 +1,4 @@
-// src/context/RaceContext.jsx (FULLY UPDATED — Optimized live polling: 30s in active window, 60s on race day)
+// src/context/RaceContext.jsx (FINAL — Cache-first load, background live polling only)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -144,7 +144,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Results loading + optimized live polling
+  // Results loading + background live polling only
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -156,7 +156,7 @@ export function RaceProvider({ children }) {
     let aborted = false;
     let pollInterval = null;
 
-    // Calculate live status once per effect run
+    // Calculate live status
     const now = Math.floor(Date.now() / 1000);
     const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
     const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
@@ -169,7 +169,7 @@ export function RaceProvider({ children }) {
     const isLive = isActiveWindow || isRaceDayFallback;
     if (!aborted) setIsLiveRace(isLive);
 
-    // Always fetch fresh on initial load during live race
+    // Only fetch fresh on first load if no cache or admin refresh
     const shouldFetchFreshOnStart = results.length === 0 || resultsVersion > 0;
 
     const loadResults = async (forceFresh = false) => {
@@ -198,8 +198,8 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // Fetch fresh if: forced, live race, no cache, or admin refresh
-        const shouldFetchFresh = forceFresh || isLive || cachedResults.length === 0 || resultsVersion > 0;
+        // Fetch fresh only if forced (polling) or first load with no cache
+        const shouldFetchFresh = forceFresh || cachedResults.length === 0 || resultsVersion > 0;
 
         if (shouldFetchFresh) {
           console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
@@ -247,7 +247,6 @@ export function RaceProvider({ children }) {
               console.log(`[RaceContext] Smart upsert complete (${count || 0} rows affected)`);
               allResults = deduped;
 
-              // Bump timestamp only if real changes
               if (count && count > 0) {
                 await supabase
                   .from('chronotrack_events')
@@ -277,15 +276,15 @@ export function RaceProvider({ children }) {
       }
     };
 
-    // Initial load
+    // Initial load — use cache if available
     loadResults(shouldFetchFreshOnStart);
 
-    // Optimized live polling
+    // Background live polling only — always fresh
     if (isActiveWindow) {
-      pollInterval = setInterval(() => loadResults(true), 30000); // 30 seconds during active window
+      pollInterval = setInterval(() => loadResults(true), 30000); // 30 seconds
       console.log('[RaceContext] Live polling started — 30s interval (active window)');
     } else if (isRaceDayFallback) {
-      pollInterval = setInterval(() => loadResults(true), 60000); // 60 seconds on race day fallback
+      pollInterval = setInterval(() => loadResults(true), 60000); // 60 seconds
       console.log('[RaceContext] Race day polling started — 60s interval');
     }
 
