@@ -1,6 +1,4 @@
-// FORCED NEW BUILD — 2025-12-20  — FIX isActiveWindow ReferenceError FOREVER
-// This line forces Git to see a change and triggers a fresh Vercel deploy
-// src/context/RaceContext.jsx (FINAL — Production-ready, no errors, smart polling)
+// src/context/RaceContext.jsx (FINAL — Fixed scope for isActiveWindow, production-ready)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -146,7 +144,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Results loading + smart polling
+  // Results loading + smart polling (fixed scope for isActiveWindow)
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -158,7 +156,22 @@ export function RaceProvider({ children }) {
     let aborted = false;
     let pollInterval = null;
 
-    const loadResults = async () => {
+    // Calculate live status once per effect run — now in correct scope
+    const now = Math.floor(Date.now() / 1000);
+    const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
+    const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
+
+    const isActiveWindow = startTime && endTime && now >= startTime && now <= endTime;
+    const isRaceDayFallback = !endTime && startTime
+      ? new Date(startTime * 1000).toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
+      : false;
+
+    const isLive = isActiveWindow || isRaceDayFallback;
+    if (!aborted) setIsLiveRace(isLive);
+
+    const shouldFetchFreshOnStart = isLive || results.length === 0 || resultsVersion > 0;
+
+    const loadResults = async (forceFresh = false) => {
       if (aborted) return;
 
       try {
@@ -184,20 +197,7 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // Determine live status
-        const now = Math.floor(Date.now() / 1000);
-        const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
-        const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
-
-        const isActiveWindow = startTime && endTime && now >= startTime && now <= endTime;
-        const isRaceDayFallback = !endTime && startTime
-          ? new Date(startTime * 1000).toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
-          : false;
-
-        const isLive = isActiveWindow || isRaceDayFallback;
-        if (!aborted) setIsLiveRace(isLive);
-
-        const shouldFetchFresh = isLive || cachedResults.length === 0 || resultsVersion > 0;
+        const shouldFetchFresh = forceFresh || isLive || cachedResults.length === 0 || resultsVersion > 0;
 
         if (shouldFetchFresh) {
           console.log('[RaceContext] Fetching fresh results from ChronoTrack...');
@@ -274,14 +274,15 @@ export function RaceProvider({ children }) {
       }
     };
 
-    loadResults();
+    // Initial load
+    loadResults(shouldFetchFreshOnStart);
 
-    // Smart polling
+    // Smart polling — isActiveWindow is now in scope
     if (isActiveWindow) {
-      pollInterval = setInterval(() => loadResults(), 120000); // 2 minutes
+      pollInterval = setInterval(() => loadResults(true), 120000); // every 2 minutes
       console.log('[RaceContext] Live polling started (active window)');
     } else if (isRaceDayFallback) {
-      pollInterval = setInterval(() => loadResults(), 300000); // 5 minutes on race day
+      pollInterval = setInterval(() => loadResults(true), 300000); // every 5 minutes
       console.log('[RaceContext] Race day polling started (fallback)');
     }
 
