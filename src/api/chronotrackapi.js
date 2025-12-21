@@ -1,8 +1,5 @@
 // src/api/chronotrackapi.js
-// FINAL WORKING VERSION — Matches the last known working version exactly
-// Uses direct param auth for events + proxy + Bearer token for races/results
-// Fixes 404 by using correct endpoint paths (/race instead of /races)
-
+// FINAL — Corrected event_end_time mapping + Full working logic
 import axios from 'axios';
 
 // Direct ChronoTrack API
@@ -56,7 +53,7 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
-// EVENTS: Direct parameter auth (no CORS, proven working)
+// EVENTS: Direct parameter auth + CORRECT event_end_time mapping
 export const fetchEvents = async () => {
   const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
   const userId = import.meta.env.VITE_CHRONOTRACK_USER;
@@ -81,10 +78,12 @@ export const fetchEvents = async () => {
 
     const events = response.data.event || [];
     console.log(`[ChronoTrack Direct] Fetched ${events.length} events in one call`);
+
     return events.map(event => ({
       id: event.event_id,
       name: event.event_name,
       start_time: event.event_start_time ? parseInt(event.event_start_time, 10) : null,
+      event_end_time: event.event_end_time ? parseInt(event.event_end_time, 10) : null, // ← Critical fix!
     }));
   } catch (err) {
     console.error('[ChronoTrack Direct] Failed to fetch events:', err.response?.data || err.message);
@@ -92,7 +91,7 @@ export const fetchEvents = async () => {
   }
 };
 
-// RACES: Via proxy + correct endpoint (/race, not /races)
+// RACES: Via proxy + correct endpoint (/race)
 export const fetchRacesForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
   const response = await axios.get(`${PROXY_BASE}/api/event/${eventId}/race`, {
@@ -141,7 +140,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   return allResults;
 };
 
-// RESULTS: Full logic from your last working version
+// RESULTS: Full working logic
 export const fetchResultsForEvent = async (eventId) => {
   const authHeader = await getAuthHeader();
 
