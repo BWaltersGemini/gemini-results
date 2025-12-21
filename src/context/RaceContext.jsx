@@ -1,8 +1,10 @@
-// src/context/RaceContext.jsx (FINAL — Smart UPSERT + event_end_time support + precise live window)
+// src/context/RaceContext.jsx (FINAL — All runtime errors fixed + end_time support)
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
+import axios from 'axios';
+import chronotrackapi from '../api/chronotrackapi.cjs'; // ← Correct import
 
 export const RaceContext = createContext();
 
@@ -87,23 +89,23 @@ export function RaceProvider({ children }) {
     loadEvents();
   }, []);
 
-  // Fetch event_end_time when an event is selected (if missing)
+  // Fetch event_end_time when selected (if missing)
   useEffect(() => {
-    if (!selectedEvent || selectedEvent.event_end_time) return;
+    if (!selectedEvent || selectedEvent.event_end_time !== undefined) return;
 
     const fetchEndTime = async () => {
       try {
-        const authHeader = await getAuthHeader(); // Reuse from chronotrackapi if needed, or direct
-        const response = await axios.get(`${PROXY_BASE}/api/event/${selectedEvent.id}`, {
+        const authHeader = await chronotrackapi.getAuthHeader();
+        const response = await axios.get(`${chronotrackapi.PROXY_BASE}/api/event/${selectedEvent.id}`, {
           headers: { Authorization: authHeader },
           params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
         });
 
         const eventData = response.data.event;
-        if (eventData && eventData.event_end_time) {
+        if (eventData?.event_end_time) {
           const endTime = parseInt(eventData.event_end_time, 10);
 
-          // Update in-memory selectedEvent
+          // Update state
           setSelectedEvent(prev => ({
             ...prev,
             event_end_time: endTime,
@@ -115,7 +117,7 @@ export function RaceProvider({ children }) {
             .update({ event_end_time: endTime })
             .eq('id', selectedEvent.id);
 
-          console.log(`[RaceContext] Fetched and saved event_end_time: ${endTime} for event ${selectedEvent.id}`);
+          console.log(`[RaceContext] Fetched event_end_time: ${endTime}`);
         }
       } catch (err) {
         console.warn('[RaceContext] Failed to fetch event_end_time:', err);
@@ -123,9 +125,9 @@ export function RaceProvider({ children }) {
     };
 
     fetchEndTime();
-  }, [selectedEvent?.id, selectedEvent?.event_end_time]);
+  }, [selectedEvent?.id]);
 
-  // Race loading (unchanged — working perfectly)
+  // Race loading
   useEffect(() => {
     if (!selectedEvent) {
       setRaces([]);
@@ -188,7 +190,7 @@ export function RaceProvider({ children }) {
     loadRaces();
   }, [selectedEvent]);
 
-  // Results loading — SMART UPSERT + precise live window using event_end_time
+  // Results loading — SMART UPSERT + precise live window
   useEffect(() => {
     if (!selectedEvent) {
       setResults([]);
@@ -196,17 +198,19 @@ export function RaceProvider({ children }) {
       setIsLiveRace(false);
       return;
     }
+
     let aborted = false;
     let pollInterval = null;
 
     const loadResults = async () => {
       if (aborted) return;
+
       try {
         setLoadingResults(true);
         setError(null);
         let allResults = [];
 
-        // Load cached results first
+        // Load cached results
         let cachedResults = [];
         let start = 0;
         const pageSize = 1000;
@@ -223,7 +227,7 @@ export function RaceProvider({ children }) {
           if (data.length < pageSize) break;
         }
 
-        // Precise live window check using start_time and end_time
+        // Precise live window
         const now = Math.floor(Date.now() / 1000);
         const startTime = selectedEvent.start_time ? parseInt(selectedEvent.start_time, 10) : null;
         const endTime = selectedEvent.event_end_time ? parseInt(selectedEvent.event_end_time, 10) : null;
@@ -297,6 +301,7 @@ export function RaceProvider({ children }) {
                   console.log('[RaceContext] last_updated bumped due to real changes');
                 }
               }
+
               allResults = deduped;
               const divisions = [...new Set(deduped.map(r => r.age_group_name).filter(Boolean))].sort();
               if (!aborted) setUniqueDivisions(divisions);
@@ -322,10 +327,10 @@ export function RaceProvider({ children }) {
 
     loadResults();
 
-    // Background polling only during active race window
+    // Background polling only during active window
     if (isActiveWindow) {
-      pollInterval = setInterval(() => loadResults(), 120000); // every 2 minutes
-      console.log('[RaceContext] Precise live window active — background polling started');
+      pollInterval = setInterval(() => loadResults(), 120000);
+      console.log('[RaceContext] Active race window — background polling started');
     }
 
     return () => {
