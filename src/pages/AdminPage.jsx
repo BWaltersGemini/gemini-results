@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Fixed .cjs import + full code)
+// src/pages/AdminPage.jsx (FINAL — Working build + "Refresh Event Details" button)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -7,7 +7,9 @@ import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 import { RaceContext } from '../context/RaceContext';
 import axios from 'axios';
-import chronotrackapi from '../api/chronotrackapi.cjs'; // ← Correct way: import as default
+
+// Import the .cjs file as a namespace (Vercel-safe way)
+import * as chronotrackapi from '../api/chronotrackapi.cjs';
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -149,7 +151,7 @@ export default function AdminPage() {
     }
   };
 
-  // NEW: Bulk fetch event_end_time for all events
+  // Bulk fetch event_end_time for all events
   const fetchAllEventDetails = async () => {
     if (!confirm(`Fetch end times for all ${chronoEvents.length} events? This may take a minute.`)) {
       return;
