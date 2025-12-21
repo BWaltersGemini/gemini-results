@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FULL COMPLETE — Final Version with Visible X Button)
+// src/pages/ParticipantPage.jsx (FULL COMPLETE — Final Version)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -48,7 +48,6 @@ export default function ParticipantPage() {
     }
   }, [contextSelectedEvent]);
 
-  // Fetch upcoming events
   useEffect(() => {
     const fetchUpcoming = async () => {
       try {
@@ -86,7 +85,6 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Photo handling
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -119,17 +117,11 @@ export default function ParticipantPage() {
 
   const removePhoto = () => setUserPhoto(null);
 
-  // Load participant data
   useEffect(() => {
     const fetchDataIfMissing = async () => {
       if (participant && selectedEvent && results.length > 0) {
         if (!timeRevealed && participant.chip_time) {
-          confetti({
-            particleCount: 200,
-            spread: 80,
-            origin: { y: 0.5 },
-            colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'],
-          });
+          confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'] });
         }
         return;
       }
@@ -143,9 +135,7 @@ export default function ParticipantPage() {
         let targetEvent = selectedEvent || contextSelectedEvent;
         if (!targetEvent) {
           const resultWithBib = contextResults?.find(r => String(r.bib) === String(bib));
-          if (resultWithBib) {
-            targetEvent = events.find(e => e.id === resultWithBib.event_id);
-          }
+          if (resultWithBib) targetEvent = events.find(e => e.id === resultWithBib.event_id);
         }
         if (!targetEvent) throw new Error('Event not found');
         setLocalSelectedEvent(targetEvent);
@@ -160,12 +150,7 @@ export default function ParticipantPage() {
         const found = allResults.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found with this bib');
         setParticipant(found);
-        confetti({
-          particleCount: 250,
-          spread: 100,
-          origin: { y: 0.6 },
-          colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'],
-        });
+        confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#80ccd6', '#00a8e8', '#ffd700', '#ff6b6b', '#4ecdc4'] });
       } catch (err) {
         console.error('[ParticipantPage] Load error:', err);
         setFetchError(err.message || 'Failed to load participant');
@@ -178,7 +163,6 @@ export default function ParticipantPage() {
 
   const handleTimeComplete = () => setTimeRevealed(true);
 
-  // Card generation
   const generateResultCard = async () => {
     if (!cardRef.current) return;
     try {
@@ -230,7 +214,6 @@ export default function ParticipantPage() {
     }
   };
 
-  // Social shares
   const shareOnFacebook = () => {
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️`);
@@ -246,7 +229,6 @@ export default function ParticipantPage() {
     alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
   };
 
-  // Navigation
   const goBackToResults = () => {
     if (!selectedEvent) {
       navigate('/results');
@@ -287,7 +269,6 @@ export default function ParticipantPage() {
     navigate(`/results/${masterSlug}/${eventYear}`, { state: { highlightBib: participant.bib } });
   };
 
-  // Loading / Error
   if (loading || contextLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 flex items-center justify-center">
@@ -313,7 +294,6 @@ export default function ParticipantPage() {
     );
   }
 
-  // Calculations
   const overallTotal = results.length;
   const genderTotal = results.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
@@ -560,13 +540,7 @@ export default function ParticipantPage() {
       </div>
 
       {/* Hidden Photo Input */}
-      <input
-        type="file"
-        ref={photoInputRef}
-        accept="image/*"
-        onChange={handlePhotoUpload}
-        className="hidden"
-      />
+      <input type="file" ref={photoInputRef} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
 
       {/* Hidden Full-Size Card for html2canvas */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
@@ -575,7 +549,6 @@ export default function ParticipantPage() {
           className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
-          {/* Logo */}
           <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
             {masterLogo ? (
               <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
@@ -585,10 +558,8 @@ export default function ParticipantPage() {
               <h2 className="text-4xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
             )}
           </div>
-
           <p className="text-3xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
           <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-
           <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
             {userPhoto && (
               <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
@@ -599,14 +570,12 @@ export default function ParticipantPage() {
               {participant.first_name}<br />{participant.last_name}
             </h1>
           </div>
-
           <div className="mb-10">
             <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
             <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
               {formatChronoTime(participant.chip_time)}
             </p>
           </div>
-
           <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-10">
             <div>
               <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
@@ -624,18 +593,16 @@ export default function ParticipantPage() {
               <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
             </div>
           </div>
-
           <p className="text-3xl text-white italic mt-auto">
             Find your next race at www.youkeepmoving.com
           </p>
         </div>
       </div>
 
-      {/* Card Preview Modal */}
+      {/* Card Preview Modal - Perfectly Centered on All Devices */}
       {showCardPreview && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
-            {/* Visible Close Button */}
             <button
               onClick={() => setShowCardPreview(false)}
               className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-gray-800 text-3xl font-light hover:bg-gray-100 transition z-50"
@@ -646,62 +613,63 @@ export default function ParticipantPage() {
             <h3 className="text-4xl font-bold text-center text-gemini-dark-gray mb-10">Your Result Card 🎉</h3>
 
             <div className="flex justify-center mb-10">
-              <div className="w-96 h-96 rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200">
-                <div className="w-[1080px] h-[1080px] scale-[0.355] origin-top-left" style={{ transformOrigin: 'top left' }}>
-                  <div className="w-full h-full bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden" style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                    <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
-                      {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
-                      ) : eventLogos[selectedEvent.id] ? (
-                        <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-24 object-contain mx-auto" crossOrigin="anonymous" />
-                      ) : (
-                        <h2 className="text-4xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
-                      )}
-                    </div>
-                    <p className="text-3xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
-                    <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-                    <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
-                      {userPhoto && (
-                        <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
-                          <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
+              <div className="relative w-96 h-96 rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200">
+                <div className="absolute inset-0 flex items-start justify-center">
+                  <div className="w-[1080px] h-[1080px] scale-[0.355] origin-top" style={{ transformOrigin: 'top center' }}>
+                    <div className="w-full h-full bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden" style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
+                        {masterLogo ? (
+                          <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
+                        ) : eventLogos[selectedEvent.id] ? (
+                          <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-24 object-contain mx-auto" crossOrigin="anonymous" />
+                        ) : (
+                          <h2 className="text-4xl font-black text-gemini-dark-gray">{selectedEvent.name}</h2>
+                        )}
+                      </div>
+                      <p className="text-3xl font-black text-[#80ccd6] mb-2">{raceDisplayName}</p>
+                      <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
+                      <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
+                        {userPhoto && (
+                          <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
+                            <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <h1 className={`font-black text-white drop-shadow-2xl leading-none ${userPhoto ? 'text-6xl' : 'text-7xl'}`}>
+                          {participant.first_name}<br />{participant.last_name}
+                        </h1>
+                      </div>
+                      <div className="mb-10">
+                        <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
+                        <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
+                          {formatChronoTime(participant.chip_time)}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-10">
+                        <div>
+                          <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
+                          <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
+                          <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
                         </div>
-                      )}
-                      <h1 className={`font-black text-white drop-shadow-2xl leading-none ${userPhoto ? 'text-6xl' : 'text-7xl'}`}>
-                        {participant.first_name}<br />{participant.last_name}
-                      </h1>
-                    </div>
-                    <div className="mb-10">
-                      <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
-                      <p className="text-9xl font-black text-[#ffd700] drop-shadow-2xl leading-none">
-                        {formatChronoTime(participant.chip_time)}
+                        <div>
+                          <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
+                          <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.gender_place || '—'}</p>
+                          <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
+                        </div>
+                        <div>
+                          <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
+                          <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.age_group_place || '—'}</p>
+                          <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
+                        </div>
+                      </div>
+                      <p className="text-3xl text-white italic mt-auto">
+                        Find your next race at www.youkeepmoving.com
                       </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-10">
-                      <div>
-                        <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
-                        <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.place || '—'}</p>
-                        <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
-                      </div>
-                      <div>
-                        <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
-                        <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.gender_place || '—'}</p>
-                        <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
-                      </div>
-                      <div>
-                        <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
-                        <p className="text-7xl font-bold text-[#ffd700] leading-none">{participant.age_group_place || '—'}</p>
-                        <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
-                      </div>
-                    </div>
-                    <p className="text-3xl text-white italic mt-auto">
-                      Find your next race at www.youkeepmoving.com
-                    </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Photo Upload & Buttons */}
             <div className="mb-10">
               <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
               <div className="flex justify-center gap-6 mb-6">
