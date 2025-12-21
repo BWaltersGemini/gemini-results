@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Cache-first display, no ChronoTrack fetch on load/refresh)
+// src/pages/ResultsPage.jsx (FULLY UPDATED — With permanent Live Results Indicator + All Existing Features)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -113,7 +113,6 @@ export default function ResultsPage() {
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
-
     if (!storedMasterKey) return;
 
     const groupEventIds = masterGroups[storedMasterKey] || [];
@@ -137,7 +136,6 @@ export default function ResultsPage() {
 
   useEffect(() => {
     if (!highlightedBib || !targetRaceIdRef.current) return;
-
     const scrollToRaceAndRow = () => {
       const raceEl = raceRefs.current[targetRaceIdRef.current];
       if (raceEl) {
@@ -149,7 +147,6 @@ export default function ResultsPage() {
         }, 600);
       }
     };
-
     const timer = setTimeout(scrollToRaceAndRow, 300);
     return () => clearTimeout(timer);
   }, [highlightedBib, results]);
@@ -240,7 +237,7 @@ export default function ResultsPage() {
     }
   };
 
-  // MASTER LANDING PAGE
+  // MASTER LANDING PAGE (when no event selected)
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
     const masterEventTiles = visibleMasters
@@ -266,6 +263,7 @@ export default function ResultsPage() {
             <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">Race Results</h1>
             <p className="text-xl text-gray-600">Recent race series</p>
           </div>
+
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
               {masterEventTiles.map((master) => (
@@ -294,6 +292,7 @@ export default function ResultsPage() {
           ) : (
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
+
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
@@ -340,9 +339,28 @@ export default function ResultsPage() {
     );
   }
 
+  // EVENT RESULTS PAGE
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-32 relative">
       <div className="max-w-7xl mx-auto px-6">
+        {/* Permanent Live Results Indicator (only when race is live) */}
+        {isLiveRace && (
+          <div className="fixed top-20 right-4 md:right-8 z-50">
+            <div className="bg-green-600 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-pulse">
+              <div className="w-3 h-3 bg-white rounded-full animate-ping" />
+              <span className="font-bold text-sm md:text-base">Live Results Updating</span>
+            </div>
+          </div>
+        )}
+
+        {/* Temporary refreshing spinner (only during background fetch) */}
+        {isLiveRace && isRefreshing && (
+          <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 bg-gemini-blue text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-3 text-lg font-bold animate-pulse">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            Updating live results...
+          </div>
+        )}
+
         {!searchQuery && (
           <div className="text-center mb-16">
             {displayLogo ? (
@@ -426,15 +444,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Live Refresh Indicator — shows only when background update is happening */}
-        {isLiveRace && isRefreshing && (
-          <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 bg-gemini-blue text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-3 text-lg font-bold animate-pulse">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            Updating live results...
-          </div>
-        )}
-
-        {/* Race Cards */}
+        {/* Race Cards (navigation when not searching) */}
         {!searchQuery && displayedRaces.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
             {displayedRaces.map((race) => {
@@ -508,6 +518,7 @@ export default function ResultsPage() {
                       {editedEvents[selectedEvent.id]?.races?.[raceId] || race.race_name}
                     </h3>
                   </div>
+
                   <div className="p-6 border-b border-gray-200">
                     <button
                       onClick={() => setShowFiltersForRace(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
@@ -575,6 +586,7 @@ export default function ResultsPage() {
                       </div>
                     )}
                   </div>
+
                   <div className="overflow-x-auto">
                     <div className="md:hidden">
                       <ResultsTable
@@ -595,6 +607,7 @@ export default function ResultsPage() {
                       />
                     </div>
                   </div>
+
                   {sorted.length > pageSize && (
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mt-12 p-8 bg-gray-50 rounded-b-3xl">
                       <button
@@ -626,6 +639,7 @@ export default function ResultsPage() {
                       </button>
                     </div>
                   )}
+
                   {sorted.length > 30 && (
                     <div className="text-center py-8">
                       <button
@@ -660,7 +674,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top Button */}
+      {/* Global Back to Top Button */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-20 right-8 bg-gemini-blue text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:bg-gemini-blue/90 hover:scale-110 transition-all z-50"
