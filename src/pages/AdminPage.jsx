@@ -11,8 +11,8 @@ import { getAuthHeader, PROXY_BASE } from '../api/chronotrackapi'; // Import nee
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const { refreshResults } from useContext(RaceContext);
-
+  const { refreshResults } = useContext(RaceContext);
+  
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
