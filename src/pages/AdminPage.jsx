@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FINAL — Fixed import from .cjs + full code)
+// src/pages/AdminPage.jsx (FINAL — Fixed .cjs import + full code)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -7,9 +7,7 @@ import { createAdminSupabaseClient } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
 import { RaceContext } from '../context/RaceContext';
 import axios from 'axios';
-
-// Correct way to import named exports from .cjs file in Vite
-import { getAuthHeader, PROXY_BASE } from '../api/chronotrackapi.cjs?commonjs-proxy';
+import chronotrackapi from '../api/chronotrackapi.cjs'; // ← Correct way: import as default
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -151,7 +149,7 @@ export default function AdminPage() {
     }
   };
 
-  // Bulk fetch event_end_time for all events
+  // NEW: Bulk fetch event_end_time for all events
   const fetchAllEventDetails = async () => {
     if (!confirm(`Fetch end times for all ${chronoEvents.length} events? This may take a minute.`)) {
       return;
@@ -162,8 +160,8 @@ export default function AdminPage() {
 
     for (const event of chronoEvents) {
       try {
-        const authHeader = await getAuthHeader();
-        const response = await axios.get(`${PROXY_BASE}/api/event/${event.id}`, {
+        const authHeader = await chronotrackapi.getAuthHeader();
+        const response = await axios.get(`${chronotrackapi.PROXY_BASE}/api/event/${event.id}`, {
           headers: { Authorization: authHeader },
           params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
         });
@@ -600,6 +598,7 @@ export default function AdminPage() {
                     </div>
                     {expandedEvents[event.id] && (
                       <div className="px-6 pb-6 border-t border-gray-200">
+                        {/* Master Management */}
                         {currentMaster && (
                           <div className="mb-8 p-6 bg-gradient-to-r from-gemini-blue/10 to-gemini-blue/5 rounded-xl border border-gemini-blue/30">
                             <div className="flex justify-between items-center mb-6">
@@ -613,6 +612,7 @@ export default function AdminPage() {
                                 Delete Master
                               </button>
                             </div>
+                            {/* Logo Upload */}
                             <div className="mb-6">
                               <h5 className="text-lg font-semibold text-gray-700 mb-3">Master Logo</h5>
                               {eventLogos[currentMaster] ? (
@@ -638,6 +638,7 @@ export default function AdminPage() {
                                 />
                               )}
                             </div>
+                            {/* Ads Toggle */}
                             <div>
                               <h5 className="text-lg font-semibold text-gray-700 mb-3">Ads Visibility</h5>
                               <label className="flex items-center gap-4 cursor-pointer">
@@ -658,6 +659,7 @@ export default function AdminPage() {
                             </div>
                           </div>
                         )}
+                        {/* Standard Controls */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                           <div>
                             <label className="block text-lg font-semibold text-gray-700 mb-2">Master Event</label>
@@ -701,6 +703,7 @@ export default function AdminPage() {
                             />
                           </div>
                         </div>
+                        {/* Publish Button */}
                         <div className="mt-8 flex justify-center">
                           <button
                             onClick={() => refreshAndPublishResults(event.id)}
@@ -710,6 +713,7 @@ export default function AdminPage() {
                             {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
                           </button>
                         </div>
+                        {/* Races */}
                         {event.races && event.races.length > 0 && (
                           <div className="mt-8">
                             <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">Races ({event.races.length})</h4>
