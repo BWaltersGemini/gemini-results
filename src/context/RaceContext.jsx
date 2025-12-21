@@ -170,8 +170,8 @@ export function RaceProvider({ children }) {
     if (!aborted) setIsLiveRace(isLive);
 
     // Only fetch fresh on first load if no cache or admin refresh
-    const shouldFetchFreshOnStart = results.length === 0 || resultsVersion > 0;
-
+    const shouldFetchFreshOnStart = resultsVersion > 0;
+    
     const loadResults = async (forceFresh = false) => {
       if (aborted) return;
 
