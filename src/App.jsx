@@ -1,8 +1,8 @@
-// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop + Fixed useEffect import)
+// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop + AdminDashboard route)
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { useEffect } from 'react'; // ← THIS WAS MISSING! Add this line
+import { useEffect } from 'react';
 import { RaceProvider } from './context/RaceContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -12,7 +12,7 @@ import Services from './pages/Services';
 import Products from './pages/Products';
 import ResultsPage from './pages/ResultsPage';
 import Contact from './pages/Contact';
-import AdminPage from './pages/AdminPage';
+import AdminDashboard from './pages/admin/AdminDashboard'; // ← NEW: Updated import
 import ParticipantPage from './pages/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
 
@@ -67,7 +67,7 @@ export default function App() {
                 <Route path="/services" element={<Services />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/contact" element={<Contact />} />
-                <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin" element={<AdminDashboard />} /> {/* ← Updated route */}
                 <Route path="/master-events" element={<MasterEvents />} />
 
                 <Route path="/results" element={<ResultsPage />} />
