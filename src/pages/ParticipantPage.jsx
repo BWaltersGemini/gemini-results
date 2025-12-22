@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FULLY UPDATED — Enhanced Race Story Splits Section)
+// src/pages/ParticipantPage.jsx (FULLY UPDATED — Shareable Card with QR Code linking to results page)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -44,6 +44,12 @@ export default function ParticipantPage() {
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
   const cardRef = useRef(null);
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // Build the direct link to this participant's results page
+  const participantResultsUrl = window.location.href;
+
+  // QR code URL using a reliable free service (qrserver.com)
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=001f3f&bgcolor=FFFFFF`;
 
   useEffect(() => {
     if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
@@ -206,7 +212,7 @@ export default function ParticipantPage() {
           await navigator.share({
             files: [file],
             title: 'My Race Result!',
-            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️ Find your next race at www.youkeepmoving.com`,
+            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏊‍♂️🚴‍♂️🏃‍♂️\n\nFull results: ${participantResultsUrl}`,
           });
         } else {
           generateResultCard();
@@ -218,13 +224,13 @@ export default function ParticipantPage() {
   };
 
   const shareOnFacebook = () => {
-    const url = encodeURIComponent(window.location.href);
-    const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏃‍♂️`);
+    const url = encodeURIComponent(participantResultsUrl);
+    const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏊‍♂️🚴‍♂️🏃‍♂️`);
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`, '_blank');
   };
 
   const shareOnX = () => {
-    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! Overall: ${participant.place}, Gender: ${participant.gender_place}, Division: ${participant.age_group_place} 🏁\n\n${window.location.href}`);
+    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! Overall: ${participant.place}, Gender: ${participant.gender_place}, Division: ${participant.age_group_place} 🏁\n\n${participantResultsUrl}`);
     window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
   };
 
@@ -317,10 +323,9 @@ export default function ParticipantPage() {
     if (splitsWithPlace.length < 2) return "Strong, steady performance throughout!";
 
     const firstPlace = splitsWithPlace[0].place;
-    const lastSplitPlace = splitsWithPlace[splitsWithPlace.length - 1].place;
+    const finalPlace = participant.place || Infinity;
     const bestPlace = Math.min(...splitsWithPlace.map(s => s.place));
     const worstPlace = Math.max(...splitsWithPlace.map(s => s.place));
-    const finalPlace = participant.place || Infinity;
 
     if (finalPlace === 1 && firstPlace === 1) {
       return "Wire-to-wire dominance — led from the gun and never looked back! 🏆";
@@ -348,7 +353,7 @@ export default function ParticipantPage() {
 
   const getRankChange = (current, previous) => {
     if (!previous || !current) return null;
-    const diff = previous - current; // positive = gained positions
+    const diff = previous - current;
     if (diff > 0) return { text: `↑${diff}`, color: "text-green-600 font-bold" };
     if (diff < 0) return { text: `↓${Math.abs(diff)}`, color: "text-red-600 font-bold" };
     return { text: "–", color: "text-gray-500" };
@@ -360,6 +365,17 @@ export default function ParticipantPage() {
     const rankChange = getRankChange(split.place, prev?.place);
     return { ...split, rankChange };
   }) || [];
+
+  // Add Full Course as final "split"
+  const fullCourseSplit = {
+    name: "Full Course",
+    time: participant.chip_time,
+    pace: participant.pace,
+    place: participant.place,
+    rankChange: getRankChange(participant.place, enrichedSplits[enrichedSplits.length - 1]?.place),
+  };
+
+  const splitsWithFullCourse = [...enrichedSplits, fullCourseSplit];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
@@ -449,7 +465,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* === ENHANCED SPLITS: YOUR RACE STORY === */}
+        {/* === ENHANCED SPLITS: YOUR RACE STORY (WITH FULL COURSE) === */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="bg-gradient-to-br from-[#80ccd6]/10 to-gemini-blue/5 rounded-3xl shadow-2xl overflow-hidden border border-[#80ccd6]/30 mb-16">
             <button
@@ -457,7 +473,7 @@ export default function ParticipantPage() {
               className="w-full bg-gradient-to-r from-[#80ccd6] to-gemini-blue py-6 text-white font-black text-2xl md:text-3xl hover:opacity-90 transition flex items-center justify-center gap-4"
             >
               <span className="text-3xl">{showSplits ? '▼' : '▶'}</span>
-              {showSplits ? 'Hide' : 'Show'} Your Race Story ({participant.splits.length} Splits)
+              {showSplits ? 'Hide' : 'Show'} Your Race Story ({participant.splits.length + 1} Points)
             </button>
 
             {showSplits && (
@@ -478,27 +494,21 @@ export default function ParticipantPage() {
                       <tr>
                         <th className="px-6 py-5">Split</th>
                         <th className="px-6 py-5 text-center">Split Time</th>
-                        <th className="px-6 py-5 text-center">Cumulative</th>
                         <th className="px-6 py-5 text-center">Overall Rank</th>
                         <th className="px-6 py-5 text-center">Change</th>
                         <th className="px-6 py-5 text-center">Pace</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {enrichedSplits.map((split, i) => {
-                        // For cumulative time: use split.time if available, fall back to final chip_time for last split
-                        const cumulativeTime = split.time || (i === enrichedSplits.length - 1 ? participant.chip_time : null);
-
+                      {splitsWithFullCourse.map((split, i) => {
+                        const isFullCourse = split.name === "Full Course";
                         return (
-                          <tr key={i} className="hover:bg-gemini-blue/5 transition text-lg">
+                          <tr key={i} className={`hover:bg-gemini-blue/5 transition text-lg ${isFullCourse ? 'bg-gemini-blue/5 font-bold' : ''}`}>
                             <td className="px-6 py-5 font-semibold text-gemini-dark-gray">
                               {split.name}
                             </td>
                             <td className="px-6 py-5 text-center font-medium">
                               {formatChronoTime(split.time) || '—'}
-                            </td>
-                            <td className="px-6 py-5 text-center font-bold text-gemini-blue">
-                              {formatChronoTime(cumulativeTime) || '—'}
                             </td>
                             <td className="px-6 py-5 text-center font-bold">
                               {split.place ? `#${split.place}` : '—'}
@@ -523,7 +533,7 @@ export default function ParticipantPage() {
                 {/* Legend */}
                 <div className="mt-10 text-center text-sm text-gray-600 space-y-2">
                   <p>↑ = Gained positions • ↓ = Lost positions • – = Held position</p>
-                  <p>Cumulative = Total time from start to this point</p>
+                  <p>Full Course row shows your final official result</p>
                 </div>
               </div>
             )}
@@ -642,11 +652,11 @@ export default function ParticipantPage() {
       {/* Hidden Photo Input */}
       <input type="file" ref={photoInputRef} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
 
-      {/* Hidden Full-Size Card for html2canvas */}
+      {/* Hidden Full-Size Card for html2canvas — NOW WITH QR CODE */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden"
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden relative"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
           <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
@@ -693,6 +703,18 @@ export default function ParticipantPage() {
               <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
             </div>
           </div>
+
+          {/* QR Code in bottom-right corner */}
+          <div className="absolute bottom-8 right-8 flex flex-col items-center">
+            <img
+              src={qrCodeUrl}
+              alt="QR Code to full results"
+              className="w-32 h-32 border-4 border-white rounded-xl shadow-xl"
+              crossOrigin="anonymous"
+            />
+            <p className="text-white text-sm mt-2 font-medium">Scan for full results</p>
+          </div>
+
           <p className="text-3xl text-white italic mt-auto">
             Find your next race at www.youkeepmoving.com
           </p>
@@ -714,7 +736,7 @@ export default function ParticipantPage() {
               <div className="relative w-96 h-96 rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200">
                 <div className="absolute inset-0 flex items-start justify-center">
                   <div className="w-[1080px] h-[1080px] scale-[0.355] origin-top" style={{ transformOrigin: 'top center' }}>
-                    <div className="w-full h-full bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden" style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                    <div className="w-full h-full bg-gradient-to-br from-[#001f3f] via-[#003366] to-[#001a33] flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden relative" style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
                       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
                         {masterLogo ? (
                           <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
@@ -759,6 +781,17 @@ export default function ParticipantPage() {
                           <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
                         </div>
                       </div>
+
+                      {/* QR Code in preview */}
+                      <div className="absolute bottom-8 right-8 flex flex-col items-center">
+                        <img
+                          src={qrCodeUrl}
+                          alt="QR Code"
+                          className="w-32 h-32 border-4 border-white rounded-xl shadow-xl"
+                        />
+                        <p className="text-white text-sm mt-2 font-medium">Scan for full results</p>
+                      </div>
+
                       <p className="text-3xl text-white italic mt-auto">
                         Find your next race at www.youkeepmoving.com
                       </p>
