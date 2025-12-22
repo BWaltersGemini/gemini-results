@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (FULLY UPDATED — Shareable Card with QR Code linking to results page)
+// src/pages/ParticipantPage.jsx (FULLY UPDATED — Race Story + Mini Rank Sparkline Chart)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -377,6 +377,24 @@ export default function ParticipantPage() {
 
   const splitsWithFullCourse = [...enrichedSplits, fullCourseSplit];
 
+  // === MINI SPARKLINE RANK CHART DATA ===
+  const rankData = splitsWithFullCourse
+    .map(split => split.place)
+    .filter(place => place !== null && place !== undefined);
+
+  const hasRankData = rankData.length > 1;
+  const minRank = hasRankData ? Math.min(...rankData) : 1;
+  const maxRank = hasRankData ? Math.max(...rankData) : 10;
+  const rankRange = maxRank - minRank + 4; // padding
+
+  const chartHeight = 120;
+  const chartWidth = 600;
+  const points = rankData.map((rank, i) => {
+    const x = (i / (rankData.length - 1)) * chartWidth;
+    const y = chartHeight - ((rank - minRank + 2) / rankRange) * chartHeight;
+    return `${x},${y}`;
+  }).join(' ');
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-gemini-blue/20">
@@ -465,7 +483,7 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* === ENHANCED SPLITS: YOUR RACE STORY (WITH FULL COURSE) === */}
+        {/* === ENHANCED SPLITS: YOUR RACE STORY WITH RANK SPARKLINE === */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="bg-gradient-to-br from-[#80ccd6]/10 to-gemini-blue/5 rounded-3xl shadow-2xl overflow-hidden border border-[#80ccd6]/30 mb-16">
             <button
@@ -480,10 +498,79 @@ export default function ParticipantPage() {
               <div className="p-8 md:p-12">
                 {/* Personalized Race Narrative */}
                 {raceStory && (
-                  <div className="text-center mb-12">
+                  <div className="text-center mb-10">
                     <p className="text-2xl md:text-3xl font-bold text-gemini-dark-gray italic leading-relaxed max-w-4xl mx-auto">
                       {raceStory}
                     </p>
+                  </div>
+                )}
+
+                {/* Mini Rank Sparkline Chart */}
+                {hasRankData && (
+                  <div className="mb-12 bg-white rounded-2xl shadow-inner p-8">
+                    <h3 className="text-2xl font-bold text-center text-gemini-dark-gray mb-6">
+                      Your Position Throughout the Race
+                    </h3>
+                    <div className="flex justify-center">
+                      <svg width={chartWidth} height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="max-w-full h-auto">
+                        {/* Grid lines */}
+                        <g>
+                          {[1, Math.ceil(rankRange / 4), Math.ceil(rankRange / 2), Math.ceil(3 * rankRange / 4), rankRange].map((level, i) => (
+                            <line
+                              key={i}
+                              x1="0"
+                              y1={chartHeight - (level / rankRange) * chartHeight}
+                              x2={chartWidth}
+                              y2={chartHeight - (level / rankRange) * chartHeight}
+                              stroke="#e5e7eb"
+                              strokeDasharray="5,5"
+                            />
+                          ))}
+                        </g>
+
+                        {/* Rank line */}
+                        <polyline
+                          fill="none"
+                          stroke="#00a8e8"
+                          strokeWidth="6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          points={points}
+                        />
+
+                        {/* Data points */}
+                        {rankData.map((rank, i) => {
+                          const x = (i / (rankData.length - 1)) * chartWidth;
+                          const y = chartHeight - ((rank - minRank + 2) / rankRange) * chartHeight;
+                          return (
+                            <g key={i}>
+                              <circle cx={x} cy={y} r="10" fill="#001f3f" />
+                              <text
+                                x={x}
+                                y={y - 15}
+                                textAnchor="middle"
+                                className="text-xl font-black fill-gemini-blue"
+                              >
+                                {rank}
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Y-axis labels */}
+                        <text x="10" y="20" className="text-sm fill-gray-600">1st</text>
+                        <text x="10" y={chartHeight - 10} className="text-sm fill-gray-600">Lower = Better</text>
+                      </svg>
+                    </div>
+
+                    {/* Split labels below chart */}
+                    <div className="flex justify-between mt-4 px-8 text-sm text-gray-600">
+                      {splitsWithFullCourse.map((split, i) => (
+                        <div key={i} className="text-center">
+                          <p className="font-medium">{split.name}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -652,7 +739,7 @@ export default function ParticipantPage() {
       {/* Hidden Photo Input */}
       <input type="file" ref={photoInputRef} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
 
-      {/* Hidden Full-Size Card for html2canvas — NOW WITH QR CODE */}
+      {/* Hidden Full-Size Card for html2canvas — WITH QR CODE */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -704,7 +791,7 @@ export default function ParticipantPage() {
             </div>
           </div>
 
-          {/* QR Code in bottom-right corner */}
+          {/* QR Code */}
           <div className="absolute bottom-8 right-8 flex flex-col items-center">
             <img
               src={qrCodeUrl}
