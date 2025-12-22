@@ -1,7 +1,8 @@
-// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop)
+// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop + Fixed useEffect import)
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { useEffect } from 'react'; // ← THIS WAS MISSING! Add this line
 import { RaceProvider } from './context/RaceContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
