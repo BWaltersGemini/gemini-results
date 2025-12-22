@@ -1,4 +1,4 @@
-// src/pages/ParticipantPage.jsx (UPDATED — Splits section only shown when splits exist AND contain meaningful data)
+// src/pages/ParticipantPage.jsx (FULLY UPDATED — Enhanced Race Story Splits Section)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -309,15 +309,57 @@ export default function ParticipantPage() {
   const isAgeGroupWinner = participant.age_group_place === 1;
   const bibLogo = eventLogos[selectedEvent.id] || '/GRR.png';
 
-  // Determine if we should show the splits section
-  const hasMeaningfulSplits = participant.splits && 
-    Array.isArray(participant.splits) && 
-    participant.splits.length > 0 && 
-    participant.splits.some(split => 
-      (split.time && split.time.trim() !== '') || 
-      (split.pace && split.pace.trim() !== '') || 
-      split.place
-    );
+  // === RACE STORY LOGIC ===
+  const getRaceStory = () => {
+    if (!participant.splits || participant.splits.length === 0) return null;
+
+    const splitsWithPlace = participant.splits.filter(s => s.place);
+    if (splitsWithPlace.length < 2) return "Strong, steady performance throughout!";
+
+    const firstPlace = splitsWithPlace[0].place;
+    const lastSplitPlace = splitsWithPlace[splitsWithPlace.length - 1].place;
+    const bestPlace = Math.min(...splitsWithPlace.map(s => s.place));
+    const worstPlace = Math.max(...splitsWithPlace.map(s => s.place));
+    const finalPlace = participant.place || Infinity;
+
+    if (finalPlace === 1 && firstPlace === 1) {
+      return "Wire-to-wire dominance — led from the gun and never looked back! 🏆";
+    }
+    if (finalPlace === 1 && firstPlace > 5) {
+      return "EPIC COMEBACK! Started mid-pack but stormed to victory with an unstoppable surge! 🔥";
+    }
+    if (bestPlace === 1 && finalPlace > 3) {
+      return "Had the lead early but got passed late — a valiant fight to the line!";
+    }
+    if (worstPlace - bestPlace >= 20) {
+      return "A rollercoaster race — big swings, but battled through every step!";
+    }
+    if (finalPlace <= 3 && firstPlace > 10) {
+      return "Patient and powerful — saved the best for last with a huge negative split! 🚀";
+    }
+    if (Math.abs(firstPlace - finalPlace) <= 3) {
+      return "Rock-solid consistency — stayed near the front the entire race!";
+    }
+
+    return "Gritty, determined performance — gave it everything out there!";
+  };
+
+  const raceStory = getRaceStory();
+
+  const getRankChange = (current, previous) => {
+    if (!previous || !current) return null;
+    const diff = previous - current; // positive = gained positions
+    if (diff > 0) return { text: `↑${diff}`, color: "text-green-600 font-bold" };
+    if (diff < 0) return { text: `↓${Math.abs(diff)}`, color: "text-red-600 font-bold" };
+    return { text: "–", color: "text-gray-500" };
+  };
+
+  // Enrich splits with rank change
+  const enrichedSplits = participant.splits?.map((split, i, arr) => {
+    const prev = i > 0 ? arr[i - 1] : null;
+    const rankChange = getRankChange(split.place, prev?.place);
+    return { ...split, rankChange };
+  }) || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gemini-light-gray to-gemini-blue/10 pt-40 py-16">
@@ -407,38 +449,82 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Splits Section — Only shown when meaningful splits exist */}
-        {hasMeaningfulSplits && (
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#80ccd6]/20 mb-16">
+        {/* === ENHANCED SPLITS: YOUR RACE STORY === */}
+        {participant.splits && participant.splits.length > 0 && (
+          <div className="bg-gradient-to-br from-[#80ccd6]/10 to-gemini-blue/5 rounded-3xl shadow-2xl overflow-hidden border border-[#80ccd6]/30 mb-16">
             <button
               onClick={() => setShowSplits(!showSplits)}
-              className="w-full bg-gradient-to-r from-[#80ccd6] to-[#80ccd6]/70 py-6 text-white font-bold text-2xl hover:opacity-90 transition flex items-center justify-center gap-3"
+              className="w-full bg-gradient-to-r from-[#80ccd6] to-gemini-blue py-6 text-white font-black text-2xl md:text-3xl hover:opacity-90 transition flex items-center justify-center gap-4"
             >
-              <span>{showSplits ? '▼' : '▶'}</span>
-              {showSplits ? 'Hide' : 'Show'} Split Times ({participant.splits.length})
+              <span className="text-3xl">{showSplits ? '▼' : '▶'}</span>
+              {showSplits ? 'Hide' : 'Show'} Your Race Story ({participant.splits.length} Splits)
             </button>
+
             {showSplits && (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-100 text-gray-700">
-                    <tr>
-                      <th className="px-8 py-5 text-left font-semibold">Split</th>
-                      <th className="px-8 py-5 text-left font-semibold">Time</th>
-                      <th className="px-8 py-5 text-left font-semibold">Pace</th>
-                      <th className="px-8 py-5 text-left font-semibold">Place</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {participant.splits.map((split, i) => (
-                      <tr key={i} className="hover:bg-gray-50 transition">
-                        <td className="px-8 py-5 font-medium">{split.name || `Split ${i + 1}`}</td>
-                        <td className="px-8 py-5">{formatChronoTime(split.time) || '—'}</td>
-                        <td className="px-8 py-5">{split.pace || '—'}</td>
-                        <td className="px-8 py-5">{split.place || '—'}</td>
+              <div className="p-8 md:p-12">
+                {/* Personalized Race Narrative */}
+                {raceStory && (
+                  <div className="text-center mb-12">
+                    <p className="text-2xl md:text-3xl font-bold text-gemini-dark-gray italic leading-relaxed max-w-4xl mx-auto">
+                      {raceStory}
+                    </p>
+                  </div>
+                )}
+
+                {/* Splits Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-gemini-blue/10 text-gemini-dark-gray font-bold uppercase text-sm tracking-wider">
+                      <tr>
+                        <th className="px-6 py-5">Split</th>
+                        <th className="px-6 py-5 text-center">Split Time</th>
+                        <th className="px-6 py-5 text-center">Cumulative</th>
+                        <th className="px-6 py-5 text-center">Overall Rank</th>
+                        <th className="px-6 py-5 text-center">Change</th>
+                        <th className="px-6 py-5 text-center">Pace</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {enrichedSplits.map((split, i) => {
+                        // For cumulative time: use split.time if available, fall back to final chip_time for last split
+                        const cumulativeTime = split.time || (i === enrichedSplits.length - 1 ? participant.chip_time : null);
+
+                        return (
+                          <tr key={i} className="hover:bg-gemini-blue/5 transition text-lg">
+                            <td className="px-6 py-5 font-semibold text-gemini-dark-gray">
+                              {split.name}
+                            </td>
+                            <td className="px-6 py-5 text-center font-medium">
+                              {formatChronoTime(split.time) || '—'}
+                            </td>
+                            <td className="px-6 py-5 text-center font-bold text-gemini-blue">
+                              {formatChronoTime(cumulativeTime) || '—'}
+                            </td>
+                            <td className="px-6 py-5 text-center font-bold">
+                              {split.place ? `#${split.place}` : '—'}
+                            </td>
+                            <td className="px-6 py-5 text-center text-2xl">
+                              {split.rankChange ? (
+                                <span className={split.rankChange.color}>
+                                  {split.rankChange.text}
+                                </span>
+                              ) : '—'}
+                            </td>
+                            <td className="px-6 py-5 text-center text-gray-700">
+                              {split.pace || '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Legend */}
+                <div className="mt-10 text-center text-sm text-gray-600 space-y-2">
+                  <p>↑ = Gained positions • ↓ = Lost positions • – = Held position</p>
+                  <p>Cumulative = Total time from start to this point</p>
+                </div>
               </div>
             )}
           </div>
