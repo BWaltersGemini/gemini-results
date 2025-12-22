@@ -1,11 +1,11 @@
-// src/App.jsx (UPDATED — With ScrollToTop for smooth navigation)
+// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop)
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { RaceProvider } from './context/RaceContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import ScrollToTop from './components/ScrollToTop';  // ← Add this
+import ScrollToTop from './components/ScrollToTop';
 import Home from './pages/Home';
 import Services from './pages/Services';
 import Products from './pages/Products';
@@ -14,6 +14,9 @@ import Contact from './pages/Contact';
 import AdminPage from './pages/AdminPage';
 import ParticipantPage from './pages/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
+
+// Import react-ga4 for Google Analytics 4
+import ReactGA from 'react-ga4';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +28,24 @@ const queryClient = new QueryClient({
   },
 });
 
+// Initialize GA4 once (your Measurement ID)
+ReactGA.initialize('G-3Y6ME9XWPR');
+
+// Component to track page views on route changes
+function AnalyticsTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    ReactGA.send({
+      hitType: 'pageview',
+      page: location.pathname + location.search,
+      title: document.title,
+    });
+  }, [location]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -32,9 +53,12 @@ export default function App() {
         <Router>
           <div className="min-h-screen flex flex-col">
             <Navbar />
-            
-            {/* This ensures scroll to top on every navigation */}
+
+            {/* Ensures scroll to top on navigation */}
             <ScrollToTop />
+
+            {/* Tracks page views on every route change */}
+            <AnalyticsTracker />
 
             <main className="flex-grow">
               <Routes>
