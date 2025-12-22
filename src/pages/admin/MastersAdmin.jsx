@@ -1,7 +1,9 @@
 // src/pages/admin/MastersAdmin.jsx
-// Full standalone Masters tab for the split Admin Dashboard
+// Updated: Loads chronoEvents to show linked events + Search bar for masters
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../supabaseClient';
+import { createAdminSupabaseClient } from '../../supabaseClient';
 
 export default function MastersAdmin({
   masterGroups,
@@ -12,21 +14,34 @@ export default function MastersAdmin({
   setShowAdsPerMaster,
   autoSaveConfig,
 }) {
-  const [chronoEvents, setChronoEvents] = useState([]); // Will be passed from parent or loaded here if needed
+  const [chronoEvents, setChronoEvents] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Note: chronoEvents is used to show linked events count and list.
-  // For now, assume it's passed from AdminDashboard or loaded similarly.
+  const adminSupabase = createAdminSupabaseClient();
 
+  // Load all events to display linked ones
+  useEffect(() => {
+    const loadEvents = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chronotrack_events')
+          .select('id, name, start_time')
+          .order('start_time', { ascending: false });
+        if (error) throw error;
+        setChronoEvents(data || []);
+      } catch (err) {
+        console.error('Failed to load events for Masters tab:', err);
+      }
+    };
+    loadEvents();
+  }, []);
+
+  // Logo upload
   const handleLogoUpload = async (e, masterKey) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // In a real implementation, you'd use Supabase storage upload
-    // Here is the full working version:
     try {
-      const { createAdminSupabaseClient } = await import('../../supabaseClient');
-      const adminSupabase = createAdminSupabaseClient();
-
       const { error: uploadError } = await adminSupabase.storage
         .from('logos')
         .upload(`public/${masterKey}`, file, {
@@ -48,11 +63,9 @@ export default function MastersAdmin({
     }
   };
 
+  // Remove logo
   const handleRemoveLogo = async (masterKey) => {
     try {
-      const { createAdminSupabaseClient } = await import('../../supabaseClient');
-      const adminSupabase = createAdminSupabaseClient();
-
       const { error } = await adminSupabase.storage
         .from('logos')
         .remove([`public/${masterKey}`]);
@@ -68,6 +81,7 @@ export default function MastersAdmin({
     }
   };
 
+  // Delete entire master series
   const handleDeleteMaster = async (masterKey) => {
     if (!confirm(`Delete master series "${masterKey}"? This will unlink all events and remove its logo.`)) return;
 
@@ -83,30 +97,50 @@ export default function MastersAdmin({
     }
   };
 
+  // Format date helper
   const formatDate = (epoch) => {
     if (!epoch) return 'Date TBD';
     const date = new Date(epoch * 1000);
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  // Get linked events for a master (requires chronoEvents to be available)
+  // Get linked events for a master
   const getLinkedEvents = (masterKey) => {
-    if (!chronoEvents.length) return [];
     return chronoEvents.filter((e) => masterGroups[masterKey]?.includes(e.id.toString()));
   };
 
+  // Filter masters by search term
+  const filteredMasters = Object.keys(masterGroups).filter((masterKey) =>
+    masterKey.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <section className="space-y-8">
-      <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Master Event Series</h2>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8">
+        <h2 className="text-3xl font-bold text-gemini-dark-gray">Master Event Series</h2>
 
-      {Object.keys(masterGroups).length === 0 ? (
+        {/* Search Bar */}
+        <div className="w-full sm:w-96">
+          <input
+            type="text"
+            placeholder="Search master series..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-6 py-4 border border-gray-300 rounded-xl text-lg focus:outline-none focus:ring-4 focus:ring-gemini-blue/30"
+          />
+        </div>
+      </div>
+
+      {filteredMasters.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl shadow-lg">
-          <p className="text-xl text-gray-600">No master series created yet.</p>
-          <p className="text-gray-500 mt-4">Create masters by assigning events in the Events tab.</p>
+          <p className="text-xl text-gray-600">
+            {searchTerm ? 'No master series match your search.' : 'No master series created yet.'}
+          </p>
+          {!searchTerm && <p className="text-gray-500 mt-4">Create masters by assigning events in the Events tab.</p>}
         </div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {Object.keys(masterGroups).map((masterKey) => {
+          {filteredMasters.map((masterKey) => {
             const logo = eventLogos[masterKey];
             const linkedEvents = getLinkedEvents(masterKey);
 
@@ -125,10 +159,10 @@ export default function MastersAdmin({
                   </button>
                 </div>
 
-                {/* Logo Upload / Display */}
-                <div className="mb-8">
+                {/* Logo */}
+                <div className="mb-8 text-center">
                   {logo ? (
-                    <div className="text-center">
+                    <>
                       <img
                         src={logo}
                         alt={`${masterKey} logo`}
@@ -140,7 +174,7 @@ export default function MastersAdmin({
                       >
                         Remove Logo
                       </button>
-                    </div>
+                    </>
                   ) : (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -178,7 +212,7 @@ export default function MastersAdmin({
                   </label>
                 </div>
 
-                {/* Linked Events List */}
+                {/* Linked Events */}
                 <div>
                   <p className="font-semibold text-gray-700 mb-3">
                     Linked Events ({linkedEvents.length})
