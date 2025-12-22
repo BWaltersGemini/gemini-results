@@ -1,25 +1,23 @@
 // src/pages/admin/AdminDashboard.jsx
+// Main Admin Dashboard - Login, Tab Navigation, Shared State & Save Controls
+
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { loadAppConfig } from '../../utils/appConfig';
 import { createAdminSupabaseClient } from '../../supabaseClient';
 
-// Lazy load heavy tabs
+// Lazy-load the heavy tabs for better performance
 const EventsAdmin = lazy(() => import('./EventsAdmin'));
 const MastersAdmin = lazy(() => import('./MastersAdmin'));
 const PerformanceAdmin = lazy(() => import('./PerformanceAdmin'));
 
 export default function AdminDashboard() {
-  const navigate = useNavigate();
-
+  // Login state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('events');
-  const [saveStatus, setSaveStatus] = useState('');
 
-  // Shared global state
+  // Shared global config state (passed down to child tabs)
   const [masterGroups, setMasterGroups] = useState({});
   const [editedEvents, setEditedEvents] = useState({});
   const [hiddenRaces, setHiddenRaces] = useState({});
@@ -28,8 +26,13 @@ export default function AdminDashboard() {
   const [ads, setAds] = useState([]);
   const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
 
+  // UI state
+  const [activeTab, setActiveTab] = useState('events'); // events | masters | performance | website
+  const [saveStatus, setSaveStatus] = useState('');
+
   const adminSupabase = createAdminSupabaseClient();
 
+  // Load all config from Supabase on login
   const loadGlobalConfig = async () => {
     const config = await loadAppConfig();
     setMasterGroups(config.masterGroups || {});
@@ -41,6 +44,7 @@ export default function AdminDashboard() {
     setLiveAutoFetchPerEvent(config.liveAutoFetchPerEvent || {});
   };
 
+  // Auto-save individual config keys
   const autoSaveConfig = async (key, value) => {
     try {
       const { error } = await adminSupabase
@@ -50,11 +54,13 @@ export default function AdminDashboard() {
       setSaveStatus(`${key.replace(/([A-Z])/g, ' $1').trim()} saved`);
       setTimeout(() => setSaveStatus(''), 4000);
     } catch (err) {
+      console.error(`Auto-save failed for ${key}:`, err);
       setSaveStatus('Auto-save failed');
       setTimeout(() => setSaveStatus(''), 6000);
     }
   };
 
+  // Bulk save all changes
   const saveAllChanges = async () => {
     try {
       await Promise.all([
@@ -66,19 +72,21 @@ export default function AdminDashboard() {
         autoSaveConfig('hiddenRaces', hiddenRaces),
         autoSaveConfig('liveAutoFetchPerEvent', liveAutoFetchPerEvent),
       ]);
-      setSaveStatus('All changes saved!');
+      setSaveStatus('All changes saved to Supabase!');
       setTimeout(() => setSaveStatus(''), 5000);
     } catch {
       setSaveStatus('Bulk save failed');
     }
   };
 
+  // Check login status on mount
   useEffect(() => {
     const loggedIn = localStorage.getItem('adminLoggedIn') === 'true';
     setIsLoggedIn(loggedIn);
     if (loggedIn) loadGlobalConfig();
   }, []);
 
+  // Login Screen
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -117,9 +125,11 @@ export default function AdminDashboard() {
     );
   }
 
+  // Logged-in Dashboard
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-12">
           <h1 className="text-4xl font-bold text-gemini-dark-gray">Admin Dashboard</h1>
           <button
@@ -133,36 +143,56 @@ export default function AdminDashboard() {
           </button>
         </div>
 
+        {/* Save Status Toast */}
         {saveStatus && (
           <div className="fixed top-24 right-8 z-50 bg-gemini-blue text-white px-8 py-4 rounded-2xl shadow-2xl animate-pulse text-lg font-semibold">
             {saveStatus}
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tab Navigation */}
         <div className="flex flex-wrap gap-2 mb-10 bg-gray-100 p-2 rounded-xl w-fit">
-          <button onClick={() => setActiveTab('events')} className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'events' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}>
+          <button
+            onClick={() => setActiveTab('events')}
+            className={`px-8 py-3 rounded-lg font-semibold transition ${
+              activeTab === 'events' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            }`}
+          >
             Events
           </button>
-          <button onClick={() => setActiveTab('masters')} className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'masters' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}>
+          <button
+            onClick={() => setActiveTab('masters')}
+            className={`px-8 py-3 rounded-lg font-semibold transition ${
+              activeTab === 'masters' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            }`}
+          >
             Masters
           </button>
-          <button onClick={() => setActiveTab('performance')} className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'performance' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}>
+          <button
+            onClick={() => setActiveTab('performance')}
+            className={`px-8 py-3 rounded-lg font-semibold transition ${
+              activeTab === 'performance' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            }`}
+          >
             Performance
           </button>
-          <button onClick={() => setActiveTab('website')} className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'website' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}>
+          <button
+            onClick={() => setActiveTab('website')}
+            className={`px-8 py-3 rounded-lg font-semibold transition ${
+              activeTab === 'website' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            }`}
+          >
             Website
           </button>
         </div>
 
-        {/* Lazy-loaded tabs */}
-        <Suspense fallback={<div className="text-center py-20 text-xl text-gray-600">Loading...</div>}>
+        {/* Lazy-loaded Tab Content */}
+        <Suspense fallback={<div className="text-center py-20 text-xl text-gray-600">Loading tab...</div>}>
           {activeTab === 'events' && (
             <EventsAdmin
               masterGroups={masterGroups}
               editedEvents={editedEvents}
               hiddenRaces={hiddenRaces}
-              eventLogos={eventLogos}
               liveAutoFetchPerEvent={liveAutoFetchPerEvent}
               setMasterGroups={setMasterGroups}
               setEditedEvents={setEditedEvents}
@@ -171,6 +201,7 @@ export default function AdminDashboard() {
               autoSaveConfig={autoSaveConfig}
             />
           )}
+
           {activeTab === 'masters' && (
             <MastersAdmin
               masterGroups={masterGroups}
@@ -182,26 +213,37 @@ export default function AdminDashboard() {
               autoSaveConfig={autoSaveConfig}
             />
           )}
+
           {activeTab === 'performance' && <PerformanceAdmin />}
+
           {activeTab === 'website' && (
-            <div className="space-y-12">
+            <section className="space-y-12">
               <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
               <div className="bg-white rounded-2xl shadow-lg p-8">
                 <h3 className="text-2xl font-bold mb-6">Advertisements</h3>
-                <input type="file" multiple accept="image/*" className="mb-6" />
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => {
+                    // Simple placeholder - full upload logic can be added later
+                    console.log('Ad upload:', e.target.files);
+                  }}
+                  className="mb-6 block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white"
+                />
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   {ads.map((ad, i) => (
-                    <div key={i} className="rounded-xl overflow-hidden shadow-md">
+                    <div key={i} className="rounded-xl overflow-hidden shadow-md hover:shadow-xl transition">
                       <img src={ad} alt={`Ad ${i + 1}`} className="w-full h-48 object-cover" />
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
+            </section>
           )}
         </Suspense>
 
-        {/* Save All Button */}
+        {/* Global Save Button */}
         <div className="text-center mt-20">
           <button
             onClick={saveAllChanges}
