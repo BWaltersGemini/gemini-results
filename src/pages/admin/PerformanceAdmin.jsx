@@ -1,5 +1,5 @@
 // src/pages/admin/PerformanceAdmin.jsx
-// FINAL: Full Internal Growth + Simulated GA4 Traffic + Master Series Annual + Top Performer
+// FINAL VERSION: Live GA4 Integration + Optimized Loading + Full Historical Data (2018+) + Master Series Breakdown
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
@@ -23,14 +23,14 @@ export default function PerformanceAdmin({ masterGroups }) {
   const fetchAllData = async (forceRefresh = false) => {
     if (!forceRefresh && lastUpdated) {
       setLoading(false);
-      return;
+      return; // Use cached data
     }
 
     try {
       setLoading(true);
       setRefreshing(forceRefresh);
 
-      // === INTERNAL DATA: Events & Participants (2018+) ===
+      // === 1. INTERNAL DATA: Events & Participants (2018+) ===
       const { data: events } = await supabase
         .from('chronotrack_events')
         .select('id, name, start_time')
@@ -58,7 +58,7 @@ export default function PerformanceAdmin({ masterGroups }) {
       setYearlyEvents(years.map((y) => ({ year: y, count: eventsByYear[y] || 0 })));
       setYearlyParticipants(years.map((y) => ({ year: y, count: participantsByYear[y] || 0 })));
 
-      // === MASTER SERIES ANNUAL BREAKDOWN ===
+      // === 2. MASTER SERIES ANNUAL BREAKDOWN ===
       const seriesData = {};
       for (const [masterKey, eventIds] of Object.entries(masterGroups || {})) {
         const linkedEvents = events.filter((e) => eventIds.includes(e.id.toString()));
@@ -110,37 +110,46 @@ export default function PerformanceAdmin({ masterGroups }) {
         setSelectedMaster(Object.keys(seriesData)[0]);
       }
 
-      // === SIMULATED GA4 DATA (Replace with real API later) ===
-      setGaSessions([
-        { year: 2022, count: 45000 },
-        { year: 2023, count: 68000 },
-        { year: 2024, count: 92000 },
-        { year: 2025, count: 115000 },
-      ]);
+      // === 3. LIVE GA4 DATA ===
+      try {
+        const gaRes = await fetch('/api/ga4-report');
+        if (gaRes.ok) {
+          const { yearly, topPages } = await gaRes.json();
 
-      setGaUsers([
-        { year: 2022, count: 28000 },
-        { year: 2023, count: 42000 },
-        { year: 2024, count: 58000 },
-        { year: 2025, count: 72000 },
-      ]);
+          const gaYears = Object.keys(yearly).map(Number).sort((a, b) => a - b);
 
-      setGaEventClicks([
-        { year: 2023, count: 3200 },
-        { year: 2024, count: 5100 },
-        { year: 2025, count: 7800 },
-      ]);
+          setGaSessions(gaYears.map((y) => ({ year: y, count: yearly[y]?.sessions || 0 })));
+          setGaUsers(gaYears.map((y) => ({ year: y, count: yearly[y]?.users || 0 })));
+          setGaEventClicks(gaYears.map((y) => ({ year: y, count: yearly[y]?.eventClicks || 0 })));
 
-      setGaTopPages([
-        { name: 'Home Page', path: '/', views: 210000 },
-        { name: 'All Results', path: '/results', views: 180000 },
-        { name: 'Results Pages', path: '/results/*', views: 450000 },
-        { name: 'Participant Detail', path: '/participant', views: 120000 },
-      ]);
+          const friendlyNames = {
+            '/': 'Home Page',
+            '/results': 'All Results',
+            '/results/*': 'Results Pages',
+            '/participant': 'Participant Detail',
+            '/services': 'Services',
+            '/products': 'Products',
+            '/contact': 'Contact',
+          };
+
+          setGaTopPages(
+            topPages.map((p) => ({
+              name: friendlyNames[p.path] || p.path.slice(1).replace(/-/g, ' ').replace(/\//g, ' › ') || 'Other',
+              path: p.path,
+              views: p.views,
+            }))
+          );
+        } else {
+          console.warn('GA4 API returned error:', await gaRes.text());
+          // Keep previous data on error
+        }
+      } catch (err) {
+        console.error('GA4 fetch error:', err);
+      }
 
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('Failed to load performance data:', err);
+      console.error('Performance data load failed:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -161,14 +170,14 @@ export default function PerformanceAdmin({ masterGroups }) {
     return (
       <div className="text-center py-32">
         <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-gemini-blue"></div>
-        <p className="mt-8 text-2xl text-gray-600">Loading performance data (2018–present + website traffic)...</p>
+        <p className="mt-8 text-2xl text-gray-600">Loading performance data (2018–present + live GA4 traffic)...</p>
       </div>
     );
   }
 
   return (
     <section className="space-y-16">
-      {/* Header */}
+      {/* Header with Refresh */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <h2 className="text-5xl font-bold text-gemini-dark-gray">Performance Dashboard</h2>
         <button
@@ -193,10 +202,10 @@ export default function PerformanceAdmin({ masterGroups }) {
         </p>
       )}
 
-      {/* GA4: Website Sessions */}
+      {/* LIVE GA4: Website Sessions */}
       <div className="bg-white rounded-3xl shadow-2xl p-12">
         <h3 className="text-3xl font-bold text-gemini-dark-gray mb-10 text-center">
-          Website Sessions (Google Analytics)
+          Website Sessions (Live from Google Analytics)
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {gaSessions.map((item, i) => {
@@ -207,11 +216,13 @@ export default function PerformanceAdmin({ masterGroups }) {
             return (
               <div
                 key={item.year}
-                className={`text-center p-8 rounded-3xl border-4 ${
-                  item.year === 2025 ? 'border-gemini-blue bg-gemini-blue/10' : 'border-gray-200'
+                className={`text-center p-8 rounded-3xl border-4 transition-all ${
+                  item.year === 2025
+                    ? 'border-gemini-blue bg-gemini-blue/10 scale-110 shadow-xl'
+                    : 'border-gray-200 bg-gray-50'
                 }`}
               >
-                <div className="text-5xl font-black">{item.count.toLocaleString()}</div>
+                <div className="text-5xl font-black text-gemini-dark-gray">{item.count.toLocaleString()}</div>
                 <div className="text-2xl font-bold mt-4">{item.year}</div>
                 {change !== null && (
                   <div className={`mt-6 text-2xl font-bold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -224,10 +235,10 @@ export default function PerformanceAdmin({ masterGroups }) {
         </div>
       </div>
 
-      {/* GA4: Website Users */}
+      {/* LIVE GA4: Website Users */}
       <div className="bg-white rounded-3xl shadow-2xl p-12">
         <h3 className="text-3xl font-bold text-gemini-dark-gray mb-10 text-center">
-          Website Users (Google Analytics)
+          Website Users (Live from Google Analytics)
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {gaUsers.map((item, i) => {
@@ -238,11 +249,13 @@ export default function PerformanceAdmin({ masterGroups }) {
             return (
               <div
                 key={item.year}
-                className={`text-center p-8 rounded-3xl border-4 ${
-                  item.year === 2025 ? 'border-gemini-blue bg-gemini-blue/10' : 'border-gray-200'
+                className={`text-center p-8 rounded-3xl border-4 transition-all ${
+                  item.year === 2025
+                    ? 'border-gemini-blue bg-gemini-blue/10 scale-110 shadow-xl'
+                    : 'border-gray-200 bg-gray-50'
                 }`}
               >
-                <div className="text-5xl font-black">{item.count.toLocaleString()}</div>
+                <div className="text-5xl font-black text-gemini-dark-gray">{item.count.toLocaleString()}</div>
                 <div className="text-2xl font-bold mt-4">{item.year}</div>
                 {change !== null && (
                   <div className={`mt-6 text-2xl font-bold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -255,10 +268,10 @@ export default function PerformanceAdmin({ masterGroups }) {
         </div>
       </div>
 
-      {/* GA4: Upcoming Event Clicks */}
+      {/* LIVE GA4: Upcoming Event Clicks */}
       <div className="bg-white rounded-3xl shadow-2xl p-12">
         <h3 className="text-3xl font-bold text-gemini-dark-gray mb-10 text-center">
-          Clicks to Upcoming Events (youkeepmoving.com)
+          Clicks to Upcoming Events (youkeepmoving.com) — Live GA4
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {gaEventClicks.map((item, i) => {
@@ -269,8 +282,10 @@ export default function PerformanceAdmin({ masterGroups }) {
             return (
               <div
                 key={item.year}
-                className={`text-center p-8 rounded-3xl border-4 ${
-                  item.year === 2025 ? 'border-gemini-blue bg-gemini-blue/10' : 'border-gray-200'
+                className={`text-center p-8 rounded-3xl border-4 transition-all ${
+                  item.year === 2025
+                    ? 'border-gemini-blue bg-gemini-blue/10 scale-110 shadow-xl'
+                    : 'border-gray-200 bg-gray-50'
                 }`}
               >
                 <div className="text-5xl font-black text-gemini-blue">{item.count.toLocaleString()}</div>
@@ -286,19 +301,25 @@ export default function PerformanceAdmin({ masterGroups }) {
         </div>
       </div>
 
-      {/* GA4: Top Pages */}
+      {/* LIVE GA4: Top Pages */}
       <div className="bg-white rounded-3xl shadow-2xl p-12">
         <h3 className="text-3xl font-bold text-gemini-dark-gray mb-10 text-center">
-          Top Pages (All Time Page Views)
+          Top Pages (All Time Page Views — Live GA4)
         </h3>
         <div className="space-y-6">
           {gaTopPages
             .sort((a, b) => b.views - a.views)
-            .map((page) => (
-              <div key={page.path} className="flex items-center justify-between p-6 bg-gray-50 rounded-2xl hover:bg-gemini-blue/5 transition">
-                <div>
-                  <div className="text-2xl font-bold text-gemini-dark-gray">{page.name}</div>
-                  <div className="text-lg text-gray-600">{page.path}</div>
+            .map((page, index) => (
+              <div
+                key={page.path}
+                className="flex items-center justify-between p-6 bg-gray-50 rounded-2xl hover:bg-gemini-blue/5 transition"
+              >
+                <div className="flex items-center gap-6">
+                  <div className="text-3xl font-bold text-gray-400">#{index + 1}</div>
+                  <div>
+                    <div className="text-2xl font-bold text-gemini-dark-gray">{page.name}</div>
+                    <div className="text-lg text-gray-600">{page.path}</div>
+                  </div>
                 </div>
                 <div className="text-4xl font-black text-gemini-blue">
                   {page.views.toLocaleString()}
@@ -467,7 +488,7 @@ export default function PerformanceAdmin({ masterGroups }) {
       )}
 
       <div className="text-center text-gray-500 italic text-lg">
-        Internal data: 2018–present | Website traffic: Google Analytics 4 (simulated — connect API for live data)
+        Internal data: 2018–present | Website traffic: Live from Google Analytics 4
       </div>
     </section>
   );
