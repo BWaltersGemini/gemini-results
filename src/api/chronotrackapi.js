@@ -1,5 +1,5 @@
 // src/api/chronotrackapi.js
-// FINAL — Long-term fix: Group intervals, attach splits to full course result
+// FINAL — Complete long-term fix: interval=ALL + timestamp sorting + full split capture
 import axios from 'axios';
 
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
@@ -196,7 +196,7 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Processing ${divisionBrackets.length} division brackets`);
   console.log(`[ChronoTrack] Processing ${overallBrackets.length} overall brackets`);
 
-  // Fetch raw interval results (includes full course + splits)
+  // === FETCH ALL INTERVALS INCLUDING T2 AND CUSTOM SPLITS ===
   let rawIntervalResults = [];
   let page = 1;
   const maxPages = 40;
@@ -209,6 +209,7 @@ export const fetchResultsForEvent = async (eventId) => {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
           page,
           size: 500,
+          interval: 'ALL', // ← Critical: gets every split including T2, Start to..., etc.
         },
       });
 
@@ -220,9 +221,9 @@ export const fetchResultsForEvent = async (eventId) => {
       page++;
     }
 
-    console.log(`[ChronoTrack] Fetched ${rawIntervalResults.length} raw interval rows for event ${eventId}`);
+    console.log(`[ChronoTrack] Fetched ${rawIntervalResults.length} raw interval rows (interval=ALL) for event ${eventId}`);
   } catch (err) {
-    console.error('[ChronoTrack] Failed to fetch raw results', err);
+    console.error('[ChronoTrack] Failed to fetch raw interval results', err);
     throw err;
   }
 
@@ -296,38 +297,36 @@ export const fetchResultsForEvent = async (eventId) => {
     });
   }
 
-  // === LONG-TERM FIX: Group intervals and build proper splits ===
+  // === GROUP INTERVALS AND BUILD CLEAN PARTICIPANT RESULTS ===
   const participantsByEntry = {};
 
   rawIntervalResults.forEach(row => {
     const entryId = row.results_entry_id;
-    if (!entryId) return; // Skip if no entry_id
+    if (!entryId) return;
 
     if (!participantsByEntry[entryId]) {
       participantsByEntry[entryId] = {
         fullCourse: null,
-        splits: [],
-        raw: row,
+        intervals: [], // All non-full-course rows
       };
     }
 
-    // If this is the full course row, store it
+    // Store full course row
     if (row.results_interval_full === '1') {
       participantsByEntry[entryId].fullCourse = row;
     } else {
-      // Otherwise, it's a split — collect it
-      participantsByEntry[entryId].splits.push({
-        name: row.results_interval_name || 'Split',
-        time: row.results_time || null,
-        pace: row.results_pace || null,
-        place: row.results_rank ? parseInt(row.results_rank, 10) : null,
+      // Collect all other intervals
+      const endTime = row.results_end_chip_time ? parseFloat(row.results_end_chip_time) : 0;
+      participantsByEntry[entryId].intervals.push({
+        row,
+        endTime,
       });
     }
   });
 
-  // Build final clean results — one per participant
+  // Build final results
   const mappedResults = Object.values(participantsByEntry)
-    .filter(p => p.fullCourse) // Only include those with a full course result
+    .filter(p => p.fullCourse) // Only participants with a full course result
     .map(p => {
       const r = p.fullCourse;
       const lookupKey = getLookupKey(r);
@@ -344,16 +343,18 @@ export const fetchResultsForEvent = async (eventId) => {
         country = parts[2] || country;
       }
 
-      // Sort splits in logical order (Swim → T1 → Bike → T2 → Run)
-      const orderedSplits = p.splits.sort((a, b) => {
-        const order = ['Swim', 'T1', 'Bike', 'T2', 'Run'];
-        const aIndex = order.indexOf(a.name);
-        const bIndex = order.indexOf(b.name);
-        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-        if (aIndex !== -1) return -1;
-        if (bIndex !== -1) return 1;
-        return 0;
-      });
+      // Sort splits by end_chip_time (chronological order)
+      const orderedIntervals = p.intervals
+        .sort((a, b) => a.endTime - b.endTime)
+        .map(item => item.row);
+
+      // Build splits array with rank, pace, time
+      const splits = orderedIntervals.map(row => ({
+        name: row.results_interval_name || 'Split',
+        time: row.results_time || null,
+        pace: row.results_pace || null,
+        place: row.results_rank ? parseInt(row.results_rank, 10) : null,
+      }));
 
       return {
         first_name: r.results_first_name || '',
@@ -373,12 +374,12 @@ export const fetchResultsForEvent = async (eventId) => {
         city,
         state,
         country,
-        splits: orderedSplits,
+        splits, // Fully populated and correctly ordered
         entry_id: r.results_entry_id || null,
       };
     });
 
-  console.log(`[ChronoTrack] Final: ${mappedResults.length} clean participant results (with splits attached)`);
+  console.log(`[ChronoTrack] Final: ${mappedResults.length} clean participant results with ordered splits`);
   console.log(`[ChronoTrack] Gender places: ${Object.keys(genderPlaces).length} | Division places: ${Object.keys(divisionPlaces).length}`);
 
   return mappedResults;
