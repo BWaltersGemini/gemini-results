@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// Kiosk Mode with Access Pin → Event Select → Set Exit Pin → Full Kiosk
+// Final Kiosk Mode: Access Pin → Event Select → Set Exit Pin → Full Touch-Friendly Kiosk
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -35,7 +35,7 @@ export default function ResultsKiosk() {
 
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
-  // Restore kiosk session
+  // Restore session on refresh
   useEffect(() => {
     const stored = sessionStorage.getItem('kioskExitPin');
     if (stored && selectedEvent) {
@@ -112,11 +112,13 @@ export default function ResultsKiosk() {
     document.getElementById('kiosk-search-input')?.focus();
   };
 
+  // Auto-focus inputs
   useEffect(() => {
     if (stage === 'access-pin') document.getElementById('access-pin-input')?.focus();
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
+  // Prevent navigation without PIN
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const handlePopState = (e) => {
@@ -142,17 +144,21 @@ export default function ResultsKiosk() {
     }
   };
 
+  // Block common refresh shortcuts
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const block = (e) => {
-      if (e.key === 'Backspace' || (e.metaKey && e.key.toLowerCase() === 'r')) e.preventDefault();
+      if (e.key === 'F5' || e.key === 'Backspace' || (e.metaKey && e.key.toLowerCase() === 'r')) {
+        e.preventDefault();
+      }
     };
     window.addEventListener('keydown', block);
     return () => window.removeEventListener('keydown', block);
   }, [stage]);
 
-  // === RENDER ===
+  // === RENDER STAGES ===
 
+  // 1. Access Pin (smaller, touch-friendly)
   if (stage === 'access-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex items-center justify-center p-8">
@@ -196,6 +202,7 @@ export default function ResultsKiosk() {
     );
   }
 
+  // 2. Event Select
   if (stage === 'event-select') {
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
@@ -239,6 +246,7 @@ export default function ResultsKiosk() {
     );
   }
 
+  // 3. Set Exit Pin (smaller)
   if (stage === 'set-exit-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex items-center justify-center p-8">
@@ -286,25 +294,25 @@ export default function ResultsKiosk() {
     );
   }
 
-  // Full Kiosk Mode
+  // 4. Full Kiosk Mode — optimized for iPad
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={400} gravity={0.15} />}
 
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex flex-col items-center justify-center text-white p-8">
-        <div className="text-center mb-12">
+        <div className="text-center mb-10">
           {logoUrl && (
-            <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-40 mb-8 object-contain drop-shadow-2xl" />
+            <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-36 mb-6 object-contain drop-shadow-2xl" />
           )}
-          <h1 className="text-5xl md:text-7xl font-black drop-shadow-lg">{getEventDisplayName()}</h1>
-          <p className="text-2xl md:text-3xl mt-4 opacity-90">Finish Line Kiosk</p>
+          <h1 className="text-5xl md:text-6xl font-black drop-shadow-lg">{getEventDisplayName()}</h1>
+          <p className="text-2xl md:text-3xl mt-3 opacity-90">Finish Line Kiosk</p>
         </div>
 
-        {loadingResults && <div className="text-6xl animate-pulse">Loading results...</div>}
+        {loadingResults && <div className="text-5xl animate-pulse">Loading results...</div>}
 
         {!participant && !loadingResults && (
-          <div className="w-full max-w-3xl">
-            <p className="text-3xl md:text-4xl text-center mb-12 font-light">
+          <div className="w-full max-w-2xl">
+            <p className="text-3xl text-center mb-8 font-light">
               Search by Bib # or Last Name
             </p>
             <input
@@ -314,13 +322,13 @@ export default function ResultsKiosk() {
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && performSearch(searchTerm)}
               placeholder="Enter bib or name..."
-              className="w-full text-6xl md:text-8xl text-center bg-white/20 backdrop-blur border-4 border-white/50 rounded-3xl py-12 px-8 text-white placeholder-white/60 focus:outline-none focus:border-white"
+              className="w-full text-5xl md:text-7xl text-center bg-white/20 backdrop-blur border-4 border-white/50 rounded-3xl py-10 px-8 text-white placeholder-white/60 focus:outline-none focus:border-white"
               autoFocus
             />
-            <div className="text-center mt-12">
+            <div className="text-center mt-10">
               <button
                 onClick={() => performSearch(searchTerm)}
-                className="px-16 py-8 bg-white text-gemini-blue text-5xl font-bold rounded-full hover:scale-105 transition shadow-2xl"
+                className="px-14 py-6 bg-white text-gemini-blue text-4xl font-bold rounded-full hover:scale-105 transition shadow-xl"
               >
                 GO!
               </button>
@@ -329,27 +337,27 @@ export default function ResultsKiosk() {
         )}
 
         {participant && typeof participant === 'object' && (
-          <div className="bg-white/95 backdrop-blur-xl text-gemini-dark-gray rounded-3xl shadow-2xl p-12 max-w-4xl w-full text-center">
-            <div className="text-6xl md:text-8xl font-black text-gemini-blue mb-6">
+          <div className="bg-white/95 backdrop-blur-xl text-gemini-dark-gray rounded-3xl shadow-2xl p-8 max-w-2xl w-full text-center">
+            <div className="text-5xl md:text-7xl font-black text-gemini-blue mb-4">
               #{formatPlace(participant.place)}
             </div>
-            <h2 className="text-5xl md:text-7xl font-bold mb-4">
+            <h2 className="text-4xl md:text-6xl font-bold mb-4">
               {participant.first_name} {participant.last_name}
             </h2>
-            <p className="text-3xl md:text-4xl text-gray-600 mb-12">Bib #{participant.bib}</p>
+            <p className="text-2xl md:text-3xl text-gray-600 mb-10">Bib #{participant.bib}</p>
 
-            <div className="grid grid-cols-2 gap-12 text-3xl md:text-4xl mb-16">
-              <div className="bg-gemini-blue/10 rounded-2xl py-8">
+            <div className="grid grid-cols-2 gap-8 text-2xl md:text-3xl mb-12">
+              <div className="bg-gemini-blue/10 rounded-2xl py-6">
                 <div className="font-black text-gemini-blue">{formatTime(participant.chip_time)}</div>
-                <div className="text-gray-700 mt-2">Chip Time</div>
+                <div className="text-gray-700 mt-2 text-lg">Chip Time</div>
               </div>
-              <div className="bg-gray-100 rounded-2xl py-8">
+              <div className="bg-gray-100 rounded-2xl py-6">
                 <div className="font-black">{participant.pace || '—'}</div>
-                <div className="text-gray-700 mt-2">Pace</div>
+                <div className="text-gray-700 mt-2 text-lg">Pace</div>
               </div>
             </div>
 
-            <div className="text-3xl space-y-4 mb-16">
+            <div className="text-2xl md:text-3xl space-y-4 mb-12">
               <p><strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
               {participant.age_group_place && (
                 <p><strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}</p>
@@ -357,17 +365,17 @@ export default function ResultsKiosk() {
             </div>
 
             <div>
-              <p className="text-3xl font-bold mb-8">Scan for Full Results</p>
-              <div className="bg-gray-200 border-2 border-dashed rounded-xl w-64 h-64 mx-auto flex items-center justify-center text-6xl">
+              <p className="text-2xl font-bold mb-6">Scan for Full Results</p>
+              <div className="bg-gray-200 border-2 border-dashed rounded-xl w-48 h-48 mx-auto flex items-center justify-center text-5xl">
                 📱
               </div>
-              <p className="text-xl mt-8 text-gray-600">
+              <p className="text-lg mt-6 text-gray-600">
                 gemini-results.vercel.app/results
               </p>
             </div>
 
             {countdown !== null && (
-              <div className="fixed bottom-16 left-1/2 -translate-x-1/2 text-5xl font-bold bg-black/70 px-12 py-8 rounded-full">
+              <div className="fixed bottom-12 left-1/2 -translate-x-1/2 text-5xl font-bold bg-black/70 px-10 py-6 rounded-full">
                 Returning in {countdown}s
               </div>
             )}
@@ -383,7 +391,7 @@ export default function ResultsKiosk() {
               Please check with timing staff nearby.
             </p>
             {countdown !== null && (
-              <div className="fixed bottom-16 left-1/2 -translate-x-1/2 text-5xl font-bold bg-black/70 px-12 py-8 rounded-full">
+              <div className="fixed bottom-12 left-1/2 -translate-x-1/2 text-5xl font-bold bg-black/70 px-10 py-6 rounded-full">
                 Returning in {countdown}s
               </div>
             )}
@@ -391,6 +399,7 @@ export default function ResultsKiosk() {
         )}
       </div>
 
+      {/* Exit PIN Modal */}
       {showExitPinModal && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
           <div className="bg-white rounded-3xl p-12 text-center max-w-sm">
