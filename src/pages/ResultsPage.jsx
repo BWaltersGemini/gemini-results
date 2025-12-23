@@ -1,12 +1,10 @@
 // src/pages/ResultsPage.jsx
 // FINAL — Complete Results Page (December 23, 2025)
-// • Main finishers table (CONF/FIN status)
-// • Collapsible "Did Not Finish" section per race (DNF/DQ)
-// • DNFs searchable in global search
+// • Fixed infinite re-render bug in master/year event selection
 // • Enhanced live indicators & toast with pulsing dot
-// • Auto-expand DNF sections when search matches only DNFs
-// • Performance-optimized with useMemo for filtering
-// • Fully compatible with { finishers, nonFinishers } API
+// • Auto-expand DNF sections on search matches
+// • Performance-optimized with useMemo
+// • All previous features preserved
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -99,7 +97,7 @@ export default function ResultsPage() {
     } else if (searchQuery) {
       setExpandedDnfSections({});
     }
-  }, [searchQuery, globalFilteredResults, results.nonFinishers]);
+  }, [searchQuery, globalFilteredResults, results.nonFinishers, displayedRaces]);
 
   // Back-to-top button visibility
   useEffect(() => {
@@ -154,7 +152,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection from URL
+  // FIXED: Event selection from URL — removed selectedEvent from deps to prevent infinite loop
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -170,7 +168,7 @@ export default function ResultsPage() {
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
     }
-  }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
+  }, [masterKey, year, events, masterGroups]); // ← selectedEvent removed from deps
 
   // Races to display
   const embeddedRaces = selectedEvent?.races || [];
@@ -471,7 +469,7 @@ export default function ResultsPage() {
             </div>
           ) : (
             displayedRaces.map((race) => {
-              // Use useMemo for per-race filtering
+              // Per-race filtering with useMemo
               const displayFinishers = useMemo(() => {
                 const raceFinishers = results.finishers.filter(r => r.race_id === race.race_id);
                 return searchQuery
