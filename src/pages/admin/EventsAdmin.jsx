@@ -22,6 +22,9 @@ export default function EventsAdmin({
   setLiveAutoFetchPerEvent,
   autoSaveConfig,
 }) {
+
+  console.log('[EventsAdmin] LOADED VERSION: 2025-12-23-FINAL-NO-COLUMNS');  // ← ADD THIS LINE HERE
+
   const [chronoEvents, setChronoEvents] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
   const [expandedYears, setExpandedYears] = useState({});
