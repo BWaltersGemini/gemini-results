@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// New Flow: /kiosk → Access Pin → Event Select → Set Exit Pin → Full Kiosk Mode
+// Updated: Reliable event selection + console debugging + forgiving results filter
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -34,10 +34,10 @@ export default function ResultsKiosk() {
   const timeoutRef = useRef(null);
   const AUTO_RESET_SECONDS = 10;
 
-  // Load from .env — make sure you add this!
+  // Load from .env (add VITE_KIOSK_ACCESS_PIN to Vercel settings!)
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
-  // Retrieve stored exit PIN (persists across refreshes until cleared)
+  // Restore session if returning
   useEffect(() => {
     const stored = sessionStorage.getItem('kioskExitPin');
     if (stored && selectedEvent) {
@@ -45,6 +45,14 @@ export default function ResultsKiosk() {
       setStage('kiosk');
     }
   }, [selectedEvent]);
+
+  // Debug logs
+  useEffect(() => {
+    console.log('[Kiosk Debug] Events loaded:', events.length);
+    console.log('[Kiosk Debug] Results loaded:', results.length);
+    console.log('[Kiosk Debug] Selected event:', selectedEvent?.name || 'none');
+    console.log('[Kiosk Debug] Current stage:', stage);
+  }, [events, results, selectedEvent, stage]);
 
   // Helpers
   const formatTime = (timeStr) => (timeStr?.trim() ? timeStr.trim() : '—');
@@ -118,7 +126,7 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // Block navigation unless exit PIN entered
+  // Lock navigation in kiosk mode
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const handlePopState = (e) => {
@@ -202,11 +210,16 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 2. Event Select
+  // 2. Event Select — now shows ALL events, with live participant count
   if (stage === 'event-select') {
-    const sortedEvents = [...events]
-      .filter((e) => results.some((r) => r.event_id === e.id)) // Only events with results
-      .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+    // Sort all events by most recent first
+    const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+
+    console.log('[Kiosk Event Select] Total events available:', sortedEvents.length);
+    sortedEvents.forEach(e => {
+      const count = results.filter(r => r.event_id === e.id).length;
+      console.log(`[Kiosk Event] ${e.name} (ID: ${e.id}) — ${count} results`);
+    });
 
     return (
       <div className="fixed inset-0 bg-gray-50 flex flex-col">
@@ -216,13 +229,15 @@ export default function ResultsKiosk() {
         <div className="flex-1 overflow-y-auto p-8">
           {sortedEvents.length === 0 ? (
             <div className="text-center py-20">
-              <p className="text-3xl text-gray-600">No events with results found.</p>
+              <p className="text-3xl text-gray-600">No events loaded yet. Refresh page.</p>
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
               {sortedEvents.map((event) => {
                 const count = results.filter((r) => r.event_id === event.id).length;
                 const logo = eventLogos[event.id];
+                const isLoading = count === 0 && loadingResults;
+
                 return (
                   <button
                     key={event.id}
@@ -230,7 +245,7 @@ export default function ResultsKiosk() {
                       setSelectedEvent(event);
                       setStage('set-exit-pin');
                     }}
-                    className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl hover:scale-105 transition text-left"
+                    className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl hover:scale-105 transition text-left relative"
                   >
                     {logo && (
                       <img src={logo} alt="Logo" className="max-h-32 mx-auto mb-6 object-contain" />
@@ -240,7 +255,7 @@ export default function ResultsKiosk() {
                     </h3>
                     <p className="text-xl text-gray-600 mb-2">{formatDate(event.start_time)}</p>
                     <p className="text-lg font-medium text-gemini-blue">
-                      {count} {count === 1 ? 'finisher' : 'finishers'}
+                      {isLoading ? 'Loading results...' : `${count} ${count === 1 ? 'finisher' : 'finishers'}`}
                     </p>
                   </button>
                 );
@@ -302,7 +317,7 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 4. Full Kiosk Mode (same beautiful design as before)
+  // 4. Full Kiosk Mode
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={400} gravity={0.15} />}
