@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (COMPLETE — Precise scroll to first matching row + all features)
+// src/pages/ResultsPage.jsx (COMPLETE — Attractive "Jump to Results" button after search)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -40,7 +40,7 @@ export default function ResultsPage() {
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
 
-  // GLOBAL FILTERED RESULTS — declared early
+  // GLOBAL FILTERED RESULTS — declared early to avoid TDZ
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -84,40 +84,6 @@ export default function ResultsPage() {
     setExpandedRaces({});
     setRacePagination({});
   }, [searchQuery]);
-
-  // PRECISE SCROLL TO FIRST MATCHING ROW
-  useEffect(() => {
-    if (searchQuery === prevSearchQueryRef.current) return;
-    prevSearchQueryRef.current = searchQuery;
-
-    if (!searchQuery.trim()) {
-      resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-
-    if (globalFilteredResults.length === 0) {
-      resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-
-    const firstMatch = globalFilteredResults[0];
-    const raceId = firstMatch.race_id;
-
-    if (!expandedRaces[raceId]) {
-      setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
-    }
-
-    setTimeout(() => {
-      const row = document.querySelector(`[data-bib="${firstMatch.bib}"][data-race-id="${raceId}"]`);
-      if (row) {
-        const offset = 100;
-        const topPos = row.getBoundingClientRect().top + window.pageYOffset - offset;
-        window.scrollTo({ top: topPos, behavior: 'smooth' });
-      } else {
-        resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }, 150);
-  }, [searchQuery, globalFilteredResults, expandedRaces]);
 
   // Back-to-top
   useEffect(() => {
@@ -360,7 +326,7 @@ export default function ResultsPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
-        {/* Sticky Search */}
+        {/* Sticky Search with Attractive Jump Button */}
         <div className={`sticky top-32 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-primary/30' : ''}`}>
           <div className="relative max-w-3xl mx-auto">
             <input
@@ -379,10 +345,25 @@ export default function ResultsPage() {
               </button>
             )}
           </div>
+
           {searchQuery && (
-            <p className="text-center mt-3 text-gray-700 font-medium">
-              {globalFilteredResults.length} result{globalFilteredResults.length !== 1 ? 's' : ''} found
-            </p>
+            <div className="text-center mt-5">
+              {globalFilteredResults.length > 0 ? (
+                <button
+                  onClick={() => resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="inline-flex items-center gap-3 px-8 py-4 bg-primary text-white text-lg font-bold rounded-full hover:bg-primary/90 shadow-xl transition transform hover:scale-105"
+                >
+                  <span>
+                    {globalFilteredResults.length} result{globalFilteredResults.length !== 1 ? 's' : ''} found
+                  </span>
+                  <span className="text-2xl">↓ Jump to Results</span>
+                </button>
+              ) : (
+                <p className="text-lg text-gray-700 font-medium">
+                  No participants found matching "{searchQuery}"
+                </p>
+              )}
+            </div>
           )}
         </div>
 
@@ -544,7 +525,6 @@ export default function ResultsPage() {
                       onNameClick={handleNameClick}
                       isMobile={window.innerWidth < 768}
                       highlightedBib={highlightedBib}
-                      raceId={race.race_id}
                     />
                   )}
                 </section>
