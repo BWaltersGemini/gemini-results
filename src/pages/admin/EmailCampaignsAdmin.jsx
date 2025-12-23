@@ -133,7 +133,6 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
     try {
       const samplePerson = emailList[0] || { firstName: 'Test', fullName: 'Test User' };
       const sampleParticipant = results[0] || {};
-
       const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent);
 
       const res = await fetch('https://api.resend.com/emails', {
