@@ -198,7 +198,7 @@ export function RaceProvider({ children }) {
             // Prepare upsert payload with correct string event_id
             const toUpsert = [
               ...fresh.finishers.map(r => ({
-                event_id: String(selectedEvent.id),
+                event_id: selectedEvent.id,                 // ← Number directly,
                 entry_id: r.entry_id ?? null,
                 race_id: r.race_id || null,
                 bib: r.bib || null,

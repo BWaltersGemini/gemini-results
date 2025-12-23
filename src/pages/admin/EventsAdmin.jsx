@@ -160,7 +160,7 @@ export default function EventsAdmin({
 
       // Upsert all (finishers + DNFs) — CRITICAL FIX: String(eventId)
       const toUpsert = deduped.map(r => ({
-        event_id: String(eventId),                    // ← Fixed: convert to string
+        event_id: eventId,                            // ← Send as number        
         race_id: r.race_id || null,
         bib: r.bib || null,
         first_name: r.first_name || null,
