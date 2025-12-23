@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Auto-scroll to first matching result on search 2)
+// src/pages/ResultsPage.jsx (FINAL — Fixed TDZ error by moving globalFilteredResults up)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -41,6 +41,14 @@ export default function ResultsPage() {
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
   const raceSectionRefs = useRef({}); // One ref per race section
+
+  // GLOBAL FILTERED RESULTS — MOVED UP to avoid TDZ in useEffect below
+  const globalFilteredResults = searchQuery
+    ? results.filter(r =>
+        r.bib?.toString().includes(searchQuery) ||
+        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : results;
 
   // Live results toast
   useEffect(() => {
@@ -186,14 +194,6 @@ export default function ResultsPage() {
       setSelectedEvent(yearEvents[0]);
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
-
-  // Global filtered results
-  const globalFilteredResults = searchQuery
-    ? results.filter(r =>
-        r.bib?.toString().includes(searchQuery) ||
-        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : results;
 
   // Races to display
   const embeddedRaces = selectedEvent?.races || [];
@@ -392,7 +392,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Header, Stats, Jump Links — unchanged */}
+        {/* Header */}
         <div className="text-center mb-16">
           {displayLogo && (
             <img src={displayLogo} alt="Event logo" className="mx-auto max-h-48 mb-8 object-contain" />
@@ -417,6 +417,7 @@ export default function ResultsPage() {
           )}
         </div>
 
+        {/* Stats */}
         {totalFinishers > 0 && (
           <div className="grid grid-cols-3 gap-8 max-w-3xl mx-auto mb-16 text-center">
             <div className="bg-white rounded-2xl shadow-lg py-6">
@@ -434,6 +435,7 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* Race Jump Links */}
         {displayedRaces.length > 1 && (
           <div className="flex flex-wrap justify-center gap-4 mb-12">
             {displayedRaces.map((race) => (
