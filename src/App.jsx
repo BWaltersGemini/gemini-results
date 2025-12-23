@@ -80,8 +80,7 @@ export default function App() {
                 <Route path="/participant" element={<ParticipantPage />} />
 
                 {/* Kiosk Mode — Event-Specific */}
-                <Route path="/kiosk/:masterKey/:year" element={<ResultsKiosk />} />
-                <Route path="/kiosk/:masterKey/:year/bib/:bib" element={<ResultsKiosk />} />
+		<Route path="/kiosk" element={<ResultsKiosk />} />
 
                 {/* Optional: Generic kiosk fallback (shows error if no event matched) */}
                 <Route path="/kiosk" element={<ResultsKiosk />} />
