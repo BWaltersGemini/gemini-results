@@ -1,10 +1,14 @@
 // src/api/chronotrackapi.js
-// FINAL — Stores both finishers and DNFs in Supabase
-// • CONF/FIN = ranked finishers (main results)
-// • DNF/DQ = stored with partial data, no rankings (shown in collapsible section)
-// • Safe for 20k+ events
+// FINAL — Complete Production Version (December 2025)
+// • CONF/FIN = official finishers (main ranked results)
+// • DNF/DQ = stored with partial data, no rankings (collapsible section)
+// • Full splits preserved
+// • Safe bracket fetching
+// • Batched entry_status calls
+// • Stores BOTH finishers and DNFs in Supabase
 
 import axios from 'axios';
+import { supabase } from '../supabaseClient'; // ← Critical import
 
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
 const PROXY_BASE = '/chrono-api';
@@ -288,7 +292,7 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // Bracket processing (unchanged)
+  // Process brackets (same safe logic)
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
