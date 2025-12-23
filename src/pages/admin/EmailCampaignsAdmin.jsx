@@ -113,7 +113,7 @@ export default function EmailCampaignsAdmin() {
         )}
       </div>
 
-      {/* Step 2: Results & Build List */}
+      {/* Step 2: Participant Data & Build List */}
       {selectedEvent && (
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h3 className="text-2xl font-bold mb-6">2. Participant Data</h3>
@@ -147,14 +147,14 @@ export default function EmailCampaignsAdmin() {
         </div>
       )}
 
-      {/* Step 3: Email List Preview — FIXED SAFE RENDERING */}
+      {/* Step 3: Email List Preview — BULLETPROOF SAFE RENDERING */}
       {emailList.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h3 className="text-2xl font-bold mb-6">
             3. Email List Ready — {emailList.length} recipients
           </h3>
           <p className="text-lg text-gray-600 mb-6">
-            Next: We’ll add a template editor with placeholders ({{first_name}}, {{place}}, {{chip_time}}, etc.) and send via Resend or SendGrid.
+            Next: Template editor with placeholders ({{first_name}}, {{place}}, {{chip_time}}, etc.) and send via Resend or SendGrid coming soon!
           </p>
           <div className="max-h-96 overflow-y-auto border border-gray-300 rounded-xl">
             <table className="w-full text-left">
@@ -166,13 +166,15 @@ export default function EmailCampaignsAdmin() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {emailList.slice(0, 100).map((person, i) => {
-                  const displayName = person.fullName ||
-                    `${person.firstName || ''} ${person.lastName || ''}`.trim() ||
-                    'Name not available';
+                  // Safely construct name using only fields returned by fetchEntryDetails
+                  const name = person.fullName ||
+                               (person.firstName && person.lastName
+                                 ? `${person.firstName.trim()} ${person.lastName.trim()}`
+                                 : person.firstName?.trim() || person.lastName?.trim() || 'Name not available');
 
                   return (
                     <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">{displayName}</td>
+                      <td className="px-6 py-4">{name}</td>
                       <td className="px-6 py-4 font-mono text-sm">{person.email}</td>
                     </tr>
                   );
@@ -187,6 +189,11 @@ export default function EmailCampaignsAdmin() {
               </tbody>
             </table>
           </div>
+          {emailList.length > 100 && (
+            <p className="mt-4 text-center text-gray-600">
+              Showing first 100 of {emailList.length} total recipients
+            </p>
+          )}
         </div>
       )}
     </section>
