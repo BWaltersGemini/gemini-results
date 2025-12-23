@@ -1,10 +1,10 @@
 // src/pages/admin/EventsAdmin.jsx
-// FINAL — Complete EventsAdmin (December 23, 2025)
-// • Fixed: event_id now correctly converted to string for Supabase text column
-// • Publishes both finishers and DNF/DQ (with _status column)
-// • Bulk and single publish working
-// • Refresh events with end times
-// • Master series management, race editing, live toggle, delete
+// FINAL — Fully Fixed & Production Ready (December 23, 2025)
+// • event_id correctly sent as number (bigint column in Supabase)
+// • Compatible with new fetchResultsForEvent return format { finishers, nonFinishers }
+// • Robust deduplication and upsert
+// • All previous features preserved: bulk publish, master linking, live toggle, delete, etc.
+
 import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
 import { createAdminSupabaseClient } from '../../supabaseClient';
@@ -150,7 +150,7 @@ export default function EventsAdmin({
         return;
       }
 
-      // Deduplicate
+      // Deduplicate by entry_id or bib+race_id fallback
       const seen = new Map();
       allParticipants.forEach(r => {
         const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
@@ -158,9 +158,9 @@ export default function EventsAdmin({
       });
       const deduped = Array.from(seen.values());
 
-      // Upsert all (finishers + DNFs) — CRITICAL FIX: String(eventId)
+      // Build upsert payload — event_id as number (bigint column)
       const toUpsert = deduped.map(r => ({
-        event_id: eventId,                            // ← Send as number        
+        event_id: eventId,                          // ← Number (bigint compatible)
         race_id: r.race_id || null,
         bib: r.bib || null,
         first_name: r.first_name || null,
@@ -183,11 +183,18 @@ export default function EventsAdmin({
         _status: r._status || 'FIN',
       }));
 
+      // Debug: Check first row
+      console.log('[EventsAdmin] Sample upsert row:', toUpsert[0]);
+      console.log('[EventsAdmin] Total upsert rows:', toUpsert.length);
+
       const { error } = await adminSupabase
         .from('chronotrack_results')
         .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[EventsAdmin] Upsert error:', error);
+        throw error;
+      }
 
       setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
       console.log(`[EventsAdmin] Published ${deduped.length} participants (incl. DNFs) for event ${eventId}`);
