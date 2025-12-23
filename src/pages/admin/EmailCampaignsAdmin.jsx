@@ -6,7 +6,8 @@ import { fetchEmailsForEntries } from '../../api/chronotrackAdminApi';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
-console.log('%c🟢 EMAIL CAMPAIGNS v4.0 — BOLD & MODERN EDITION LIVE', 'color: white; background: #dc2626; font-size: 16px; padding: 8px; border-radius: 4px;');
+// Version banner
+console.log('%c🟢 EMAIL CAMPAIGNS v4.1 — FINAL BOLD & CLEAN', 'color: white; background: #dc2626; font-size: 16px; padding: 8px; border-radius: 4px;');
 
 const ordinal = (n) => {
   if (!n) return '';
@@ -32,7 +33,7 @@ const getRaceStory = (splits, finalPlace) => {
   return "Gritty, determined performance — you gave it everything! ❤️";
 };
 
-export default function EmailCampaignsAdmin({ eventLogos = {} }) {
+export default function EmailCampaignsAdmin() {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [results, setResults] = useState([]);
@@ -45,48 +46,50 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
 
   const [subject, setSubject] = useState('{{first_name}}, You Absolutely Crushed {{event_name}}! 🎉');
   const [html, setHtml] = useState(`
-<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 20px auto; background: linear-gradient(to bottom, #f8fafc, #e0f2fe); border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
-  <!-- Hero Section -->
-  <div style="background: linear-gradient(135deg, #001f3f, #2563eb); color: white; padding: 60px 20px; text-align: center;">
-    <h1 style="font-size: 56px; font-weight: 900; margin: 0; text-shadow: 0 4px 8px rgba(0,0,0,0.3);">CONGRATULATIONS!</h1>
-    <h2 style="font-size: 40px; margin: 20px 0 10px; font-weight: 700;">{{first_name}} {{last_name}}</h2>
-    <p style="font-size: 28px; margin: 10px 0; opacity: 0.9;">You conquered the {{race_name}}!</p>
-    <div style="margin: 40px 0;">
-      <p style="font-size: 24px; margin: 0; opacity: 0.9;">Official Chip Time</p>
-      <p style="font-size: 80px; font-weight: 900; margin: 10px 0; line-height: 1; text-shadow: 0 6px 12px rgba(0,0,0,0.4);">{{chip_time}}</p>
-      <p style="font-size: 24px; margin: 0; opacity: 0.9;">Pace: {{pace}}</p>
+<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 20px auto; background: #f8fafc; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
+  <!-- Hero -->
+  <div style="background: linear-gradient(135deg, #001f3f, #2563eb); color: white; padding: 80px 20px; text-align: center;">
+    <h1 style="font-size: 64px; font-weight: 900; margin: 0; text-shadow: 0 6px 12px rgba(0,0,0,0.4);">CONGRATULATIONS!</h1>
+    <h2 style="font-size: 48px; margin: 30px 0 20px; font-weight: 700;">{{first_name}}</h2>
+    <p style="font-size: 32px; margin: 10px 0; opacity: 0.9;">You conquered the {{race_name}}!</p>
+    <div style="margin: 50px 0;">
+      <p style="font-size: 28px; margin: 0; opacity: 0.9;">Official Chip Time</p>
+      <p style="font-size: 96px; font-weight: 900; margin: 20px 0; line-height: 1; text-shadow: 0 8px 16px rgba(0,0,0,0.5);">{{chip_time}}</p>
+      <p style="font-size: 28px; margin: 0; opacity: 0.9;">Pace: {{pace}}</p>
     </div>
   </div>
 
   <!-- Logo -->
-  <div style="text-align: center; padding: 30px 20px; background: white;">
-    <img src="{{event_logo}}" alt="Event Logo" style="max-width: 320px; height: auto; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);" />
+  <div style="text-align: center; padding: 40px 20px; background: white;">
+    <img src="{{event_logo}}" alt="Gemini Timing" style="max-width: 350px; height: auto; border-radius: 16px; box-shadow: 0 15px 35px rgba(0,0,0,0.1);" />
   </div>
 
-  <!-- Stats Grid -->
+  <!-- Stats Card -->
   <div style="padding: 40px 20px; background: white;">
-    <h3 style="text-align: center; font-size: 32px; font-weight: 800; color: #001f3f; margin-bottom: 40px;">Your Race Highlights</h3>
-    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
-      <div style="text-align: center; background: linear-gradient(to bottom, #dbeafe, #bfdbfe); padding: 30px; border-radius: 16px; box-shadow: 0 8px 20px rgba(59,130,246,0.1);">
-        <p style="font-size: 20px; color: #1e40af; margin: 0 0 10px; font-weight: 600;">Overall</p>
-        <p style="font-size: 64px; font-weight: 900; color: #1e3a8a; margin: 0; line-height: 1;">{{place_ordinal}}</p>
-      </div>
-      <div style="text-align: center; background: linear-gradient(to bottom, #fef3c7, #fde68a); padding: 30px; border-radius: 16px; box-shadow: 0 8px 20px rgba(251,191,36,0.1);">
-        <p style="font-size: 20px; color: #92400e; margin: 0 0 10px; font-weight: 600;">Gender</p>
-        <p style="font-size: 64px; font-weight: 900; color: #78350f; margin: 0; line-height: 1;">{{gender_place_ordinal}}</p>
-      </div>
-      <div style="text-align: center; background: linear-gradient(to bottom, #d9f99d, #bef264); padding: 30px; border-radius: 16px; box-shadow: 0 8px 20px rgba(163,230,53,0.1);">
-        <p style="font-size: 20px; color: #4d7c0f; margin: 0 0 10px; font-weight: 600;">Division</p>
-        <p style="font-size: 64px; font-weight: 900; color: #365314; margin: 0; line-height: 1;">{{age_group_place_ordinal}}</p>
-        <p style="font-size: 18px; color: #4d7c0f; margin: 10px 0 0;">{{age_group_name}}</p>
+    <div style="background: white; border: 6px solid #2563eb; border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(37,99,235,0.15);">
+      <h3 style="text-align: center; font-size: 36px; font-weight: 800; color: #001f3f; margin-bottom: 40px;">Your Race Highlights</h3>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px;">
+        <div style="text-align: center;">
+          <p style="font-size: 24px; color: #1e40af; margin: 0 0 15px; font-weight: 600;">Overall</p>
+          <p style="font-size: 80px; font-weight: 900; color: #1e3a8a; margin: 0; line-height: 1;">{{place_ordinal}}</p>
+        </div>
+        <div style="text-align: center;">
+          <p style="font-size: 24px; color: #92400e; margin: 0 0 15px; font-weight: 600;">Gender</p>
+          <p style="font-size: 80px; font-weight: 900; color: #78350f; margin: 0; line-height: 1;">{{gender_place_ordinal}}</p>
+        </div>
+        <div style="text-align: center;">
+          <p style="font-size: 24px; color: #4d7c0f; margin: 0 0 15px; font-weight: 600;">Division</p>
+          <p style="font-size: 80px; font-weight: 900; color: #365314; margin: 0; line-height: 1;">{{age_group_place_ordinal}}</p>
+          <p style="font-size: 22px; color: #4d7c0f; margin: 15px 0 0;">{{age_group_name}}</p>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Race Story -->
   <div style="padding: 40px 20px; text-align: center;">
-    <div style="background: linear-gradient(to right, #dbeafe, #fef3c7, #d9f99d); padding: 40px; border-radius: 20px; max-width: 500px; margin: 0 auto;">
-      <p style="font-size: 32px; font-weight: 900; color: #1e3a8a; margin: 0; line-height: 1.4;">
+    <div style="background: linear-gradient(to right, #dbeafe, #fef3c7, #d9f99d); padding: 50px; border-radius: 24px; max-width: 500px; margin: 0 auto; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
+      <p style="font-size: 36px; font-weight: 900; color: #1e3a8a; margin: 0; line-height: 1.5;">
         {{race_story}}
       </p>
     </div>
@@ -96,18 +99,18 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
   {{splits_table}}
 
   <!-- Upcoming Events -->
-  <div style="padding: 40px 20px; background: #f8fafc;">
-    <h3 style="text-align: center; font-size: 32px; font-weight: 800; color: #001f3f; margin-bottom: 30px;">Ready for Your Next Challenge?</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+  <div style="padding: 50px 20px; background: #f8fafc;">
+    <h3 style="text-align: center; font-size: 36px; font-weight: 800; color: #001f3f; margin-bottom: 40px;">Ready for Your Next Challenge?</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px;">
       {{upcoming_events}}
     </div>
   </div>
 
   <!-- Footer -->
-  <div style="text-align: center; padding: 40px 20px; background: #001f3f; color: white;">
-    <p style="font-size: 20px; margin: 0 0 10px;">— The Gemini Timing Team</p>
+  <div style="text-align: center; padding: 50px 20px; background: #001f3f; color: white;">
+    <p style="font-size: 24px; margin: 0 0 15px;">— The Gemini Timing Team</p>
     <p style="margin: 0;">
-      <a href="https://geminitiming.com" style="color: #60a5fa; font-size: 18px; text-decoration: none;">geminitiming.com</a>
+      <a href="https://geminitiming.com" style="color: #60a5fa; font-size: 20px; text-decoration: none;">geminitiming.com</a>
     </p>
   </div>
 </div>
@@ -131,7 +134,6 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
     loadEvents();
   }, []);
 
-  // Load upcoming events from Tribe API
   useEffect(() => {
     const loadUpcoming = async () => {
       try {
@@ -185,13 +187,10 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
   const replacePlaceholders = (template, person, participant, event, splitsTable = '', upcomingCards = '') => {
     if (!person || !participant || !event) return template;
 
-    const logo = eventLogos[event.id] || '/GRR.png';
-
     const raceStory = getRaceStory(participant.splits || [], participant.place);
 
     return template
       .replace(/{{first_name}}/g, person.firstName || '')
-      .replace(/{{full_name}}/g, person.fullName || '')
       .replace(/{{place_ordinal}}/g, participant.place ? ordinal(participant.place) : '')
       .replace(/{{gender_place_ordinal}}/g, participant.gender_place ? ordinal(participant.gender_place) : '')
       .replace(/{{age_group_place_ordinal}}/g, participant.age_group_place ? ordinal(participant.age_group_place) : '')
@@ -201,27 +200,29 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
       .replace(/{{race_name}}/g, participant.race_name || event.name || '')
       .replace(/{{event_name}}/g, event.name || '')
       .replace(/{{event_date}}/g, new Date(event.start_time * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
-      .replace(/{{event_logo}}/g, logo)
+      .replace(/{{event_logo}}/g, '/GRR.png') // ← Always use GRR.png from public
       .replace(/{{race_story}}/g, raceStory)
       .replace(/{{splits_table}}/g, splitsTable)
       .replace(/{{upcoming_events}}/g, upcomingCards);
   };
 
   const generateSplitsTable = (splits) => {
-    if (!splits || splits.length === 0) return '<p style="text-align: center; color: #666;">No split data available</p>';
+    if (!splits || splits.length === 0) return ''; // ← No filler — just blank
 
     let table = `
-    <table style="width: 100%; border-collapse: collapse; margin: 40px 0; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-      <thead>
-        <tr style="background: #001f3f; color: white;">
-          <th style="padding: 20px; text-align: left; font-size: 18px;">Split</th>
-          <th style="padding: 20px; text-align: center; font-size: 18px;">Time</th>
-          <th style="padding: 20px; text-align: center; font-size: 18px;">Rank</th>
-          <th style="padding: 20px; text-align: center; font-size: 18px;">Change</th>
-          <th style="padding: 20px; text-align: center; font-size: 18px;">Pace</th>
-        </tr>
-      </thead>
-      <tbody>`;
+    <div style="padding: 40px 20px;">
+      <h3 style="text-align: center; font-size: 32px; font-weight: 800; color: #001f3f; margin-bottom: 30px;">Your Race Splits</h3>
+      <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+        <thead style="background: #001f3f; color: white;">
+          <tr>
+            <th style="padding: 20px; text-align: left;">Split</th>
+            <th style="padding: 20px; text-align: center;">Time</th>
+            <th style="padding: 20px; text-align: center;">Rank</th>
+            <th style="padding: 20px; text-align: center;">Change</th>
+            <th style="padding: 20px; text-align: center;">Pace</th>
+          </tr>
+        </thead>
+        <tbody>`;
 
     splits.forEach((split, i, arr) => {
       const prevPlace = i > 0 ? arr[i - 1].place : null;
@@ -233,9 +234,8 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
         else change = '<span style="color: #6b7280;">–</span>';
       }
 
-      const isFullCourse = split.name === "Full Course";
       table += `
-      <tr style="${isFullCourse ? 'background: #e0f2fe; font-weight: bold;' : ''}">
+      <tr>
         <td style="padding: 20px; border-bottom: 1px solid #eee;">${split.name}</td>
         <td style="padding: 20px; border-bottom: 1px solid #eee; text-align: center;">${split.time || '—'}</td>
         <td style="padding: 20px; border-bottom: 1px solid #eee; text-align: center; font-weight: bold;">${split.place ? `#${split.place}` : '—'}</td>
@@ -247,25 +247,26 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
     table += `
       </tbody>
     </table>
-    <p style="text-align: center; color: #666; font-size: 14px;">
+    <p style="text-align: center; color: #666; margin-top: 20px;">
       ↑ Gained positions • ↓ Lost positions • – Held steady
-    </p>`;
+    </p>
+    </div>`;
 
     return table;
   };
 
   const generateUpcomingCards = () => {
     if (upcomingEvents.length === 0) {
-      return '<p style="text-align: center; color: #666;">No upcoming events right now — check back soon!</p>';
+      return '<p style="text-align: center; color: #666; font-size: 18px;">Check back soon for upcoming races!</p>';
     }
 
     return upcomingEvents.map(event => `
-      <div style="background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
-        ${event.image?.url ? `<img src="${event.image.url}" alt="${event.title.rendered}" style="width: 100%; height: 180px; object-cover;" />` : '<div style="height: 180px; background: #e5e7eb; display: flex; align-items: center; justify-content: center;"><p style="color: #9ca3af;">No Image</p></div>'}
-        <div style="padding: 20px;">
-          <h4 style="font-size: 20px; font-weight: bold; color: #001f3f; margin: 0 0 10px;">${event.title.rendered || event.title}</h4>
-          <p style="color: #6b7280; margin: 0 0 20px;">${new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-          <a href="${event.url}" target="_blank" style="display: inline-block; background: #2563eb; color: white; padding: 14px 28px; border-radius: 50px; text-decoration: none; font-weight: bold;">Register Now →</a>
+      <div style="background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
+        ${event.image?.url ? `<img src="${event.image.url}" alt="${event.title.rendered}" style="width: 100%; height: 200px; object-cover;" />` : '<div style="height: 200px; background: #e5e7eb; display: flex; align-items: center; justify-content: center;"><p style="color: #9ca3af; font-size: 20px;">No Image</p></div>'}
+        <div style="padding: 25px;">
+          <h4 style="font-size: 24px; font-weight: bold; color: #001f3f; margin: 0 0 15px;">${event.title.rendered || event.title}</h4>
+          <p style="color: #6b7280; font-size: 18px; margin: 0 0 25px;">${new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          <a href="${event.url}" target="_blank" style="display: inline-block; background: #2563eb; color: white; padding: 16px 32px; border-radius: 50px; text-decoration: none; font-weight: bold; font-size: 18px;">Register Now →</a>
         </div>
       </div>
     `).join('');
@@ -277,19 +278,12 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
 
     setTestSending(true);
     try {
-      const samplePerson = emailList[0] || { firstName: 'Test', fullName: 'Test Runner' };
+      const samplePerson = emailList[0] || { firstName: 'Test' };
       const sampleParticipant = results[0] || {};
       const splitsTable = generateSplitsTable(sampleParticipant.splits || []);
       const upcomingCards = generateUpcomingCards();
 
-      const renderedHtml = replacePlaceholders(
-        html,
-        samplePerson,
-        sampleParticipant,
-        selectedEvent,
-        splitsTable,
-        upcomingCards
-      );
+      const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent, splitsTable, upcomingCards);
 
       await sendViaApi([testEmail], '[TEST] ' + subject, renderedHtml);
       alert('Test email sent! Check your inbox.');
@@ -301,13 +295,12 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
   };
 
   const sendAllEmails = async () => {
-    if (!confirm(`Send to all ${emailList.length} runners? This cannot be undone.`)) return;
+    if (!confirm(`Send to all ${emailList.length} recipients? This cannot be undone.`)) return;
 
     setSending(true);
     let sent = 0;
     let failed = 0;
 
-    const splitsTable = generateSplitsTable(results[0]?.splits || []); // Use first participant's splits as template
     const upcomingCards = generateUpcomingCards();
 
     try {
@@ -317,14 +310,8 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
           r.last_name?.toLowerCase() === person.lastName?.toLowerCase()
         ) || results[0];
 
-        const renderedHtml = replacePlaceholders(
-          html,
-          person,
-          participant,
-          selectedEvent,
-          generateSplitsTable(participant.splits || []),
-          upcomingCards
-        );
+        const splitsTable = generateSplitsTable(participant.splits || []);
+        const renderedHtml = replacePlaceholders(html, person, participant, selectedEvent, splitsTable, upcomingCards);
 
         try {
           await sendViaApi([person.email], subject, renderedHtml);
@@ -361,8 +348,8 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
   return (
     <section className="space-y-12">
       <div className="bg-red-100 border-2 border-red-500 rounded-xl p-6 text-center">
-        <p className="text-red-800 font-black text-2xl">🟥 BOLD & MODERN EMAIL v4.0 — LIVE AND READY</p>
-        <p className="text-red-700 text-lg mt-2">Hero stats • Race story • Splits • Upcoming events • Share-ready</p>
+        <p className="text-red-800 font-black text-2xl">🟥 FINAL v4.1 — BOLD, CLEAN, AND READY</p>
+        <p className="text-red-700 text-lg mt-2">Visible hero • First name only • GRR.png default • No split filler • Framed stats</p>
       </div>
 
       <h2 className="text-5xl font-black text-gemini-dark-gray text-center mb-12">Post-Race Email Campaigns</h2>
@@ -390,12 +377,12 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
             <>
               <p className="text-2xl mb-8">Found <strong>{results.length}</strong> finishers with registration data</p>
               <button onClick={handleBuildEmailList} disabled={buildingList} className="px-16 py-6 bg-gemini-blue text-white text-2xl font-black rounded-full shadow-2xl hover:scale-105 transition disabled:opacity-60">
-                {buildingList ? 'Fetching Emails...' : 'Build Email List'}
+                {buildingList ? 'Fetching...' : 'Build List'}
               </button>
               {buildingList && (
                 <div className="mt-10 p-8 bg-gemini-blue/10 rounded-2xl border-2 border-gemini-blue">
                   <p className="text-xl">Checked {progress.processed} of {progress.total}</p>
-                  <p className="text-4xl font-black text-gemini-blue mt-4">Found {progress.found} valid emails</p>
+                  <p className="text-4xl font-black text-gemini-blue mt-4">Found {progress.found} emails</p>
                 </div>
               )}
             </>
