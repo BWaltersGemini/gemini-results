@@ -1,4 +1,11 @@
-// src/pages/admin/EventsAdmin.jsx (FINAL — New Red/Turquoise Brand Palette)
+// src/pages/admin/EventsAdmin.jsx
+// FINAL — Complete EventsAdmin (December 2025)
+// • Fully compatible with { finishers, nonFinishers } from chronotrackapi.js
+// • Publishes both finishers and DNF/DQ (with _status column)
+// • Bulk and single publish working
+// • Refresh events with end times
+// • Master series management, race editing, live toggle, delete
+
 import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
 import { createAdminSupabaseClient } from '../../supabaseClient';
@@ -23,7 +30,6 @@ export default function EventsAdmin({
   const [expandedEvents, setExpandedEvents] = useState({});
   const [refreshingEvent, setRefreshingEvent] = useState(null);
   const [fetchingEvents, setFetchingEvents] = useState(false);
-  const [updatingEndTime, setUpdatingEndTime] = useState(null);
   const [publishingAll, setPublishingAll] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [newMasterKeys, setNewMasterKeys] = useState({});
@@ -132,19 +138,29 @@ export default function EventsAdmin({
     setPublishingAll(false);
   };
 
-  // Refresh & publish single event results
+  // Refresh & publish single event results — compatible with { finishers, nonFinishers }
   const refreshAndPublishResults = async (eventId) => {
     setRefreshingEvent(eventId);
     try {
       const fresh = await fetchResultsForEvent(eventId);
-      if (fresh.length === 0) return;
+      const allParticipants = [...(fresh.finishers || []), ...(fresh.nonFinishers || [])];
+
+      if (allParticipants.length === 0) {
+        console.log(`[EventsAdmin] No participants for event ${eventId}`);
+        setParticipantCounts(prev => ({ ...prev, [eventId]: 0 }));
+        return;
+      }
+
+      // Deduplicate
       const seen = new Map();
-      fresh.forEach((r) => {
+      allParticipants.forEach(r => {
         const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
         if (!seen.has(key)) seen.set(key, r);
       });
       const deduped = Array.from(seen.values());
-      const toUpsert = deduped.map((r) => ({
+
+      // Upsert all (finishers + DNFs)
+      const toUpsert = deduped.map(r => ({
         event_id: eventId,
         race_id: r.race_id || null,
         bib: r.bib || null,
@@ -165,12 +181,17 @@ export default function EventsAdmin({
         splits: r.splits || [],
         entry_id: r.entry_id ?? null,
         race_name: r.race_name ?? null,
+        _status: r._status || 'FIN',
       }));
+
       const { error } = await adminSupabase
         .from('chronotrack_results')
         .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
+
       if (error) throw error;
-      setParticipantCounts((prev) => ({ ...prev, [eventId]: deduped.length }));
+
+      setParticipantCounts(prev => ({ ...prev, [eventId]: deduped.length }));
+      console.log(`[EventsAdmin] Published ${deduped.length} participants (incl. DNFs) for event ${eventId}`);
     } catch (err) {
       console.error('Publish failed:', err);
       throw err;
@@ -279,19 +300,6 @@ export default function EventsAdmin({
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  const formatDateTime = (epoch) => {
-    if (!epoch || isNaN(epoch)) return 'Not set';
-    const date = new Date(epoch * 1000);
-    return date.toLocaleString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  };
-
   // Group events by year and month
   const groupEventsByYearMonth = () => {
     const groups = {};
@@ -308,6 +316,7 @@ export default function EventsAdmin({
   };
 
   const groupedEvents = groupEventsByYearMonth();
+
   const toggleYear = (year) => setExpandedYears((prev) => ({ ...prev, [year]: !prev[year] }));
   const toggleMonth = (yearMonth) => setExpandedMonths((prev) => ({ ...prev, [yearMonth]: !prev[yearMonth] }));
   const toggleEventExpansion = (eventId) => setExpandedEvents((prev) => ({ ...prev, [eventId]: !prev[eventId] }));
@@ -359,7 +368,6 @@ export default function EventsAdmin({
               <span>{year}</span>
               <span className="text-4xl font-bold text-primary">{expandedYears[year] ? '−' : '+'}</span>
             </button>
-
             {expandedYears[year] && (
               <div className="border-t-4 border-primary/20">
                 {Object.entries(months)
@@ -373,16 +381,13 @@ export default function EventsAdmin({
                         <span>{month}</span>
                         <span className="text-3xl font-bold text-primary">{expandedMonths[`${year}-${month}`] ? '−' : '+'}</span>
                       </button>
-
                       {expandedMonths[`${year}-${month}`] && (
                         <div className="pb-8">
                           {events.map((event) => {
                             const currentMaster = getCurrentMasterForEvent(event.id);
                             if (hideMasteredEvents && currentMaster) return null;
-
                             const displayName = editedEvents[event.id]?.name || event.name;
                             const count = participantCounts[event.id] || 0;
-
                             const now = Math.floor(Date.now() / 1000);
                             const startTime = event.start_time ? parseInt(event.start_time, 10) : null;
                             const endTime = event.event_end_time ? parseInt(event.event_end_time, 10) : null;
@@ -411,7 +416,6 @@ export default function EventsAdmin({
                                   </div>
                                   <span className="text-3xl font-bold text-primary">{expandedEvents[event.id] ? '−' : '+'}</span>
                                 </div>
-
                                 {expandedEvents[event.id] && (
                                   <div className="p-8 bg-white border-t-4 border-primary/30">
                                     {/* Master Assignment */}
@@ -448,7 +452,6 @@ export default function EventsAdmin({
                                           )}
                                         </div>
                                       </div>
-
                                       <div>
                                         <label className="block text-xl font-bold text-brand-dark mb-3">Event Display Name</label>
                                         <input
@@ -459,7 +462,6 @@ export default function EventsAdmin({
                                         />
                                       </div>
                                     </div>
-
                                     {/* Action Buttons */}
                                     <div className="flex flex-col sm:flex-row justify-center items-center gap-8 mb-10">
                                       <label className="flex items-center gap-6 cursor-pointer">
@@ -473,7 +475,6 @@ export default function EventsAdmin({
                                           Live Auto-Fetch {isAutoFetchEnabled ? 'ON' : 'OFF'}
                                         </span>
                                       </label>
-
                                       <button
                                         onClick={() => refreshAndPublishResults(event.id)}
                                         disabled={refreshingEvent === event.id}
@@ -481,7 +482,6 @@ export default function EventsAdmin({
                                       >
                                         {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
                                       </button>
-
                                       <button
                                         onClick={() => handleDeleteEvent(event.id, displayName)}
                                         className="px-12 py-6 bg-red-600 text-white text-2xl font-black rounded-xl hover:bg-red-700 transition shadow-2xl"
@@ -489,7 +489,6 @@ export default function EventsAdmin({
                                         Delete Event
                                       </button>
                                     </div>
-
                                     {/* Races */}
                                     {event.races && event.races.length > 0 && (
                                       <div>
