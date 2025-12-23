@@ -1,6 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// Kiosk Mode: Access Pin → Event Select → Full Kiosk (Guided Access lockdown)
-// Multiple match selector + exact bib search
+// Final Kiosk Mode — Multi-match selector simplified
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,8 +24,8 @@ export default function ResultsKiosk() {
   const [stage, setStage] = useState('access-pin');
   const [accessPinInput, setAccessPinInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [matches, setMatches] = useState([]); // [] = no search, array = multiple matches, null = single result shown
-  const [participant, setParticipant] = useState(null); // Shown when single result selected
+  const [matches, setMatches] = useState([]); // Multiple matches
+  const [participant, setParticipant] = useState(null); // Single selected
   const [showConfetti, setShowConfetti] = useState(false);
   const [countdown, setCountdown] = useState(null);
 
@@ -59,7 +58,7 @@ export default function ResultsKiosk() {
 
   const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
 
-  // Search with exact bib + partial name
+  // Exact bib + partial name search
   const performSearch = (query) => {
     if (!query.trim()) {
       setMatches([]);
@@ -71,9 +70,9 @@ export default function ResultsKiosk() {
     const lowerTerm = term.toLowerCase();
 
     const found = results.filter((r) => {
-      // Exact bib match (priority)
+      // Exact bib match
       if (r.bib && r.bib.toString() === term) return true;
-      // Name contains search (case-insensitive)
+      // Name contains search
       const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
       return fullName.includes(lowerTerm);
     });
@@ -86,7 +85,7 @@ export default function ResultsKiosk() {
     } else if (found.length > 1) {
       setMatches(found);
       setParticipant(null);
-      setCountdown(null); // No auto-reset on selection screen
+      setCountdown(null);
     } else {
       setMatches([]);
       setParticipant('not-found');
@@ -131,7 +130,6 @@ export default function ResultsKiosk() {
 
   // === RENDER ===
 
-  // 1. Access Pin
   if (stage === 'access-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex items-center justify-center p-8">
@@ -171,7 +169,6 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 2. Event Select
   if (stage === 'event-select') {
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
@@ -222,7 +219,7 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 3. Full Kiosk Mode (Exit PIN commented out — using Guided Access)
+  // Full Kiosk Mode
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={400} gravity={0.15} />}
@@ -237,7 +234,7 @@ export default function ResultsKiosk() {
           <p className="text-2xl md:text-3xl mt-3 opacity-90">Finish Line Kiosk</p>
         </div>
 
-        {/* Countdown - Top Right */}
+        {/* Countdown */}
         {countdown !== null && (
           <div className="fixed top-8 right-8 text-4xl font-bold bg-black/70 px-8 py-4 rounded-full shadow-2xl">
             Returning in {countdown}s
@@ -273,39 +270,33 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Multiple Matches Selector */}
+        {/* Multiple Matches — Only Name + Bib + Tap Indicator */}
         {matches.length > 0 && (
           <div className="w-full max-w-4xl">
-            <p className="text-3xl text-center mb-10 font-light">Select Your Result</p>
-            <div className="grid gap-6 md:grid-cols-2">
+            <p className="text-4xl text-center mb-12 font-bold">Tap Your Name Below</p>
+            <div className="grid gap-8 md:grid-cols-2">
               {matches.map((p, i) => (
                 <button
                   key={i}
                   onClick={() => selectParticipant(p)}
-                  className="bg-white/95 backdrop-blur text-gemini-dark-gray rounded-3xl shadow-2xl p-8 hover:scale-105 transition"
+                  className="bg-white/95 backdrop-blur text-gemini-dark-gray rounded-3xl shadow-2xl p-12 hover:scale-105 transition flex flex-col items-center"
                 >
-                  <div className="text-3xl font-bold mb-2">
+                  <div className="text-5xl font-black mb-4">
                     {p.first_name} {p.last_name}
                   </div>
-                  <div className="text-2xl text-gray-600 mb-4">Bib #{p.bib}</div>
-                  <div className="grid grid-cols-2 gap-4 text-xl">
-                    <div>
-                      <strong>Time:</strong> {formatTime(p.chip_time)}
-                    </div>
-                    <div>
-                      <strong>Place:</strong> #{formatPlace(p.place)}
-                    </div>
+                  <div className="text-4xl text-gemini-blue font-bold">
+                    Bib #{p.bib}
                   </div>
-                  <div className="text-lg text-gray-600 mt-4">
-                    Age {p.age} • {p.gender}
+                  <div className="mt-8 text-2xl text-gray-600 flex items-center gap-3">
+                    Tap here <span className="text-4xl">→</span>
                   </div>
                 </button>
               ))}
             </div>
-            <div className="text-center mt-10">
+            <div className="text-center mt-12">
               <button
                 onClick={resetToSearch}
-                className="px-12 py-5 bg-gray-700 text-white text-2xl font-bold rounded-full hover:bg-gray-600 transition"
+                className="px-14 py-6 bg-gray-700 text-white text-3xl font-bold rounded-full hover:bg-gray-600 transition"
               >
                 ← Back to Search
               </button>
@@ -371,32 +362,8 @@ export default function ResultsKiosk() {
         )}
       </div>
 
-      {/* Exit PIN Modal — COMMENTED OUT (using Guided Access instead) */}
-      {/* 
-      {showExitPinModal && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl p-12 text-center max-w-sm">
-            <h3 className="text-4xl font-bold text-gemini-dark-gray mb-8">Enter Exit PIN</h3>
-            <input
-              type="password"
-              value={exitPinInput}
-              onChange={(e) => setExitPinInput(e.target.value.slice(0, 4))}
-              onKeyDown={(e) => e.key === 'Enter' && handleExitPinSubmit()}
-              className="text-5xl text-center tracking-widest px-8 py-6 border-4 border-gemini-blue rounded-2xl mb-8"
-              autoFocus
-            />
-            <div className="space-x-6">
-              <button onClick={handleExitPinSubmit} className="px-12 py-6 bg-gemini-blue text-white text-3xl font-bold rounded-full">
-                Exit Kiosk
-              </button>
-              <button onClick={() => { setShowExitPinModal(false); setExitPinInput(''); }} className="px-12 py-6 bg-gray-300 text-gray-800 text-3xl font-bold rounded-full">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      */}
+      {/* Exit PIN Modal — COMMENTED OUT (using Guided Access) */}
+      {/* ... */}
     </>
   );
 }
