@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — New Palette + Top 5 Pagination + View All Button)
+// src/pages/ResultsPage.jsx (FINAL — New Palette + Top 5 Default + View All + Fixed Full Pagination)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -36,14 +36,17 @@ export default function ResultsPage() {
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
-  // Pagination per race: show top 5 by default
-  const [expandedRaces, setExpandedRaces] = useState({}); // { race_id: true/false }
+  // Per-race top 5 / view all toggle
+  const [expandedRaces, setExpandedRaces] = useState({});
+
+  // Per-race pagination state (only active when "View All" is clicked)
+  const [racePagination, setRacePagination] = useState({});
 
   // Refs
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
 
-  // Live update toast
+  // Live toast
   useEffect(() => {
     const handler = (e) => {
       const count = e.detail?.count || 1;
@@ -62,16 +65,23 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // Reset filters on master change
+  // Reset on master change or search
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
       setActiveDivisionFilter('');
       setHighlightedBib(null);
       setExpandedRaces({});
+      setRacePagination({});
       prevMasterKeyRef.current = masterKey;
     }
   }, [masterKey]);
+
+  useEffect(() => {
+    // Reset pagination when search changes
+    setExpandedRaces({});
+    setRacePagination({});
+  }, [searchQuery]);
 
   // Scroll to results on search
   useEffect(() => {
@@ -80,7 +90,7 @@ export default function ResultsPage() {
     }
   }, [searchQuery]);
 
-  // Back-to-top button visibility
+  // Back-to-top visibility
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
@@ -450,8 +460,28 @@ export default function ResultsPage() {
               const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
               const sorted = [...raceResults].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
-              // Default: top 5 only
-              const displayResults = expandedRaces[race.race_id] ? sorted : sorted.slice(0, 5);
+              // Pagination state for this race
+              const racePag = racePagination[race.race_id] || { currentPage: 1, pageSize: 50 };
+              const { currentPage, pageSize } = racePag;
+
+              const setCurrentPage = (page) => {
+                setRacePagination(prev => ({
+                  ...prev,
+                  [race.race_id]: { ...prev[race.race_id], currentPage: page }
+                }));
+              };
+
+              const setPageSize = (size) => {
+                setRacePagination(prev => ({
+                  ...prev,
+                  [race.race_id]: { pageSize: size, currentPage: 1 }
+                }));
+              };
+
+              // Display logic: top 5 or full with pagination
+              const displayResults = expandedRaces[race.race_id]
+                ? sorted
+                : sorted.slice(0, 5);
 
               return (
                 <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
@@ -462,7 +492,7 @@ export default function ResultsPage() {
                     {sorted.length > 5 && (
                       <button
                         onClick={() => setExpandedRaces(prev => ({ ...prev, [race.race_id]: !prev[race.race_id] }))}
-                        className="px-6 py-3 bg-primary text-white font-bold rounded-full hover:bg-primary/90 transition shadow-lg"
+                        className="px-8 py-4 bg-primary text-white font-bold rounded-full hover:bg-primary/90 transition shadow-xl"
                       >
                         {expandedRaces[race.race_id] ? 'Show Top 5' : `View All (${sorted.length})`}
                       </button>
@@ -472,16 +502,20 @@ export default function ResultsPage() {
                   <ResultsTable
                     data={displayResults}
                     totalResults={sorted.length}
+                    currentPage={currentPage}
+                    setCurrentPage={setCurrentPage}
+                    pageSize={pageSize}
+                    setPageSize={setPageSize}
                     onNameClick={handleNameClick}
                     isMobile={window.innerWidth < 768}
                     highlightedBib={highlightedBib}
                   />
 
                   {sorted.length > 5 && !expandedRaces[race.race_id] && (
-                    <div className="text-center mt-8">
+                    <div className="text-center mt-10">
                       <button
                         onClick={() => setExpandedRaces(prev => ({ ...prev, [race.race_id]: true }))}
-                        className="text-primary font-bold text-xl hover:underline"
+                        className="text-primary font-bold text-2xl hover:underline"
                       >
                         View All {sorted.length} Results →
                       </button>
