@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react';
 import { fetchEvents } from '../../api/chronotrackapi';
 import { fetchResultsForEvent } from '../../api/chronotrackapi';
 import { fetchEmailsForEntries } from '../../api/chronotrackAdminApi';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 
 // Version banner
 console.log('%c🟢 EMAIL CAMPAIGNS v3.0 — FULL EDITOR + SEND LIVE', 'color: white; background: #7c3aed; font-size: 16px; padding: 8px; border-radius: 4px;');
