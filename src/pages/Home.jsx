@@ -1,15 +1,17 @@
-// src/pages/Home.jsx (FINAL — Updated with NEW RED/TURQUOISE BRAND PALETTE)
+// src/pages/Home.jsx (FINAL — Fixed TDZ bug + Updated palette)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 export default function Home() {
+  // ← MOVE useContext TO THE TOP
   const {
     events = [],
     loading,
     setSelectedEvent,
   } = useContext(RaceContext);
+
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
 
@@ -21,6 +23,8 @@ export default function Home() {
   const [fetchedAthletes, setFetchedAthletes] = useState(0);
   const [displayAthletes, setDisplayAthletes] = useState(0);
   const [displayRaces, setDisplayRaces] = useState(0);
+
+  // ← NOW SAFE TO USE events
   const totalRacesTimed = BASE_RACES + events.length;
 
   // Fetch global published athletes count
@@ -52,7 +56,6 @@ export default function Home() {
     let currentRaces = 0;
     const athletesStep = finalAthletes / steps;
     const racesStep = totalRacesTimed / steps;
-
     const timer = setInterval(() => {
       currentAthletes += athletesStep;
       currentRaces += racesStep;
@@ -65,10 +68,10 @@ export default function Home() {
         setDisplayRaces(Math.floor(currentRaces));
       }
     }, interval);
-
     return () => clearInterval(timer);
   }, [finalAthletes, totalRacesTimed, loading]);
 
+  // ← NOW SAFE TO USE localStorage (after context)
   const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
   const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
   const eventLogos = JSON.parse(localStorage.getItem('eventLogos')) || {};
@@ -200,7 +203,6 @@ export default function Home() {
           </h2>
           <div className="w-24 h-1 bg-primary mx-auto"></div>
         </div>
-
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-primary"></div>
@@ -242,7 +244,6 @@ export default function Home() {
             })}
           </div>
         )}
-
         <div className="text-center mt-16">
           <Link
             to="/results"
