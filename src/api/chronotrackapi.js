@@ -1,10 +1,11 @@
 // src/api/chronotrackapi.js
 // FINAL PRODUCTION VERSION — December 2025
-// • Accurate splits with proven entry_id + fullCourse logic
-// • Safe bracket fetching (maxPages + deduplication)
-// • DNF/DQ/DNS fully excluded via explicit entry_status from /entry/{entryID}
-// • Handles up to 20,000 finishers safely with batched, throttled requests
-// • Progress logging for large events
+// • CONF = valid finisher (displayed in main results)
+// • DNF/DQ = shown in separate "Did Not Finish" collapsible table
+// • Full splits preserved
+// • Safe bracket fetching (no infinite loops)
+// • Batched entry_status calls (safe for 20k+ events)
+// • Returns { finishers, nonFinishers } for ResultsPage
 
 import axios from 'axios';
 
@@ -106,7 +107,7 @@ export const fetchRacesForEvent = async (eventId) => {
   }));
 };
 
-// SAFE BRACKET FETCHER — prevents infinite loops + light deduplication
+// SAFE BRACKET FETCHER
 const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   let allResults = [];
   let page = 1;
@@ -147,19 +148,15 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
 
       console.log(`[ChronoTrack] ${bracketName} (page ${page}) → +${newResults.length} new unique (total: ${allResults.length}) from ${raceName}`);
 
-      if (results.length < pageSize) {
-        console.log(`[ChronoTrack] ${bracketName} — final partial page, complete`);
-        break;
-      }
-
+      if (results.length < pageSize) break;
       if (page >= maxPages) {
-        console.warn(`[ChronoTrack] Hit maxPages (${maxPages}) for ${bracketName} — stopping safely`);
+        console.warn(`[ChronoTrack] Hit maxPages (${maxPages}) for ${bracketName}`);
         break;
       }
 
       page++;
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed page ${page} for ${bracketName} in ${raceName}`, err.message || err);
+      console.warn(`[ChronoTrack] Failed page ${page} for ${bracketName}`, err.message || err);
       break;
     }
   }
@@ -168,13 +165,13 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   return allResults;
 };
 
-// BATCHED ENTRY STATUS FETCH — safe for up to 20,000 finishers
+// BATCHED ENTRY STATUS FETCH — safe for large events
 const fetchEntryStatusesInBatches = async (entryIds) => {
   if (entryIds.length === 0) return {};
 
   const statuses = {};
   const batchSize = 50;
-  const delayMs = 600; // Be kind to the API
+  const delayMs = 600;
 
   let processed = 0;
 
@@ -190,32 +187,29 @@ const fetchEntryStatusesInBatches = async (entryIds) => {
           timeout: 15000,
         });
         const status = res.data.entry?.entry_status || 'FIN';
-        return { entryId, status, success: true };
+        return { entryId, status };
       } catch (err) {
         if (err.response?.status === 404) {
-          return { entryId, status: 'NOT_FOUND', success: true };
+          return { entryId, status: 'NOT_FOUND' };
         }
         console.warn(`[ChronoTrack] Entry status fetch failed for ${entryId}:`, err.message);
-        return { entryId, status: 'FIN', success: false }; // Safe fallback
+        return { entryId, status: 'FIN' }; // Safe fallback
       }
     });
 
     const results = await Promise.all(batchPromises);
-
     results.forEach(({ entryId, status }) => {
       statuses[entryId] = status;
     });
 
     processed += results.length;
-    console.log(`[ChronoTrack] Entry statuses fetched: ${processed}/${entryIds.length} (${((processed / entryIds.length) * 100).toFixed(1)}%)`);
+    console.log(`[ChronoTrack] Entry statuses fetched: ${processed}/${entryIds.length}`);
 
-    // Delay between batches (except last)
     if (i + batchSize < entryIds.length) {
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
 
-  console.log(`[ChronoTrack] All entry statuses fetched: ${Object.keys(statuses).length} total`);
   return statuses;
 };
 
@@ -236,7 +230,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }));
     console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races`);
   } catch (err) {
-    console.warn('[ChronoTrack] Failed to fetch races for event', eventId, err);
+    console.warn('[ChronoTrack] Failed to fetch races', err);
   }
 
   let allBrackets = [];
@@ -251,7 +245,7 @@ export const fetchResultsForEvent = async (eventId) => {
     allBrackets = bracketsResponse.data.event_bracket || [];
     console.log(`[ChronoTrack] Found ${allBrackets.length} total brackets`);
   } catch (err) {
-    console.error('[ChronoTrack] Failed to fetch brackets for event', eventId, err);
+    console.error('[ChronoTrack] Failed to fetch brackets', err);
     throw err;
   }
 
@@ -272,7 +266,7 @@ export const fetchResultsForEvent = async (eventId) => {
   console.log(`[ChronoTrack] Processing ${divisionBrackets.length} division brackets`);
   console.log(`[ChronoTrack] Processing ${overallBrackets.length} overall brackets`);
 
-  // === FETCH ALL INTERVALS INCLUDING T2 AND CUSTOM SPLITS ===
+  // === FETCH ALL INTERVALS ===
   let rawIntervalResults = [];
   let page = 1;
   const maxPages = 40;
@@ -293,9 +287,9 @@ export const fetchResultsForEvent = async (eventId) => {
       if (results.length < 500) break;
       page++;
     }
-    console.log(`[ChronoTrack] Fetched ${rawIntervalResults.length} raw interval rows (interval=ALL) for event ${eventId}`);
+    console.log(`[ChronoTrack] Fetched ${rawIntervalResults.length} raw interval rows (interval=ALL)`);
   } catch (err) {
-    console.error('[ChronoTrack] Failed to fetch raw interval results', err);
+    console.error('[ChronoTrack] Failed to fetch intervals', err);
     throw err;
   }
 
@@ -310,7 +304,7 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // Process gender brackets — only full course
+  // Gender brackets — only full course
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
@@ -327,7 +321,7 @@ export const fetchResultsForEvent = async (eventId) => {
     });
   }
 
-  // Process division brackets — only full course
+  // Division brackets — only full course
   for (const bracket of divisionBrackets) {
     const name = (bracket.bracket_name || '').trim();
     if (!name) continue;
@@ -370,7 +364,7 @@ export const fetchResultsForEvent = async (eventId) => {
     });
   }
 
-  // === GROUP INTERVALS AND BUILD CANDIDATE FINISHERS ===
+  // === GROUP CANDIDATES BY ENTRY_ID ===
   const participantsByEntry = {};
   rawIntervalResults.forEach(row => {
     const entryId = row.results_entry_id;
@@ -391,76 +385,82 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   });
 
-  // Candidates: everyone with a full course row
+  // Candidates = anyone with a full course row
   const candidates = Object.values(participantsByEntry).filter(p => p.fullCourse !== null);
-
-  // Fetch official entry_status for all candidates
   const entryIds = candidates.map(p => p.fullCourse.results_entry_id).filter(Boolean);
+
+  // Fetch official status
   const entryStatuses = await fetchEntryStatusesInBatches(entryIds);
 
-  // Final mapping — exclude anyone not officially FIN
-  const mappedResults = candidates
-    .map(p => {
-      const r = p.fullCourse;
-      const entryId = r.results_entry_id;
-      const status = entryStatuses[entryId] || 'FIN';
+  const finishers = [];
+  const nonFinishers = [];
 
-      if (!['FIN', null, undefined].includes(status)) {
-        console.log(`[ChronoTrack] EXCLUDED: ${r.results_first_name} ${r.results_last_name} (bib ${r.results_bib}) — official status: ${status}`);
-        return null;
-      }
+  candidates.forEach(p => {
+    const r = p.fullCourse;
+    const entryId = r.results_entry_id;
+    const status = entryStatuses[entryId] || 'FIN';
 
-      const lookupKey = getLookupKey(r);
-      const divInfo = lookupKey ? divisionPlaces[lookupKey] : null;
+    const lookupKey = getLookupKey(r);
+    const divInfo = lookupKey ? divisionPlaces[lookupKey] : null;
 
-      let city = r.results_city || null;
-      let state = r.results_state || r.results_state_code || null;
-      let country = r.results_country || r.results_country_code || null;
+    let city = r.results_city || null;
+    let state = r.results_state || r.results_state_code || null;
+    let country = r.results_country || r.results_country_code || null;
 
-      if (r.results_hometown) {
-        const parts = r.results_hometown.split(',').map(part => part.trim());
-        city = parts[0] || city;
-        state = parts[1] || state;
-        country = parts[2] || country;
-      }
+    if (r.results_hometown) {
+      const parts = r.results_hometown.split(',').map(part => part.trim());
+      city = parts[0] || city;
+      state = parts[1] || state;
+      country = parts[2] || country;
+    }
 
-      const orderedIntervals = p.intervals
-        .sort((a, b) => a.endTime - b.endTime)
-        .map(item => item.row);
+    const orderedIntervals = p.intervals
+      .sort((a, b) => a.endTime - b.endTime)
+      .map(item => item.row);
 
-      const splits = orderedIntervals.map(row => ({
-        name: row.results_interval_name || 'Split',
-        time: row.results_time || null,
-        pace: row.results_pace || null,
-        place: row.results_rank ? parseInt(row.results_rank, 10) : null,
-      }));
+    const splits = orderedIntervals.map(row => ({
+      name: row.results_interval_name || 'Split',
+      time: row.results_time || null,
+      pace: row.results_pace || null,
+      place: row.results_rank ? parseInt(row.results_rank, 10) : null,
+    }));
 
-      return {
-        first_name: r.results_first_name || '',
-        last_name: r.results_last_name || '',
-        chip_time: r.results_time || '',
-        clock_time: r.results_gun_time || '',
-        place: r.results_rank ? parseInt(r.results_rank, 10) : null,
-        gender_place: lookupKey ? genderPlaces[lookupKey] || null : null,
-        age_group_name: divInfo ? divInfo.name : (r.results_primary_bracket_name || ''),
-        age_group_place: divInfo ? divInfo.place : null,
-        pace: r.results_pace || '',
-        age: r.results_age ? parseInt(r.results_age, 10) : null,
-        gender: r.results_sex || '',
-        bib: r.results_bib || '',
-        race_id: r.results_race_id || null,
-        race_name: r.results_race_name || '',
-        city,
-        state,
-        country,
-        splits,
-        entry_id: entryId || null,
-      };
-    })
-    .filter(Boolean); // Remove excluded athletes
+    const participant = {
+      first_name: r.results_first_name || '',
+      last_name: r.results_last_name || '',
+      chip_time: r.results_time || '',
+      clock_time: r.results_gun_time || '',
+      place: r.results_rank ? parseInt(r.results_rank, 10) : null,
+      gender_place: lookupKey ? genderPlaces[lookupKey] || null : null,
+      age_group_name: divInfo ? divInfo.name : (r.results_primary_bracket_name || ''),
+      age_group_place: divInfo ? divInfo.place : null,
+      pace: r.results_pace || '',
+      age: r.results_age ? parseInt(r.results_age, 10) : null,
+      gender: r.results_sex || '',
+      bib: r.results_bib || '',
+      race_id: r.results_race_id || null,
+      race_name: r.results_race_name || '',
+      city,
+      state,
+      country,
+      splits,
+      entry_id: entryId || null,
+      _status: status, // internal debug
+    };
 
-  console.log(`[ChronoTrack] Final: ${mappedResults.length} OFFICIAL finishers (after entry_status filtering)`);
-  console.log(`[ChronoTrack] Gender places: ${Object.keys(genderPlaces).length} | Division places: ${Object.keys(divisionPlaces).length}`);
+    if (['DNF', 'DQ'].includes(status)) {
+      // Clear rankings
+      participant.place = null;
+      participant.gender_place = null;
+      participant.age_group_place = null;
+      nonFinishers.push(participant);
+    } else {
+      // CONF and FIN are valid
+      finishers.push(participant);
+    }
+  });
 
-  return mappedResults;
+  console.log(`[ChronoTrack] Final: ${finishers.length} finishers | ${nonFinishers.length} DNF/DQ`);
+
+  return { finishers, nonFinishers };
 };

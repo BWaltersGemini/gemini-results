@@ -1,4 +1,4 @@
-// src/components/ResultsTable.jsx (COMPLETE — With data attributes for scroll targeting)
+// src/components/ResultsTable.jsx (FINAL — Supports DNF styling + no rankings for DNFs)
 import { useNavigate } from 'react-router-dom';
 
 export default function ResultsTable({
@@ -12,6 +12,7 @@ export default function ResultsTable({
   isMobile,
   highlightedBib,
   raceId,
+  isDnfTable = false, // New prop to detect if this is the DNF section
 }) {
   const navigate = useNavigate();
 
@@ -37,7 +38,9 @@ export default function ResultsTable({
   if (data.length === 0) {
     return (
       <div className="text-center py-20 text-gray-500">
-        <p className="text-3xl font-bold text-brand-dark">No results match your filters</p>
+        <p className="text-3xl font-bold text-brand-dark">
+          {isDnfTable ? 'No DNF/DQ participants in this race' : 'No results match your filters'}
+        </p>
         <p className="text-xl mt-4">Try adjusting your search or filters</p>
       </div>
     );
@@ -50,14 +53,20 @@ export default function ResultsTable({
   const startIdx = (safeCurrentPage - 1) * safePageSize;
   const endIdx = Math.min(startIdx + safePageSize, safeTotalResults);
   const displayedData = data.slice(startIdx, endIdx);
-
   const pageOptions = [25, 50, 100, 200];
+
+  // Common row classes for DNF styling
+  const dnfRowClass = isDnfTable
+    ? 'bg-red-50 hover:bg-red-100 text-gray-600 italic'
+    : '';
 
   if (isMobile) {
     return (
       <div className="space-y-6">
         {displayedData.map((r) => {
           const isHighlighted = highlightedBib && String(r.bib) === String(highlightedBib);
+          const showRankings = !isDnfTable;
+
           return (
             <div
               key={getRowKey(r)}
@@ -65,12 +74,12 @@ export default function ResultsTable({
               data-race-id={raceId}
               className={`bg-white rounded-3xl shadow-xl border-2 p-6 cursor-pointer transition-all duration-200 active:scale-98 ${
                 isHighlighted ? 'border-primary shadow-2xl ring-4 ring-primary/20' : 'border-gray-200'
-              }`}
+              } ${dnfRowClass}`}
               onClick={() => handleRowClick(r)}
             >
               <div className="flex justify-between items-center mb-4">
                 <div className="text-4xl font-black text-primary">
-                  {r.place ? formatPlace(r.place) : '—'}
+                  {showRankings && r.place ? formatPlace(r.place) : '—'}
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-brand-dark">Bib {r.bib || '—'}</div>
@@ -80,19 +89,28 @@ export default function ResultsTable({
                 {r.first_name} {r.last_name}
                 <span className="text-xl text-gray-400">→</span>
               </h3>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="bg-primary/10 rounded-xl py-4">
-                  <div className="text-2xl font-bold text-primary">{r.chip_time || '—'}</div>
-                  <div className="text-sm text-gray-700">Time</div>
+
+              {showRankings ? (
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="bg-primary/10 rounded-xl py-4">
+                    <div className="text-2xl font-bold text-primary">{r.chip_time || '—'}</div>
+                    <div className="text-sm text-gray-700">Time</div>
+                  </div>
+                  <div className="bg-brand-light rounded-xl py-4">
+                    <div className="text-2xl font-bold text-brand-dark">{r.pace || '—'}</div>
+                    <div className="text-sm text-gray-700">Pace</div>
+                  </div>
                 </div>
-                <div className="bg-brand-light rounded-xl py-4">
-                  <div className="text-2xl font-bold text-brand-dark">{r.pace || '—'}</div>
-                  <div className="text-sm text-gray-700">Pace</div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-2xl font-bold text-red-600">Did Not Finish</p>
+                  <p className="text-lg text-gray-600 mt-2">Last recorded: {r.chip_time || '—'}</p>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
+
         {endIdx < safeTotalResults && (
           <div className="text-center mt-10">
             <button
@@ -107,7 +125,7 @@ export default function ResultsTable({
     );
   }
 
-  // Desktop
+  // Desktop Table
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-8 px-6">
@@ -145,13 +163,17 @@ export default function ResultsTable({
 
       <div className="overflow-x-auto -mx-6 px-6">
         <table className="w-full text-left">
-          <thead className="bg-primary/10 text-brand-dark font-bold uppercase text-sm tracking-wider">
+          <thead className={`font-bold uppercase text-sm tracking-wider ${isDnfTable ? 'bg-red-100 text-red-800' : 'bg-primary/10 text-brand-dark'}`}>
             <tr>
               <th className="px-6 py-5">Place</th>
               <th className="px-6 py-5">Bib</th>
               <th className="px-6 py-5">Name</th>
-              <th className="px-6 py-5">Gender Place</th>
-              <th className="px-6 py-5">Division Place</th>
+              {!isDnfTable && (
+                <>
+                  <th className="px-6 py-5">Gender Place</th>
+                  <th className="px-6 py-5">Division Place</th>
+                </>
+              )}
               <th className="px-6 py-5">Time</th>
               <th className="px-6 py-5">Pace</th>
               <th className="px-6 py-5">Age</th>
@@ -161,6 +183,8 @@ export default function ResultsTable({
           <tbody className="divide-y divide-gray-200">
             {displayedData.map((r) => {
               const isHighlighted = highlightedBib && String(r.bib) === String(highlightedBib);
+              const showRankings = !isDnfTable;
+
               return (
                 <tr
                   key={getRowKey(r)}
@@ -168,11 +192,11 @@ export default function ResultsTable({
                   data-race-id={raceId}
                   className={`hover:bg-primary/5 cursor-pointer transition duration-200 group ${
                     isHighlighted ? 'bg-primary/10 font-bold ring-2 ring-primary/30' : ''
-                  }`}
+                  } ${dnfRowClass}`}
                   onClick={() => handleRowClick(r)}
                 >
                   <td className="px-6 py-5 font-black text-xl text-primary">
-                    {r.place ? formatPlace(r.place) : '—'}
+                    {showRankings && r.place ? formatPlace(r.place) : '—'}
                   </td>
                   <td className="px-6 py-5 font-semibold text-lg text-brand-dark">{r.bib || '—'}</td>
                   <td className="px-6 py-5 font-semibold text-brand-dark group-hover:text-primary group-hover:underline transition">
@@ -181,18 +205,27 @@ export default function ResultsTable({
                       <span className="text-gray-400 text-sm opacity-0 group-hover:opacity-100 transition">→</span>
                     </span>
                   </td>
-                  <td className="px-6 py-5 font-medium text-brand-dark">
-                    {r.gender_place ? formatPlace(r.gender_place) : '—'}
-                  </td>
-                  <td className="px-6 py-5 font-medium text-brand-dark whitespace-nowrap">
-                    {r.age_group_place ? (
-                      <span>
-                        {formatPlace(r.age_group_place)} {r.age_group_name || ''}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
+                  {!showRankings && (
+                    <td colSpan="2" className="px-6 py-5 text-center text-red-600 font-bold italic">
+                      Did Not Finish
+                    </td>
+                  )}
+                  {showRankings && (
+                    <>
+                      <td className="px-6 py-5 font-medium text-brand-dark">
+                        {r.gender_place ? formatPlace(r.gender_place) : '—'}
+                      </td>
+                      <td className="px-6 py-5 font-medium text-brand-dark whitespace-nowrap">
+                        {r.age_group_place ? (
+                          <span>
+                            {formatPlace(r.age_group_place)} {r.age_group_name || ''}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </>
+                  )}
                   <td className="px-6 py-5 font-semibold text-brand-dark">{r.chip_time || '—'}</td>
                   <td className="px-6 py-5 text-brand-dark">{r.pace || '—'}</td>
                   <td className="px-6 py-5 text-brand-dark">{r.age || '—'}</td>
