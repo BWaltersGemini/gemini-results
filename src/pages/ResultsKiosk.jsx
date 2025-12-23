@@ -1,11 +1,12 @@
 // src/pages/ResultsKiosk.jsx
-// Final Kiosk Mode: Access Pin → Event Select → Set Exit Pin → Full Touch-Friendly Kiosk
+// Final Kiosk Mode with proper QR code, logo, timer position, and "Search Again" button
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Confetti from 'react-confetti';
 import { useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
+import QRCode from 'react-qr-code'; // ← Add this package: npm install react-qr-code
 
 export default function ResultsKiosk() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function ResultsKiosk() {
     results = [],
     selectedEvent,
     setSelectedEvent,
+    masterGroups = {},
     eventLogos = {},
     loadingResults,
   } = useContext(RaceContext);
@@ -35,7 +37,7 @@ export default function ResultsKiosk() {
 
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
-  // Restore session on refresh
+  // Restore session
   useEffect(() => {
     const stored = sessionStorage.getItem('kioskExitPin');
     if (stored && selectedEvent) {
@@ -44,14 +46,7 @@ export default function ResultsKiosk() {
     }
   }, [selectedEvent]);
 
-  // Debug logs
-  useEffect(() => {
-    console.log('[Kiosk] Events:', events.length);
-    console.log('[Kiosk] Results:', results.length);
-    console.log('[Kiosk] Selected Event:', selectedEvent?.name || 'none');
-    console.log('[Kiosk] Stage:', stage);
-  }, [events, results, selectedEvent, stage]);
-
+  // Helpers
   const formatTime = (timeStr) => (timeStr?.trim() ? timeStr.trim() : '—');
   const formatPlace = (place) =>
     !place ? '—' : place === 1 ? '1st' : place === 2 ? '2nd' : place === 3 ? '3rd' : `${place}th`;
@@ -66,6 +61,25 @@ export default function ResultsKiosk() {
   };
 
   const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
+
+  // Get master key for URL (reverse lookup)
+  const getMasterKeyForEvent = () => {
+    if (!selectedEvent) return null;
+    return Object.keys(masterGroups).find((key) =>
+      masterGroups[key]?.includes(String(selectedEvent.id))
+    );
+  };
+
+  // Generate results URL for QR code
+  const getResultsUrl = () => {
+    const masterKey = getMasterKeyForEvent();
+    if (!masterKey || !selectedEvent?.start_time) return 'https://gemini-results.vercel.app/results';
+
+    const year = new Date(selectedEvent.start_time * 1000).getFullYear();
+    const slug = masterKey.toLowerCase().replace(/\s+/g, '-');
+    return `https://gemini-results.vercel.app/results/${slug}/${year}`;
+  };
+
   const logoUrl = selectedEvent ? eventLogos[selectedEvent.id] || null : null;
 
   const performSearch = (query) => {
@@ -82,10 +96,10 @@ export default function ResultsKiosk() {
     if (found) {
       setParticipant(found);
       setShowConfetti(true);
-      startCountdown();
+      if (countdown === null) startCountdown(); // Only start if not already running
     } else {
       setParticipant('not-found');
-      startCountdown();
+      setCountdown(null); // No auto-reset on not found
     }
   };
 
@@ -112,13 +126,13 @@ export default function ResultsKiosk() {
     document.getElementById('kiosk-search-input')?.focus();
   };
 
-  // Auto-focus inputs
+  // Auto-focus
   useEffect(() => {
     if (stage === 'access-pin') document.getElementById('access-pin-input')?.focus();
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // Prevent navigation without PIN
+  // Prevent navigation
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const handlePopState = (e) => {
@@ -144,7 +158,7 @@ export default function ResultsKiosk() {
     }
   };
 
-  // Block common refresh shortcuts
+  // Block shortcuts
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const block = (e) => {
@@ -156,19 +170,14 @@ export default function ResultsKiosk() {
     return () => window.removeEventListener('keydown', block);
   }, [stage]);
 
-  // === RENDER STAGES ===
+  // === RENDER ===
 
-  // 1. Access Pin (smaller, touch-friendly)
   if (stage === 'access-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex items-center justify-center p-8">
         <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-12 max-w-sm w-full text-center">
-          <h1 className="text-4xl font-black text-gemini-dark-gray mb-8">
-            Timing Team Access
-          </h1>
-          <p className="text-xl text-gray-700 mb-8">
-            Enter Access Pin to configure kiosk
-          </p>
+          <h1 className="text-4xl font-black text-gemini-dark-gray mb-8">Timing Team Access</h1>
+          <p className="text-xl text-gray-700 mb-8">Enter Access Pin to configure kiosk</p>
           <input
             id="access-pin-input"
             type="password"
@@ -202,7 +211,6 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 2. Event Select
   if (stage === 'event-select') {
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
@@ -246,7 +254,6 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 3. Set Exit Pin (smaller)
   if (stage === 'set-exit-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex items-center justify-center p-8">
@@ -294,12 +301,13 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 4. Full Kiosk Mode — optimized for iPad
+  // Full Kiosk Mode
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={400} gravity={0.15} />}
 
-      <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex flex-col items-center justify-center text-white p-8">
+      <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex flex-col items-center justify-center text-white p-8 relative">
+        {/* Master Logo + Title */}
         <div className="text-center mb-10">
           {logoUrl && (
             <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-36 mb-6 object-contain drop-shadow-2xl" />
@@ -308,8 +316,16 @@ export default function ResultsKiosk() {
           <p className="text-2xl md:text-3xl mt-3 opacity-90">Finish Line Kiosk</p>
         </div>
 
+        {/* Countdown Timer - Top Right */}
+        {countdown !== null && (
+          <div className="fixed top-8 right-8 text-4xl font-bold bg-black/70 px-8 py-4 rounded-full shadow-2xl">
+            Returning in {countdown}s
+          </div>
+        )}
+
         {loadingResults && <div className="text-5xl animate-pulse">Loading results...</div>}
 
+        {/* Search Screen */}
         {!participant && !loadingResults && (
           <div className="w-full max-w-2xl">
             <p className="text-3xl text-center mb-8 font-light">
@@ -336,6 +352,7 @@ export default function ResultsKiosk() {
           </div>
         )}
 
+        {/* Participant Found */}
         {participant && typeof participant === 'object' && (
           <div className="bg-white/95 backdrop-blur-xl text-gemini-dark-gray rounded-3xl shadow-2xl p-8 max-w-2xl w-full text-center">
             <div className="text-5xl md:text-7xl font-black text-gemini-blue mb-4">
@@ -364,37 +381,39 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            <div>
+            {/* QR Code + Instructions */}
+            <div className="mb-8">
               <p className="text-2xl font-bold mb-6">Scan for Full Results</p>
-              <div className="bg-gray-200 border-2 border-dashed rounded-xl w-48 h-48 mx-auto flex items-center justify-center text-5xl">
-                📱
+              <div className="mx-auto w-48 h-48 bg-white p-4 rounded-2xl shadow-xl">
+                <QRCode
+                  value={getResultsUrl()}
+                  size={176}
+                  level="M"
+                  fgColor="#1e3a8a" // gemini-blue
+                />
               </div>
               <p className="text-lg mt-6 text-gray-600">
-                gemini-results.vercel.app/results
+                Scan to view all results
               </p>
             </div>
-
-            {countdown !== null && (
-              <div className="fixed bottom-12 left-1/2 -translate-x-1/2 text-5xl font-bold bg-black/70 px-10 py-6 rounded-full">
-                Returning in {countdown}s
-              </div>
-            )}
           </div>
         )}
 
+        {/* Not Found */}
         {participant === 'not-found' && (
-          <div className="text-center">
+          <div className="text-center max-w-2xl">
             <div className="text-6xl mb-8">😅</div>
             <h2 className="text-5xl md:text-7xl font-bold mb-8">No Results Found Yet</h2>
-            <p className="text-3xl md:text-4xl max-w-2xl mx-auto leading-relaxed">
+            <p className="text-3xl md:text-4xl leading-relaxed mb-12">
               Results may still be syncing!<br />
               Please check with timing staff nearby.
             </p>
-            {countdown !== null && (
-              <div className="fixed bottom-12 left-1/2 -translate-x-1/2 text-5xl font-bold bg-black/70 px-10 py-6 rounded-full">
-                Returning in {countdown}s
-              </div>
-            )}
+            <button
+              onClick={resetToSearch}
+              className="px-16 py-8 bg-white text-gemini-blue text-4xl font-bold rounded-full hover:scale-105 transition shadow-2xl"
+            >
+              Search Again
+            </button>
           </div>
         )}
       </div>
