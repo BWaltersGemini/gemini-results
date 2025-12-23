@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Auto-expand on pagination + clean UX)
+// src/pages/ResultsPage.jsx (FINAL — Auto-scroll to first matching result on search)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -27,21 +27,20 @@ export default function ResultsPage() {
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const prevSearchQueryRef = useRef(''); // Track changes to query
+
   const [liveToast, setLiveToast] = useState(null);
 
-  // Highlight bib when navigating from ParticipantPage
   const highlightBibFromState = location.state?.highlightBib;
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
-  // Per-race toggle: Top 5 vs View All
   const [expandedRaces, setExpandedRaces] = useState({});
-
-  // Per-race pagination state (currentPage & pageSize)
   const [racePagination, setRacePagination] = useState({});
 
   // Refs
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
+  const raceSectionRefs = useRef({}); // One ref per race section
 
   // Live results toast
   useEffect(() => {
@@ -62,7 +61,7 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // Reset state when switching master series
+  // Reset on master change
   const prevMasterKeyRef = useRef(masterKey);
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
@@ -80,14 +79,44 @@ export default function ResultsPage() {
     setRacePagination({});
   }, [searchQuery]);
 
-  // Scroll to results section after search
+  // AUTO-SCROLL TO FIRST MATCHING RESULT WHEN SEARCH CHANGES
   useEffect(() => {
-    if (searchQuery && resultsSectionRef.current) {
-      resultsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [searchQuery]);
+    // Only run when query actually changes
+    if (searchQuery === prevSearchQueryRef.current) return;
+    prevSearchQueryRef.current = searchQuery;
 
-  // Back-to-top button visibility
+    // If search is cleared, go to top of results
+    if (!searchQuery.trim()) {
+      resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    // If no results, still scroll to the empty state message
+    if (globalFilteredResults.length === 0) {
+      resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    // Find the first matching participant
+    const firstMatch = globalFilteredResults[0];
+    if (!firstMatch) return;
+
+    const matchingRaceId = firstMatch.race_id;
+    const targetRaceSection = raceSectionRefs.current[matchingRaceId];
+
+    if (targetRaceSection) {
+      // Offset to account for sticky search bar (~140px total height)
+      const offset = 140;
+      const topPos = targetRaceSection.getBoundingClientRect().top + window.pageYOffset - offset;
+
+      window.scrollTo({ top: topPos, behavior: 'smooth' });
+    } else {
+      // Fallback: just go to results area
+      resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [searchQuery, globalFilteredResults]);
+
+  // Back-to-top visibility
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
@@ -118,7 +147,7 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Fetch upcoming events from WordPress
+  // Fetch upcoming events
   useEffect(() => {
     const fetchUpcoming = async () => {
       try {
@@ -140,7 +169,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Select event based on URL params
+  // Event selection from URL
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -158,7 +187,7 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Global search filtering
+  // Global filtered results
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -166,7 +195,7 @@ export default function ResultsPage() {
       )
     : results;
 
-  // Determine which races to show
+  // Races to display
   const embeddedRaces = selectedEvent?.races || [];
   const racesWithAnyResults = embeddedRaces.filter((race) =>
     results.some((r) => r.race_id === race.race_id)
@@ -180,13 +209,12 @@ export default function ResultsPage() {
     displayedRaces = displayedRaces.filter((race) => slugify(race.race_name) === raceSlug);
   }
 
-  // Logo logic
+  // Logo & stats
   const currentMasterKey = Object.keys(masterGroups).find(key => masterGroups[key]?.includes(String(selectedEvent?.id)));
   const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
-  // Finisher stats
   const finishers = results.filter(r => r.chip_time && r.chip_time.trim() !== '');
   const totalFinishers = finishers.length;
   const maleFinishers = finishers.filter(r => r.gender === 'M').length;
@@ -213,7 +241,7 @@ export default function ResultsPage() {
     });
   };
 
-  // Available years for year selector
+  // Year selector
   let availableYears = [];
   if (currentMasterKey) {
     const linkedEventIds = (masterGroups[currentMasterKey] || []).map(String);
@@ -226,7 +254,7 @@ export default function ResultsPage() {
     navigate(`/results/${masterKey}/${newYear}${raceSlug ? '/' + raceSlug : ''}`);
   };
 
-  // MASTER SERIES LANDING PAGE (no specific event selected)
+  // MASTER LANDING PAGE
   if (!selectedEvent) {
     const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
 
@@ -285,7 +313,7 @@ export default function ResultsPage() {
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
 
-          {/* Upcoming Events Section */}
+          {/* Upcoming Events */}
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-brand-dark mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
@@ -328,10 +356,9 @@ export default function ResultsPage() {
     );
   }
 
-  // EVENT-SPECIFIC RESULTS PAGE
+  // EVENT RESULTS PAGE
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
-      {/* Live Toast */}
       {liveToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl animate-pulse text-xl font-bold">
           {liveToast.message}
@@ -339,7 +366,7 @@ export default function ResultsPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
-        {/* Sticky Search Bar */}
+        {/* Sticky Search */}
         <div className={`sticky top-32 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-primary/30' : ''}`}>
           <div className="relative max-w-3xl mx-auto">
             <input
@@ -365,7 +392,7 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Event Header */}
+        {/* Header, Stats, Jump Links — unchanged */}
         <div className="text-center mb-16">
           {displayLogo && (
             <img src={displayLogo} alt="Event logo" className="mx-auto max-h-48 mb-8 object-contain" />
@@ -390,7 +417,6 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Finisher Stats */}
         {totalFinishers > 0 && (
           <div className="grid grid-cols-3 gap-8 max-w-3xl mx-auto mb-16 text-center">
             <div className="bg-white rounded-2xl shadow-lg py-6">
@@ -408,7 +434,6 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Race Jump Links */}
         {displayedRaces.length > 1 && (
           <div className="flex flex-wrap justify-center gap-4 mb-12">
             {displayedRaces.map((race) => (
@@ -423,7 +448,7 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Results Sections */}
+        {/* Results */}
         <div ref={resultsSectionRef}>
           {displayedRaces.length === 0 ? (
             <div className="text-center py-32">
@@ -458,7 +483,6 @@ export default function ResultsPage() {
               const isExpanded = expandedRaces[race.race_id];
               const tableData = isExpanded ? sorted : sorted.slice(0, 5);
 
-              // Safely update page — auto-expand if going beyond top 5
               const updatePage = (newPage) => {
                 if (newPage > 1 && !isExpanded) {
                   setExpandedRaces(prev => ({ ...prev, [race.race_id]: true }));
@@ -469,7 +493,6 @@ export default function ResultsPage() {
                 }));
               };
 
-              // Safely update page size — auto-expand if needed
               const updatePageSize = (newSize) => {
                 const currentPag = racePagination[race.race_id] || { currentPage: 1 };
                 const newFirstIndex = (currentPag.currentPage - 1) * newSize;
@@ -483,7 +506,12 @@ export default function ResultsPage() {
               };
 
               return (
-                <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
+                <section
+                  key={race.race_id}
+                  id={`race-${race.race_id}`}
+                  ref={(el) => (raceSectionRefs.current[race.race_id] = el)}
+                  className="mb-24"
+                >
                   <div className="flex justify-between items-center mb-8">
                     <h2 className="text-4xl font-bold text-brand-dark">
                       {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
@@ -496,7 +524,6 @@ export default function ResultsPage() {
                             ...prev,
                             [race.race_id]: !prev[race.race_id]
                           }));
-                          // Reset pagination when collapsing to top 5
                           if (isExpanded) {
                             setRacePagination(prev => ({
                               ...prev,
@@ -552,7 +579,7 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top Button */}
+      {/* Back to Top */}
       <button
         ref={backToTopRef}
         onClick={scrollToTop}
