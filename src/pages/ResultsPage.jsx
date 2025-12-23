@@ -1,12 +1,13 @@
 // src/pages/ResultsPage.jsx
-// FINAL — Complete Results Page with:
+// FINAL — Complete Results Page (December 23, 2025)
 // • Main finishers table (CONF/FIN status)
 // • Collapsible "Did Not Finish" section per race (DNF/DQ)
-// • DNFs are searchable in global search
-// • Clean UI with toggle for DNF visibility
-// • Fully compatible with new { finishers, nonFinishers } API
-
-import { useContext, useState, useRef, useEffect } from 'react';
+// • DNFs searchable in global search
+// • Enhanced live indicators & toast with pulsing dot
+// • Auto-expand DNF sections when search matches only DNFs
+// • Performance-optimized with useMemo for filtering
+// • Fully compatible with { finishers, nonFinishers } API
+import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
@@ -43,14 +44,16 @@ export default function ResultsPage() {
   // Combine finishers and non-finishers for global search
   const allParticipants = [...results.finishers, ...results.nonFinishers];
 
-  const globalFilteredResults = searchQuery
-    ? allParticipants.filter(r =>
-        r.bib?.toString().includes(searchQuery) ||
-        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : allParticipants;
+  const globalFilteredResults = useMemo(() => {
+    if (!searchQuery) return allParticipants;
+    const lowerQuery = searchQuery.toLowerCase();
+    return allParticipants.filter(r =>
+      r.bib?.toString().includes(searchQuery) ||
+      `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
+    );
+  }, [searchQuery, allParticipants]);
 
-  // Live toast
+  // Live toast with custom event
   useEffect(() => {
     const handler = (e) => {
       const count = e.detail?.count || 1;
@@ -80,12 +83,25 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // Reset on search
+  // Auto-expand DNF sections when search matches only DNFs
   useEffect(() => {
-    setExpandedDnfSections({});
-  }, [searchQuery]);
+    if (searchQuery && globalFilteredResults.length > 0) {
+      const newExpanded = {};
+      displayedRaces.forEach((race) => {
+        const hasDnfMatch = globalFilteredResults.some(
+          r => r.race_id === race.race_id && results.nonFinishers.includes(r)
+        );
+        if (hasDnfMatch) {
+          newExpanded[race.race_id] = true;
+        }
+      });
+      setExpandedDnfSections(newExpanded);
+    } else if (searchQuery) {
+      setExpandedDnfSections({});
+    }
+  }, [searchQuery, globalFilteredResults, results.nonFinishers]);
 
-  // Back-to-top
+  // Back-to-top button visibility
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
@@ -141,13 +157,16 @@ export default function ResultsPage() {
   // Event selection from URL
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
+
     const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find((key) => slugify(key) === urlSlug);
     if (!storedMasterKey) return;
+
     const groupEventIds = (masterGroups[storedMasterKey] || []).map(String);
     const yearEvents = events
       .filter((e) => e && e.id && groupEventIds.includes(String(e.id)) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
     }
@@ -155,18 +174,15 @@ export default function ResultsPage() {
 
   // Races to display
   const embeddedRaces = selectedEvent?.races || [];
-
   const racesWithAnyResults = embeddedRaces.filter((race) =>
     results.finishers.some((r) => r.race_id === race.race_id) ||
     results.nonFinishers.some((r) => r.race_id === race.race_id)
   );
-
   const racesWithFilteredResults = embeddedRaces.filter((race) =>
     globalFilteredResults.some((r) => r.race_id === race.race_id)
   );
 
   let displayedRaces = searchQuery ? racesWithFilteredResults : racesWithAnyResults;
-
   if (raceSlug) {
     displayedRaces = displayedRaces.filter((race) => slugify(race.race_name) === raceSlug);
   }
@@ -311,11 +327,14 @@ export default function ResultsPage() {
   // EVENT RESULTS PAGE
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
+      {/* Enhanced Live Toast with Pulsing Dot */}
       {liveToast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl animate-pulse text-xl font-bold">
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl animate-pulse text-xl font-bold flex items-center gap-3">
+          <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
           {liveToast.message}
         </div>
       )}
+
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
         {/* Sticky Search */}
         <div className={`sticky top-32 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-primary/30' : ''}`}>
@@ -366,6 +385,15 @@ export default function ResultsPage() {
             {selectedEvent.name}
           </h1>
           <p className="text-2xl text-gray-600">{formatDate(selectedEvent.start_time)}</p>
+
+          {/* Enhanced Live Indicator Below Date */}
+          {isLiveRace && (
+            <div className="flex items-center justify-center gap-3 mt-6 text-green-600 font-bold text-xl">
+              <div className="w-4 h-4 bg-green-600 rounded-full animate-ping"></div>
+              Live Results • Updating in Real Time
+            </div>
+          )}
+
           {availableYears.length > 1 && (
             <div className="mt-8">
               <select
@@ -443,16 +471,24 @@ export default function ResultsPage() {
             </div>
           ) : (
             displayedRaces.map((race) => {
-              // Finishers for this race
-              const raceFinishers = results.finishers.filter(r => r.race_id === race.race_id);
-              const filteredFinishers = globalFilteredResults.filter(r => r.race_id === race.race_id && results.finishers.includes(r));
-              const displayFinishers = searchQuery ? filteredFinishers : raceFinishers;
-              const sortedFinishers = [...displayFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+              // Use useMemo for per-race filtering
+              const displayFinishers = useMemo(() => {
+                const raceFinishers = results.finishers.filter(r => r.race_id === race.race_id);
+                return searchQuery
+                  ? globalFilteredResults.filter(r => r.race_id === race.race_id && results.finishers.includes(r))
+                  : raceFinishers;
+              }, [searchQuery, results.finishers, race.race_id, globalFilteredResults]);
 
-              // DNF/DQ for this race
-              const raceDnf = results.nonFinishers.filter(r => r.race_id === race.race_id);
-              const filteredDnf = globalFilteredResults.filter(r => r.race_id === race.race_id && results.nonFinishers.includes(r));
-              const displayDnf = searchQuery ? filteredDnf : raceDnf;
+              const sortedFinishers = useMemo(() => {
+                return [...displayFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+              }, [displayFinishers]);
+
+              const displayDnf = useMemo(() => {
+                const raceDnf = results.nonFinishers.filter(r => r.race_id === race.race_id);
+                return searchQuery
+                  ? globalFilteredResults.filter(r => r.race_id === race.race_id && results.nonFinishers.includes(r))
+                  : raceDnf;
+              }, [searchQuery, results.nonFinishers, race.race_id, globalFilteredResults]);
 
               const isDnfExpanded = expandedDnfSections[race.race_id];
 
@@ -487,7 +523,6 @@ export default function ResultsPage() {
                         <span>Did Not Finish ({displayDnf.length})</span>
                         <span className="text-3xl">{isDnfExpanded ? '−' : '+'}</span>
                       </button>
-
                       {isDnfExpanded && (
                         <div className="mt-8">
                           <ResultsTable
