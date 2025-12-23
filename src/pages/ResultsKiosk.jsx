@@ -1,12 +1,12 @@
 // src/pages/ResultsKiosk.jsx
-// Final Kiosk Mode with proper QR code, logo, timer position, and "Search Again" button
+// Final Kiosk Mode — Logo fixed to use Master Series key
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Confetti from 'react-confetti';
 import { useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
-import QRCode from 'react-qr-code'; // ← Add this package: npm install react-qr-code
+import QRCode from 'react-qr-code'; // npm install react-qr-code
 
 export default function ResultsKiosk() {
   const navigate = useNavigate();
@@ -46,7 +46,28 @@ export default function ResultsKiosk() {
     }
   }, [selectedEvent]);
 
-  // Helpers
+  // Find master series key for the selected event
+  const getMasterKeyForEvent = () => {
+    if (!selectedEvent || Object.keys(masterGroups).length === 0) return null;
+    return Object.keys(masterGroups).find((key) =>
+      masterGroups[key]?.includes(String(selectedEvent.id))
+    );
+  };
+
+  const masterKey = getMasterKeyForEvent();
+
+  // FIXED: Logo now uses master series key
+  const logoUrl = masterKey ? eventLogos[masterKey] || null : null;
+
+  // Generate correct results URL for QR code
+  const getResultsUrl = () => {
+    if (!masterKey || !selectedEvent?.start_time) return 'https://gemini-results.vercel.app/results';
+
+    const year = new Date(selectedEvent.start_time * 1000).getFullYear();
+    const slug = masterKey.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    return `https://gemini-results.vercel.app/results/${slug}/${year}`;
+  };
+
   const formatTime = (timeStr) => (timeStr?.trim() ? timeStr.trim() : '—');
   const formatPlace = (place) =>
     !place ? '—' : place === 1 ? '1st' : place === 2 ? '2nd' : place === 3 ? '3rd' : `${place}th`;
@@ -62,26 +83,6 @@ export default function ResultsKiosk() {
 
   const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
 
-  // Get master key for URL (reverse lookup)
-  const getMasterKeyForEvent = () => {
-    if (!selectedEvent) return null;
-    return Object.keys(masterGroups).find((key) =>
-      masterGroups[key]?.includes(String(selectedEvent.id))
-    );
-  };
-
-  // Generate results URL for QR code
-  const getResultsUrl = () => {
-    const masterKey = getMasterKeyForEvent();
-    if (!masterKey || !selectedEvent?.start_time) return 'https://gemini-results.vercel.app/results';
-
-    const year = new Date(selectedEvent.start_time * 1000).getFullYear();
-    const slug = masterKey.toLowerCase().replace(/\s+/g, '-');
-    return `https://gemini-results.vercel.app/results/${slug}/${year}`;
-  };
-
-  const logoUrl = selectedEvent ? eventLogos[selectedEvent.id] || null : null;
-
   const performSearch = (query) => {
     if (!query.trim()) {
       setParticipant(null);
@@ -96,10 +97,10 @@ export default function ResultsKiosk() {
     if (found) {
       setParticipant(found);
       setShowConfetti(true);
-      if (countdown === null) startCountdown(); // Only start if not already running
+      if (countdown === null) startCountdown();
     } else {
       setParticipant('not-found');
-      setCountdown(null); // No auto-reset on not found
+      setCountdown(null);
     }
   };
 
@@ -126,13 +127,11 @@ export default function ResultsKiosk() {
     document.getElementById('kiosk-search-input')?.focus();
   };
 
-  // Auto-focus
   useEffect(() => {
     if (stage === 'access-pin') document.getElementById('access-pin-input')?.focus();
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // Prevent navigation
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const handlePopState = (e) => {
@@ -158,7 +157,6 @@ export default function ResultsKiosk() {
     }
   };
 
-  // Block shortcuts
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const block = (e) => {
@@ -228,7 +226,10 @@ export default function ResultsKiosk() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
               {sortedEvents.map((event) => {
                 const count = results.filter((r) => r.event_id === event.id).length;
-                const logo = eventLogos[event.id];
+                const eventMasterKey = Object.keys(masterGroups).find((key) =>
+                  masterGroups[key]?.includes(String(event.id))
+                );
+                const eventLogo = eventMasterKey ? eventLogos[eventMasterKey] : null;
                 return (
                   <button
                     key={event.id}
@@ -238,7 +239,7 @@ export default function ResultsKiosk() {
                     }}
                     className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl hover:scale-105 transition text-left"
                   >
-                    {logo && <img src={logo} alt="Logo" className="max-h-32 mx-auto mb-6 object-contain" />}
+                    {eventLogo && <img src={eventLogo} alt="Logo" className="max-h-32 mx-auto mb-6 object-contain" />}
                     <h3 className="text-2xl font-bold text-gemini-dark-gray mb-3">{event.name}</h3>
                     <p className="text-xl text-gray-600 mb-2">{formatDate(event.start_time)}</p>
                     <p className="text-lg font-medium text-gemini-blue">
@@ -307,7 +308,7 @@ export default function ResultsKiosk() {
       {showConfetti && <Confetti recycle={false} numberOfPieces={400} gravity={0.15} />}
 
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex flex-col items-center justify-center text-white p-8 relative">
-        {/* Master Logo + Title */}
+        {/* Header with Master Logo */}
         <div className="text-center mb-10">
           {logoUrl && (
             <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-36 mb-6 object-contain drop-shadow-2xl" />
@@ -316,7 +317,7 @@ export default function ResultsKiosk() {
           <p className="text-2xl md:text-3xl mt-3 opacity-90">Finish Line Kiosk</p>
         </div>
 
-        {/* Countdown Timer - Top Right */}
+        {/* Countdown - Top Right */}
         {countdown !== null && (
           <div className="fixed top-8 right-8 text-4xl font-bold bg-black/70 px-8 py-4 rounded-full shadow-2xl">
             Returning in {countdown}s
@@ -325,7 +326,7 @@ export default function ResultsKiosk() {
 
         {loadingResults && <div className="text-5xl animate-pulse">Loading results...</div>}
 
-        {/* Search Screen */}
+        {/* Search */}
         {!participant && !loadingResults && (
           <div className="w-full max-w-2xl">
             <p className="text-3xl text-center mb-8 font-light">
@@ -381,20 +382,13 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            {/* QR Code + Instructions */}
+            {/* QR Code */}
             <div className="mb-8">
               <p className="text-2xl font-bold mb-6">Scan for Full Results</p>
               <div className="mx-auto w-48 h-48 bg-white p-4 rounded-2xl shadow-xl">
-                <QRCode
-                  value={getResultsUrl()}
-                  size={176}
-                  level="M"
-                  fgColor="#1e3a8a" // gemini-blue
-                />
+                <QRCode value={getResultsUrl()} size={176} level="M" fgColor="#1e3a8a" />
               </div>
-              <p className="text-lg mt-6 text-gray-600">
-                Scan to view all results
-              </p>
+              <p className="text-lg mt-6 text-gray-600">Scan to view all results</p>
             </div>
           </div>
         )}
