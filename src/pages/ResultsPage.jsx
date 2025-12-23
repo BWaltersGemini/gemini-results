@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Auto-scroll to first matching result on search)
+// src/pages/ResultsPage.jsx (FINAL — Auto-scroll to first matching result on search 2)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
