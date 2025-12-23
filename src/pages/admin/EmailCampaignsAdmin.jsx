@@ -6,7 +6,7 @@ import { fetchEmailsForEntries } from '../../api/chronotrackAdminApi';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
-console.log('%c🟢 EMAIL CAMPAIGNS — SIMPLE & CLEAN STATS VERSION', 'color: white; background: #16a34a; font-size: 16px; padding: 8px; border-radius: 4px;');
+console.log('%c🟢 EMAIL CAMPAIGNS — SIMPLE & CLEAN STATS VERSION (FINAL)', 'color: white; background: #16a34a; font-size: 16px; padding: 8px; border-radius: 4px;');
 
 const ordinal = (n) => {
   if (!n) return '';
@@ -59,39 +59,37 @@ export default function EmailCampaignsAdmin() {
           <!-- Hero -->
           <tr>
             <td style="background:#001f3f; color:#ffffff; padding:60px 20px; text-align:center;">
-              <h1 style="font-size:56px; font-weight:900; margin:0; color:#ffffff;">CONGRATULATIONS!</h1>
-              <h2 style="font-size:48px; margin:30px 0 20px; font-weight:700; color:#ffffff;">{{first_name}}</h2>
-              <p style="font-size:28px; margin:10px 0; color:#ffffff;">You conquered the {{race_name}}!</p>
-              <div style="margin:50px 0;">
-                <p style="font-size:24px; margin:0; color:#ffffff;">Official Chip Time</p>
-                <p style="font-size:80px; font-weight:900; margin:20px 0; color:#ffffff; line-height:1;">{{chip_time}}</p>
-                <p style="font-size:24px; margin:0; color:#ffffff;">Pace: {{pace}}</p>
-              </div>
+              <h1 style="font-size:56px; font-weight:900; margin:0 0 30px 0; color:#ffffff;">CONGRATULATIONS!</h1>
+              <h2 style="font-size:48px; font-weight:700; margin:0 0 20px 0; color:#ffffff;">{{first_name}}</h2>
+              <p style="font-size:28px; margin:0 0 40px 0; color:#ffffff;">You conquered the {{race_name}}!</p>
+              <p style="font-size:24px; margin:0; color:#ffffff;">Official Chip Time</p>
+              <p style="font-size:72px; font-weight:900; margin:20px 0; color:#ffffff; line-height:1;">{{chip_time}}</p>
+              <p style="font-size:24px; margin:0; color:#ffffff;">Pace: {{pace}}</p>
             </td>
           </tr>
 
           <!-- Stats Card -->
           <tr>
-            <td style="padding:40px 20px; background:#f8fafc;">
+            <td style="padding:50px 20px; background:#f8fafc;">
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
                     <div style="background:#ffffff; border:6px solid #2563eb; border-radius:24px; padding:40px;">
-                      <h3 style="font-size:32px; font-weight:800; color:#001f3f; text-align:center; margin-bottom:40px;">Your Race Highlights</h3>
+                      <h3 style="font-size:32px; font-weight:800; color:#001f3f; text-align:center; margin:0 0 40px 0;">Your Race Highlights</h3>
                       <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
                           <td align="center" style="padding:20px;">
-                            <p style="font-size:22px; color:#1e40af; margin:0 0 15px; font-weight:600;">Overall</p>
-                            <p style="font-size:72px; font-weight:900; color:#1e3a8a; margin:0; line-height:1;">{{place_ordinal}}</p>
+                            <p style="font-size:24px; color:#001f3f; margin:0 0 15px 0; font-weight:600;">Overall</p>
+                            <p style="font-size:72px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{place_ordinal}}</p>
                           </td>
                           <td align="center" style="padding:20px;">
-                            <p style="font-size:22px; color:#92400e; margin:0 0 15px; font-weight:600;">Gender</p>
-                            <p style="font-size:72px; font-weight:900; color:#78350f; margin:0; line-height:1;">{{gender_place_ordinal}}</p>
+                            <p style="font-size:24px; color:#001f3f; margin:0 0 15px 0; font-weight:600;">Gender</p>
+                            <p style="font-size:72px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{gender_place_ordinal}}</p>
                           </td>
                           <td align="center" style="padding:20px;">
-                            <p style="font-size:22px; color:#4d7c0f; margin:0 0 15px; font-weight:600;">Division</p>
-                            <p style="font-size:72px; font-weight:900; color:#365314; margin:0; line-height:1;">{{age_group_place_ordinal}}</p>
-                            <p style="font-size:20px; color:#4d7c0f; margin:15px 0 0;">{{age_group_name}}</p>
+                            <p style="font-size:24px; color:#001f3f; margin:0 0 15px 0; font-weight:600;">Division</p>
+                            <p style="font-size:72px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{age_group_place_ordinal}}</p>
+                            <p style="font-size:20px; color:#001f3f; margin:15px 0 0;">{{age_group_name}}</p>
                           </td>
                         </tr>
                       </table>
@@ -105,22 +103,22 @@ export default function EmailCampaignsAdmin() {
           <!-- Race Story -->
           <tr>
             <td style="padding:40px 20px; text-align:center;">
-              <div style="background:#dbeafe; padding:40px; border-radius:24px; max-width:480px; margin:0 auto;">
-                <p style="font-size:30px; font-weight:900; color:#1e40af; margin:0; line-height:1.4;">
+              <div style="background:#e0f2fe; padding:40px; border-radius:24px; max-width:480px; margin:0 auto;">
+                <p style="font-size:28px; font-weight:900; color:#001f3f; margin:0; line-height:1.4;">
                   {{race_story}}
                 </p>
               </div>
             </td>
           </tr>
 
-          <!-- CTA Buttons -->
+          <!-- CTAs -->
           <tr>
-            <td style="padding:40px 20px; text-align:center; background:#ffffff;">
-              <p style="margin-bottom:30px; font-size:20px; color:#001f3f;">
-                <a href="https://geminitiming.com" style="background:#2563eb; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">View All Results</a>
+            <td style="padding:40px 20px; text-align:center;">
+              <p style="margin:0 0 20px 0;">
+                <a href="https://geminitiming.com" style="display:inline-block; background:#2563eb; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">View All Results</a>
               </p>
-              <p style="font-size:20px; color:#001f3f;">
-                <a href="https://youkeepmoving.com" style="background:#16a34a; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">Find Your Next Event</a>
+              <p style="margin:0;">
+                <a href="https://youkeepmoving.com" style="display:inline-block; background:#16a34a; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">Find Your Next Event</a>
               </p>
             </td>
           </tr>
@@ -128,7 +126,7 @@ export default function EmailCampaignsAdmin() {
           <!-- Footer -->
           <tr>
             <td style="background:#001f3f; color:#ffffff; padding:40px 20px; text-align:center;">
-              <p style="font-size:20px; margin:0 0 10px;">— The Gemini Timing Team</p>
+              <p style="font-size:20px; margin:0 0 10px 0;">— The Gemini Timing Team</p>
               <p style="margin:0;">
                 <a href="https://geminitiming.com" style="color:#60a5fa; font-size:18px; text-decoration:none;">geminitiming.com</a>
               </p>
@@ -280,9 +278,9 @@ export default function EmailCampaignsAdmin() {
 
   return (
     <section className="space-y-12">
-      <div className="bg-blue-100 border-2 border-blue-500 rounded-xl p-6 text-center">
-        <p className="text-blue-800 font-black text-2xl">🟦 SIMPLE & CLEAN STATS EMAIL — LIVE</p>
-        <p className="text-blue-700 text-lg mt-2">Hero • Stats • Story • CTAs • No images or extras</p>
+      <div className="bg-green-100 border-2 border-green-500 rounded-xl p-6 text-center">
+        <p className="text-green-800 font-black text-2xl">🟢 SIMPLE & CLEAN STATS EMAIL — LIVE</p>
+        <p className="text-green-700 text-lg mt-2">Hero • Stats • Story • CTAs • No images or extras</p>
       </div>
 
       <h2 className="text-5xl font-black text-gemini-dark-gray text-center mb-12">Post-Race Email Campaigns</h2>
