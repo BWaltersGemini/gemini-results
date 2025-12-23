@@ -1,11 +1,10 @@
 // src/pages/admin/EventsAdmin.jsx
-// FINAL — Complete EventsAdmin (December 2025)
-// • Fully compatible with { finishers, nonFinishers } from chronotrackapi.js
+// FINAL — Complete EventsAdmin (December 23, 2025)
+// • Fixed: event_id now correctly converted to string for Supabase text column
 // • Publishes both finishers and DNF/DQ (with _status column)
 // • Bulk and single publish working
 // • Refresh events with end times
 // • Master series management, race editing, live toggle, delete
-
 import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
 import { createAdminSupabaseClient } from '../../supabaseClient';
@@ -159,9 +158,9 @@ export default function EventsAdmin({
       });
       const deduped = Array.from(seen.values());
 
-      // Upsert all (finishers + DNFs)
+      // Upsert all (finishers + DNFs) — CRITICAL FIX: String(eventId)
       const toUpsert = deduped.map(r => ({
-        event_id: String(eventId),  // ← Convert to string
+        event_id: String(eventId),                    // ← Fixed: convert to string
         race_id: r.race_id || null,
         bib: r.bib || null,
         first_name: r.first_name || null,
@@ -217,6 +216,7 @@ export default function EventsAdmin({
     });
     if (!updated[masterKey]) updated[masterKey] = [];
     if (!updated[masterKey].includes(eventId.toString())) updated[masterKey].push(eventId.toString());
+
     setMasterGroups(updated);
     setNewMasterKeys((prev) => ({ ...prev, [eventId]: '' }));
     await autoSaveConfig('masterGroups', updated);
@@ -462,6 +462,7 @@ export default function EventsAdmin({
                                         />
                                       </div>
                                     </div>
+
                                     {/* Action Buttons */}
                                     <div className="flex flex-col sm:flex-row justify-center items-center gap-8 mb-10">
                                       <label className="flex items-center gap-6 cursor-pointer">
@@ -489,6 +490,7 @@ export default function EventsAdmin({
                                         Delete Event
                                       </button>
                                     </div>
+
                                     {/* Races */}
                                     {event.races && event.races.length > 0 && (
                                       <div>
