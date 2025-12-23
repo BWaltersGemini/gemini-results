@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (COMPLETE FINAL — Sticky search lowered + Clickable names with subtle hint)
+// src/pages/ResultsPage.jsx (FINAL — New Palette + Top 5 Pagination + View All Button)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -36,11 +36,14 @@ export default function ResultsPage() {
   const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
+  // Pagination per race: show top 5 by default
+  const [expandedRaces, setExpandedRaces] = useState({}); // { race_id: true/false }
+
   // Refs
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
 
-  // Listen for live update toast
+  // Live update toast
   useEffect(() => {
     const handler = (e) => {
       const count = e.detail?.count || 1;
@@ -52,7 +55,6 @@ export default function ResultsPage() {
     return () => window.removeEventListener('liveResultsUpdate', handler);
   }, []);
 
-  // Auto-hide toast
   useEffect(() => {
     if (liveToast) {
       const timer = setTimeout(() => setLiveToast(null), 5000);
@@ -66,6 +68,7 @@ export default function ResultsPage() {
       setSearchQuery('');
       setActiveDivisionFilter('');
       setHighlightedBib(null);
+      setExpandedRaces({});
       prevMasterKeyRef.current = masterKey;
     }
   }, [masterKey]);
@@ -77,7 +80,7 @@ export default function ResultsPage() {
     }
   }, [searchQuery]);
 
-  // Show/hide back-to-top button
+  // Back-to-top button visibility
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
@@ -135,19 +138,15 @@ export default function ResultsPage() {
   // Event selection from URL
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
-
     const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find(
       (key) => slugify(key) === urlSlug
     );
-
     if (!storedMasterKey) return;
-
     const groupEventIds = (masterGroups[storedMasterKey] || []).map(String);
     const yearEvents = events
       .filter((e) => e && e.id && groupEventIds.includes(String(e.id)) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
     }
@@ -179,7 +178,7 @@ export default function ResultsPage() {
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
 
-  // Calculate stats — only from finishers with chip_time
+  // Stats
   const finishers = results.filter(r => r.chip_time && r.chip_time.trim() !== '');
   const totalFinishers = finishers.length;
   const maleFinishers = finishers.filter(r => r.gender === 'M').length;
@@ -192,10 +191,8 @@ export default function ResultsPage() {
   // Participant navigation
   const handleNameClick = (participant) => {
     if (!participant || !selectedEvent) return;
-
-    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([_, ids]) =>
+    const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
       ids.includes(String(selectedEvent.id))
     );
     if (foundMaster) {
@@ -205,13 +202,12 @@ export default function ResultsPage() {
     const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const raceSlugPart = slugify(raceName);
-
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: { participant, selectedEvent, results },
     });
   };
 
-  // Available years for this master event
+  // Available years
   let availableYears = [];
   if (currentMasterKey) {
     const linkedEventIds = (masterGroups[currentMasterKey] || []).map(String);
@@ -244,13 +240,12 @@ export default function ResultsPage() {
       .slice(0, 3);
 
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pt-32 pb-20">
+      <div className="min-h-screen bg-gradient-to-b from-brand-light to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">Race Results</h1>
+            <h1 className="text-5xl md:text-6xl font-black text-brand-dark mb-4">Race Results</h1>
             <p className="text-xl text-gray-600">Recent race series</p>
           </div>
-
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
               {masterEventTiles.map((master) => (
@@ -259,19 +254,19 @@ export default function ResultsPage() {
                   to={`/results/${master.masterSlug}/${master.latestYear}`}
                   className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
                 >
-                  <div className="h-64 bg-gray-50 flex items-center justify-center p-6">
+                  <div className="h-64 bg-brand-light flex items-center justify-center p-6">
                     {master.logo ? (
                       <img src={master.logo} alt={master.displayName} className="max-h-52 max-w-full object-contain" />
                     ) : (
-                      <span className="text-8xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
+                      <span className="text-8xl text-gray-300 group-hover:text-primary transition">🏁</span>
                     )}
                   </div>
                   <div className="p-8 text-center">
-                    <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
+                    <h3 className="text-2xl md:text-3xl font-bold text-brand-dark mb-4 group-hover:text-primary transition">
                       {master.displayName}
                     </h3>
                     <p className="text-lg text-gray-600 mb-6">Latest: {formatDate(master.dateEpoch)}</p>
-                    <span className="text-gemini-blue font-bold text-lg group-hover:underline">View Results →</span>
+                    <span className="text-primary font-bold text-lg group-hover:underline">View Results →</span>
                   </div>
                 </Link>
               ))}
@@ -279,11 +274,11 @@ export default function ResultsPage() {
           ) : (
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
-
+          {/* Upcoming Events on landing */}
           <div className="mt-20">
-            <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">Upcoming Events</h2>
+            <h2 className="text-4xl font-bold text-center text-brand-dark mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
-              <p className="text-center text-gray-600 text-xl">Loading upcoming events...</p>
+              <p className="text-center text-gray-600 text-xl">Loading...</p>
             ) : upcomingEvents.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {upcomingEvents.map((event) => (
@@ -292,27 +287,23 @@ export default function ResultsPage() {
                     href={event.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                    className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all"
                   >
                     {event.image?.url ? (
-                      <img
-                        src={event.image.url}
-                        alt={event.title.rendered || event.title}
-                        className="w-full h-60 object-cover"
-                      />
+                      <img src={event.image.url} alt={event.title.rendered || event.title} className="w-full h-60 object-cover" />
                     ) : (
-                      <div className="h-60 bg-gray-200 flex items-center justify-center">
+                      <div className="h-60 bg-brand-light flex items-center justify-center">
                         <span className="text-gray-500 font-medium">No Image</span>
                       </div>
                     )}
                     <div className="p-6">
-                      <h3 className="text-xl font-bold text-gemini-dark-gray mb-2 line-clamp-2">
+                      <h3 className="text-xl font-bold text-brand-dark mb-2 line-clamp-2">
                         {event.title.rendered || event.title}
                       </h3>
                       <p className="text-gray-600 mb-4">
                         {new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                       </p>
-                      <span className="text-gemini-blue font-bold group-hover:underline">Register →</span>
+                      <span className="text-accent font-bold group-hover:underline">Register →</span>
                     </div>
                   </a>
                 ))}
@@ -328,7 +319,7 @@ export default function ResultsPage() {
 
   // EVENT RESULTS PAGE
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
       {/* Live Toast */}
       {liveToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-4 animate-pulse text-xl font-bold">
@@ -348,15 +339,15 @@ export default function ResultsPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
-        {/* Sticky Search Bar — Moved down slightly for navbar clearance */}
-        <div className={`sticky top-32 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-gemini-blue/50' : ''}`}>
+        {/* Sticky Search */}
+        <div className={`sticky top-32 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-primary/30' : ''}`}>
           <div className="relative max-w-3xl mx-auto">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by bib or name..."
-              className="w-full px-6 py-4 text-xl placeholder-gray-500 border-0 focus:outline-none text-gray-900"
+              className="w-full px-6 py-4 text-xl placeholder-gray-500 border-0 focus:outline-none text-brand-dark"
             />
             {searchQuery && (
               <button
@@ -374,13 +365,13 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* Enhanced Header with Stats */}
+        {/* Header */}
         {!searchQuery && (
           <div className="text-center mb-16">
             {displayLogo && (
-              <img src={displayLogo} alt="Logo" className="mx-auto max-h-64 mb-8 object-contain drop-shadow-2xl" />
+              <img src={displayLogo} alt="Event Logo" className="mx-auto max-h-64 mb-8 object-contain drop-shadow-2xl" />
             )}
-            <h1 className="text-5xl md:text-6xl font-black text-gemini-dark-gray mb-4">
+            <h1 className="text-5xl md:text-6xl font-black text-brand-dark mb-4">
               {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
             </h1>
             <p className="text-2xl text-gray-600 mb-8">{formatDate(selectedEvent.start_time)}</p>
@@ -395,8 +386,8 @@ export default function ResultsPage() {
                     onClick={() => handleYearChange(y)}
                     className={`px-8 py-4 rounded-full font-bold text-xl transition ${
                       y === year
-                        ? 'bg-gemini-blue text-white shadow-xl'
-                        : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-gemini-blue hover:text-gemini-blue'
+                        ? 'bg-primary text-white shadow-xl'
+                        : 'bg-white text-brand-dark border-2 border-gray-300 hover:border-primary hover:text-primary'
                     }`}
                   >
                     {y}
@@ -405,11 +396,11 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {/* Stats Grid */}
+            {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-12">
-              <div className="bg-gradient-to-br from-gemini-blue/10 to-gemini-blue/5 rounded-2xl p-8 shadow-xl text-center">
+              <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl p-8 shadow-xl text-center">
                 <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Total Finishers</p>
-                <p className="text-6xl font-black text-gemini-blue">{totalFinishers.toLocaleString()}</p>
+                <p className="text-6xl font-black text-primary">{totalFinishers.toLocaleString()}</p>
               </div>
               <div className="bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl p-8 shadow-xl text-center">
                 <p className="text-lg uppercase text-gray-600 tracking-wider mb-4">Male</p>
@@ -430,7 +421,7 @@ export default function ResultsPage() {
               <button
                 key={race.race_id}
                 onClick={() => document.getElementById(`race-${race.race_id}`)?.scrollIntoView({ behavior: 'smooth' })}
-                className="px-8 py-4 bg-gemini-blue/10 text-gemini-blue font-bold rounded-full hover:bg-gemini-blue/20 transition"
+                className="px-8 py-4 bg-primary/10 text-primary font-bold rounded-full hover:bg-primary/20 transition"
               >
                 {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
               </button>
@@ -438,12 +429,12 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Results Section */}
+        {/* Results */}
         <div ref={resultsSectionRef}>
           {displayedRaces.length === 0 ? (
             <div className="text-center py-32">
               <div className="text-6xl mb-8">🏁</div>
-              <h2 className="text-4xl font-bold text-gemini-dark-gray mb-4">No Results Yet</h2>
+              <h2 className="text-4xl font-bold text-brand-dark mb-4">No Results Yet</h2>
               <p className="text-2xl text-gray-600 mb-8">
                 {isLiveRace ? 'The race is live — finishers will appear here soon!' : 'Timing has not started yet.'}
               </p>
@@ -459,21 +450,43 @@ export default function ResultsPage() {
               const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
               const sorted = [...raceResults].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
+              // Default: top 5 only
+              const displayResults = expandedRaces[race.race_id] ? sorted : sorted.slice(0, 5);
+
               return (
                 <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
-                  <h2 className="text-4xl font-bold text-center text-gemini-dark-gray mb-12">
-                    {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
-                  </h2>
+                  <div className="flex justify-between items-center mb-8">
+                    <h2 className="text-4xl font-bold text-brand-dark">
+                      {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
+                    </h2>
+                    {sorted.length > 5 && (
+                      <button
+                        onClick={() => setExpandedRaces(prev => ({ ...prev, [race.race_id]: !prev[race.race_id] }))}
+                        className="px-6 py-3 bg-primary text-white font-bold rounded-full hover:bg-primary/90 transition shadow-lg"
+                      >
+                        {expandedRaces[race.race_id] ? 'Show Top 5' : `View All (${sorted.length})`}
+                      </button>
+                    )}
+                  </div>
 
-                  {/* Updated ResultsTable with subtle clickable hint */}
                   <ResultsTable
-                    data={sorted}
+                    data={displayResults}
                     totalResults={sorted.length}
                     onNameClick={handleNameClick}
                     isMobile={window.innerWidth < 768}
                     highlightedBib={highlightedBib}
-                    highlightedRowRef={null}
                   />
+
+                  {sorted.length > 5 && !expandedRaces[race.race_id] && (
+                    <div className="text-center mt-8">
+                      <button
+                        onClick={() => setExpandedRaces(prev => ({ ...prev, [race.race_id]: true }))}
+                        className="text-primary font-bold text-xl hover:underline"
+                      >
+                        View All {sorted.length} Results →
+                      </button>
+                    </div>
+                  )}
                 </section>
               );
             })
@@ -483,12 +496,12 @@ export default function ResultsPage() {
         {/* Sponsors */}
         {ads.length > 0 && (
           <section className="mt-20">
-            <h3 className="text-4xl font-bold text-center text-gray-800 mb-12">Our Sponsors</h3>
+            <h3 className="text-4xl font-bold text-center text-brand-dark mb-12">Our Sponsors</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
               {ads.map((ad, i) => (
                 <div
                   key={i}
-                  className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gemini-blue/20 hover:shadow-2xl transition"
+                  className="bg-white rounded-3xl shadow-xl overflow-hidden border border-primary/20 hover:shadow-2xl transition"
                 >
                   <img src={ad} alt="Sponsor" className="w-full h-auto" />
                 </div>
@@ -498,11 +511,11 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top Button */}
+      {/* Back to Top */}
       <button
         ref={backToTopRef}
         onClick={scrollToTop}
-        className="fixed bottom-8 right-8 bg-gemini-blue text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:scale-110 hover:bg-gemini-blue/90 transition-all duration-300 z-50 opacity-0 invisible"
+        className="fixed bottom-8 right-8 bg-primary text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:scale-110 hover:bg-primary/90 transition-all duration-300 z-50 opacity-0 invisible"
         aria-label="Back to top"
       >
         ↑

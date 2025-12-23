@@ -1,4 +1,4 @@
-// src/pages/Home.jsx (FINAL — No + sign, Recent Results fixed)
+// src/pages/Home.jsx (FINAL — Updated with NEW RED/TURQUOISE BRAND PALETTE)
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ export default function Home() {
   const {
     events = [],
     loading,
-    setSelectedEvent, // ← Needed for navigation
+    setSelectedEvent,
   } = useContext(RaceContext);
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -21,7 +21,6 @@ export default function Home() {
   const [fetchedAthletes, setFetchedAthletes] = useState(0);
   const [displayAthletes, setDisplayAthletes] = useState(0);
   const [displayRaces, setDisplayRaces] = useState(0);
-
   const totalRacesTimed = BASE_RACES + events.length;
 
   // Fetch global published athletes count
@@ -31,7 +30,6 @@ export default function Home() {
         const { count, error } = await supabase
           .from('chronotrack_results')
           .select('*', { count: 'exact', head: true });
-
         if (error) throw error;
         setFetchedAthletes(count || 0);
       } catch (err) {
@@ -39,7 +37,6 @@ export default function Home() {
         setFetchedAthletes(0);
       }
     };
-
     fetchGlobalAthletes();
   }, []);
 
@@ -48,11 +45,9 @@ export default function Home() {
   // Animated count-up effect
   useEffect(() => {
     if (loading) return;
-
     const duration = 3000;
     const steps = 60;
     const interval = duration / steps;
-
     let currentAthletes = 0;
     let currentRaces = 0;
     const athletesStep = finalAthletes / steps;
@@ -61,7 +56,6 @@ export default function Home() {
     const timer = setInterval(() => {
       currentAthletes += athletesStep;
       currentRaces += racesStep;
-
       if (currentAthletes >= finalAthletes && currentRaces >= totalRacesTimed) {
         setDisplayAthletes(finalAthletes);
         setDisplayRaces(totalRacesTimed);
@@ -84,7 +78,7 @@ export default function Home() {
     return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   };
 
-  // Fetch upcoming events
+  // Fetch upcoming events from You Keep Moving
   useEffect(() => {
     const fetchUpcomingEvents = async () => {
       try {
@@ -134,7 +128,7 @@ export default function Home() {
     .slice(0, 3);
 
   const handleEventClick = (event) => {
-    setSelectedEvent(event); // ← Ensures results load correctly
+    setSelectedEvent(event);
     const year = getYearFromEvent(event);
     navigate(`/results/overall/${year}`);
     window.scrollTo(0, 0);
@@ -145,7 +139,7 @@ export default function Home() {
       {/* Hero */}
       <section className="relative h-screen w-full flex items-center justify-center overflow-hidden">
         <video src="/eventvideo.mp4" autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-black/50" />
+        <div className="absolute inset-0 bg-black/60" />
         <div className="relative z-10 text-center px-6 max-w-5xl mx-auto">
           <img src="/Gemini-Logo-White.png" alt="Gemini Timing" className="h-20 md:h-32 mx-auto mb-8" />
           <h1 className="text-4xl md:text-6xl font-light text-white tracking-wider mb-4">
@@ -155,36 +149,42 @@ export default function Home() {
             Serving Southern California since 2011
           </p>
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Link to="/results" className="px-10 py-4 bg-white text-gemini-dark-gray font-medium text-lg rounded-full hover:bg-gray-100 transition">
+            <Link
+              to="/results"
+              className="px-10 py-4 bg-white text-brand-dark font-bold text-lg rounded-full hover:bg-gray-100 transition shadow-xl"
+            >
               View Results
             </Link>
-            <Link to="/services" className="px-10 py-4 border-2 border-white text-white font-medium text-lg rounded-full hover:bg-white/10 transition">
+            <Link
+              to="/services"
+              className="px-10 py-4 border-2 border-white text-white font-bold text-lg rounded-full hover:bg-white/10 backdrop-blur-sm transition"
+            >
               Get a Quote
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Experience Stats — No + sign */}
-      <section className="py-16 md:py-24 bg-gemini-light-gray">
+      {/* Experience Stats */}
+      <section className="py-16 md:py-24 bg-brand-light">
         <div className="max-w-7xl mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-gemini-dark-gray mb-12">
+          <h2 className="text-3xl md:text-4xl font-bold text-brand-dark mb-12">
             Our Experience in Numbers
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
             <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
-              <p className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-gemini-blue mb-4 leading-tight">
+              <p className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-primary mb-4 leading-tight">
                 {displayAthletes.toLocaleString()}
               </p>
-              <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gemini-dark-gray">
+              <p className="text-lg sm:text-xl md:text-2xl font-semibold text-brand-dark">
                 Athletes Timed
               </p>
             </div>
             <div className="bg-white rounded-3xl shadow-2xl p-10 transform hover:scale-105 transition duration-300">
-              <p className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-gemini-blue mb-4 leading-tight">
+              <p className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-primary mb-4 leading-tight">
                 {displayRaces.toLocaleString()}
               </p>
-              <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gemini-dark-gray">
+              <p className="text-lg sm:text-xl md:text-2xl font-semibold text-brand-dark">
                 Races Timed
               </p>
             </div>
@@ -192,17 +192,18 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Recent & Live Results — 3 Most Recent Events */}
+      {/* Recent & Live Results */}
       <section className="py-20 md:py-32 px-6 max-w-7xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-gemini-dark-gray mb-4">
+          <h2 className="text-4xl md:text-5xl font-bold text-brand-dark mb-4">
             Recent & Live Results
           </h2>
-          <div className="w-24 h-1 bg-gemini-blue mx-auto"></div>
+          <div className="w-24 h-1 bg-primary mx-auto"></div>
         </div>
+
         {loading ? (
           <div className="text-center py-20">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-gemini-blue"></div>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-primary"></div>
             <p className="mt-6 text-xl text-gray-600">Loading results...</p>
           </div>
         ) : recentEvents.length === 0 ? (
@@ -216,23 +217,23 @@ export default function Home() {
                 <button
                   key={event.id}
                   onClick={() => handleEventClick(event)}
-                  className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30"
                 >
-                  <div className="h-72 bg-gray-50 flex items-center justify-center p-8">
+                  <div className="h-72 bg-brand-light flex items-center justify-center p-8">
                     {logo ? (
                       <img src={logo} alt={displayName} className="max-h-56 max-w-full object-contain" />
                     ) : (
-                      <span className="text-9xl text-gray-300 group-hover:text-gemini-blue transition">🏁</span>
+                      <span className="text-9xl text-gray-300 group-hover:text-primary transition">🏁</span>
                     )}
                   </div>
                   <div className="p-10 text-center">
-                    <h3 className="text-2xl md:text-3xl font-bold text-gemini-dark-gray mb-4 group-hover:text-gemini-blue transition">
+                    <h3 className="text-2xl md:text-3xl font-bold text-brand-dark mb-4 group-hover:text-primary transition">
                       {displayName}
                     </h3>
                     <p className="text-lg text-gray-600 mb-6">
                       {formatChronoDate(event.start_time)}
                     </p>
-                    <span className="text-gemini-blue font-bold group-hover:underline">
+                    <span className="text-primary font-bold group-hover:underline">
                       View Results →
                     </span>
                   </div>
@@ -241,10 +242,11 @@ export default function Home() {
             })}
           </div>
         )}
+
         <div className="text-center mt-16">
           <Link
             to="/results"
-            className="inline-block px-12 py-4 border-2 border-gemini-dark-gray text-gemini-dark-gray font-medium text-lg rounded-full hover:bg-gemini-dark-gray hover:text-white transition"
+            className="inline-block px-12 py-4 border-2 border-brand-dark text-brand-dark font-bold text-lg rounded-full hover:bg-brand-dark hover:text-white transition shadow-lg"
           >
             View All Results →
           </Link>
@@ -254,10 +256,10 @@ export default function Home() {
       {/* Upcoming Events */}
       <section className="py-20 md:py-32 bg-gray-50 px-6">
         <div className="max-w-7xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-gemini-dark-gray mb-4">
+          <h2 className="text-4xl md:text-5xl font-bold text-brand-dark mb-4">
             Upcoming Events
           </h2>
-          <div className="w-24 h-1 bg-gemini-blue mx-auto mb-12"></div>
+          <div className="w-24 h-1 bg-primary mx-auto mb-12"></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
             {upcomingEvents.length === 0 ? (
               <p className="col-span-3 text-gray-600">Loading upcoming events...</p>
@@ -277,16 +279,16 @@ export default function Home() {
                       className="w-full h-64 object-cover group-hover:scale-105 transition duration-500"
                     />
                   ) : (
-                    <div className="bg-gray-200 h-64 flex items-center justify-center">
+                    <div className="bg-brand-light h-64 flex items-center justify-center">
                       <span className="text-gray-500 font-medium">No Image</span>
                     </div>
                   )}
                   <div className="p-8">
-                    <h3 className="text-xl font-semibold text-gemini-dark-gray mb-2 line-clamp-2">
+                    <h3 className="text-xl font-semibold text-brand-dark mb-2 line-clamp-2">
                       {event.title.rendered || event.title}
                     </h3>
                     <p className="text-gray-600 mb-4">{formatTribeDate(event.start_date)}</p>
-                    <span className="text-gemini-blue font-medium group-hover:underline">
+                    <span className="text-accent font-bold group-hover:underline">
                       Learn More →
                     </span>
                   </div>
@@ -298,7 +300,7 @@ export default function Home() {
             href="https://youkeepmoving.com/events"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block px-12 py-4 bg-gemini-blue text-white font-medium text-lg rounded-full hover:bg-gemini-blue/90 transition"
+            className="inline-block px-12 py-4 bg-accent text-brand-dark font-bold text-lg rounded-full hover:bg-accent/90 transition shadow-xl"
           >
             Full Event Calendar →
           </a>
@@ -306,20 +308,20 @@ export default function Home() {
       </section>
 
       {/* CTA Footer */}
-      <section className="py-20 md:py-32 bg-gemini-dark-gray text-white text-center px-6">
+      <section className="py-20 md:py-32 bg-brand-dark text-white text-center px-6">
         <h2 className="text-4xl md:text-5xl font-bold mb-8">
           Ready to Elevate Your Race?
         </h2>
         <div className="flex flex-col sm:flex-row gap-8 justify-center items-center max-w-3xl mx-auto">
           <Link
             to="/services"
-            className="px-12 py-5 bg-white text-gemini-dark-gray font-semibold text-xl rounded-full hover:bg-gray-100 transition"
+            className="px-12 py-5 bg-white text-brand-dark font-bold text-xl rounded-full hover:bg-gray-100 transition shadow-xl"
           >
             Request Timing Services
           </Link>
           <Link
             to="/products"
-            className="px-12 py-5 border-2 border-white text-white font-semibold text-xl rounded-full hover:bg-white hover:text-gemini-dark-gray transition"
+            className="px-12 py-5 border-2 border-white text-white font-bold text-xl rounded-full hover:bg-white/20 transition backdrop-blur-sm"
           >
             Shop Race Gear
           </Link>

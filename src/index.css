@@ -1,6 +1,41 @@
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================= */
+/* BRAND COLOR PALETTE – Gemini Race Results     */
+/* Primary: #B22222 (Red)                         */
+/* Accent:  #48D1CC (Turquoise)                   */
+/* Light:   #F0F8FF (Ice Blue – backgrounds)     */
+/* Dark:    #263238 (Slate – text/headers)       */
+/* ============================================= */
+
+:root {
+  /* Core Brand Colors */
+  --brand-red: #B22222;
+  --brand-turquoise: #48D1CC;
+  --brand-light: #F0F8FF;
+  --brand-dark: #263238;
+
+  /* Semantic Aliases – use these in your components */
+  --primary: var(--brand-red);
+  --accent: var(--brand-turquoise);
+  --bg-light: var(--brand-light);
+  --text-dark: var(--brand-dark);
+  --text-light: #ffffff;
+  --text-muted: #666666;
+  --border-subtle: rgba(178, 34, 34, 0.15); /* For shadows/borders using red */
+}
+
+/* Dark mode adjustments – maintain brand consistency */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-dark: #ffffff;
+    --bg-light: #263238;
+    --text-muted: #94a3b8;
+  }
+}
 
 /* Global Reset – Fixes the ½ inch left shift and ensures full-screen layouts */
 html,
@@ -17,6 +52,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-synthesis: none;
+  background-color: var(--bg-light);
+  color: var(--text-dark);
 }
 
 #root {
@@ -52,13 +89,14 @@ button:focus-visible {
 /* Light/Dark mode overrides – cleaned up */
 @media (prefers-color-scheme: light) {
   :root {
-    color: #213547;
+    color: var(--text-dark);
     background-color: #ffffff;
   }
 }
+
 @media (prefers-color-scheme: dark) {
   :root {
-    color: rgba(255, 255, 255, 0.87);
+    color: var(--text-dark);
     background-color: #242424;
   }
 }
@@ -66,16 +104,16 @@ button:focus-visible {
 /* ============================================= */
 /* NEW: Padding for fixed navbar — CRITICAL FIX */
 /* ============================================= */
-/* Add top padding to main content so it starts below the fixed navbar */
 main {
   padding-top: 160px; /* Mobile: generous space for search bar + logo */
 }
+
 @media (min-width: 768px) {
   main {
     padding-top: 140px; /* Desktop: slightly less since search bar is inline */
   }
 }
-/* Optional: Extra breathing room on very large screens */
+
 @media (min-width: 1024px) {
   main {
     padding-top: 130px;
@@ -83,7 +121,7 @@ main {
 }
 
 /* ============================================= */
-/* NEW: Infinite Horizontal Carousel Animation   */
+/* NEW: Infinite Horizontal Carousel Animation */
 /* For the Upcoming Events section on ParticipantPage */
 /* ============================================= */
 @keyframes scroll {
@@ -105,8 +143,8 @@ main {
 }
 
 /* ============================================= */
-/* NEW: Hide Scrollbar (but keep scrolling)     */
-/* Applied to the carousel container            */
+/* NEW: Hide Scrollbar (but keep scrolling) */
+/* Applied to the carousel container */
 /* ============================================= */
 .scrollbar-hide {
   -ms-overflow-style: none; /* IE and Edge */
