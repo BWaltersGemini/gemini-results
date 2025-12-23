@@ -16,7 +16,7 @@ const ordinal = (n) => {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
-export default function EmailCampaignsAdmin() {
+export default function EmailCampaignsAdmin({ eventLogos = {} }) {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [results, setResults] = useState([]);
@@ -41,7 +41,7 @@ export default function EmailCampaignsAdmin() {
       <p>We're so proud of you — keep moving!</p>
       <hr style="border: 1px solid #eee; margin: 30px 0;" />
       <p style="font-size: 16px;"><strong>Upcoming Events You Might Love:</strong></p>
-      <p style="color: #666;">(Coming soon — smart recommendations based on your race distance and location)</p>
+      <p style="color: #666;">(Coming soon — smart recommendations)</p>
       <p style="margin-top: 40px; color: #666; font-size: 14px;">
         — The Gemini Timing Team<br>
         <a href="https://geminitiming.com" style="color: #2563eb;">geminitiming.com</a>
@@ -105,7 +105,7 @@ export default function EmailCampaignsAdmin() {
   const replacePlaceholders = (template, person, participant, event) => {
     if (!person || !participant || !event) return template;
 
-    const logo = eventLogos?.[event.id] || '';
+    const logo = eventLogos[event.id] || '/GRR.png'; // ← Backup logo from public folder
 
     return template
       .replace(/{{first_name}}/g, person.firstName || '')
@@ -116,7 +116,7 @@ export default function EmailCampaignsAdmin() {
       .replace(/{{race_name}}/g, participant.race_name || event.name || '')
       .replace(/{{event_name}}/g, event.name || '')
       .replace(/{{event_date}}/g, new Date(event.start_time * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
-      .replace(/{{event_logo}}/g, logo || 'https://via.placeholder.com/300x100?text=Event+Logo');
+      .replace(/{{event_logo}}/g, logo);
   };
 
   const sendTestEmail = async () => {
@@ -131,7 +131,7 @@ export default function EmailCampaignsAdmin() {
 
     setTestSending(true);
     try {
-      const samplePerson = emailList[0] || { firstName: 'Test', fullName: 'Test User', email: testEmail };
+      const samplePerson = emailList[0] || { firstName: 'Test', fullName: 'Test User' };
       const sampleParticipant = results[0] || {};
 
       const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent);
@@ -223,7 +223,7 @@ export default function EmailCampaignsAdmin() {
 
       <h2 className="text-4xl font-bold text-gemini-dark-gray mb-8">Email Campaigns</h2>
 
-      {/* 1. Select Event */}
+      {/* Event Selection */}
       <div className="bg-white rounded-2xl shadow-lg p-8">
         <h3 className="text-2xl font-bold mb-6">1. Select Event</h3>
         {loadingEvents ? <p>Loading...</p> : (
@@ -236,7 +236,7 @@ export default function EmailCampaignsAdmin() {
         )}
       </div>
 
-      {/* 2. Build List */}
+      {/* Build List */}
       {selectedEvent && (
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h3 className="text-2xl font-bold mb-6">2. Build Email List</h3>
@@ -257,7 +257,7 @@ export default function EmailCampaignsAdmin() {
         </div>
       )}
 
-      {/* 3. Template Editor + Preview + Send */}
+      {/* Template + Send */}
       {emailList.length > 0 && (
         <>
           <div className="bg-white rounded-2xl shadow-lg p-8">
@@ -276,17 +276,15 @@ export default function EmailCampaignsAdmin() {
             {/* Preview */}
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <h3 className="text-2xl font-bold mb-6">Live Preview</h3>
-              {results.length > 0 && (
-                <div
-                  className="border rounded-xl p-6 bg-gray-50 prose max-w-none"
-                  dangerouslySetInnerHTML={{
-                    __html: replacePlaceholders(html, emailList[0], results[0], selectedEvent)
-                  }}
-                />
-              )}
+              <div
+                className="border rounded-xl p-6 bg-gray-50 prose max-w-none"
+                dangerouslySetInnerHTML={{
+                  __html: replacePlaceholders(html, emailList[0] || {}, results[0] || {}, selectedEvent)
+                }}
+              />
             </div>
 
-            {/* Send Controls */}
+            {/* Send */}
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <h3 className="text-2xl font-bold mb-6">Send Emails</h3>
               <p className="text-xl mb-8">Ready to send to <strong>{emailList.length}</strong> participants</p>

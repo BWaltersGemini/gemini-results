@@ -8,7 +8,7 @@ import { createAdminSupabaseClient } from '../../supabaseClient';
 const EventsAdmin = lazy(() => import('./EventsAdmin'));
 const MastersAdmin = lazy(() => import('./MastersAdmin'));
 const PerformanceAdmin = lazy(() => import('./PerformanceAdmin'));
-const EmailCampaignsAdmin = lazy(() => import('./EmailCampaignsAdmin')); // ← NEW
+const EmailCampaignsAdmin = lazy(() => import('./EmailCampaignsAdmin'));
 
 export default function AdminDashboard() {
   // Login state
@@ -27,7 +27,7 @@ export default function AdminDashboard() {
   const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
 
   // UI state
-  const [activeTab, setActiveTab] = useState('events'); // events | masters | performance | website | email
+  const [activeTab, setActiveTab] = useState('events');
   const [saveStatus, setSaveStatus] = useState('');
 
   const adminSupabase = createAdminSupabaseClient();
