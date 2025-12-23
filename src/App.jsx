@@ -1,4 +1,4 @@
-// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop + Kiosk Mode routes)
+// src/App.jsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
@@ -14,9 +14,7 @@ import Contact from './pages/Contact';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ParticipantPage from './pages/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
-import ResultsKiosk from './pages/ResultsKiosk'; // ← NEW: Kiosk Mode
-
-// Import react-ga4 for Google Analytics 4
+import ResultsKiosk from './pages/ResultsKiosk';
 import ReactGA from 'react-ga4';
 
 const queryClient = new QueryClient({
@@ -29,10 +27,8 @@ const queryClient = new QueryClient({
   },
 });
 
-// Initialize GA4 once (replace with your actual Measurement ID if different)
 ReactGA.initialize('G-3Y6ME9XWPR');
 
-// Component to track page views on route changes
 function AnalyticsTracker() {
   const location = useLocation();
   useEffect(() => {
@@ -45,27 +41,34 @@ function AnalyticsTracker() {
   return null;
 }
 
+// Layout wrapper to hide Navbar & Footer on kiosk routes
+function Layout({ children }) {
+  const location = useLocation();
+  const isKiosk = location.pathname.startsWith('/kiosk');
+
+  return (
+    <>
+      {!isKiosk && <Navbar />}
+      <ScrollToTop />
+      <AnalyticsTracker />
+      <main className="flex-grow">{children}</main>
+      {!isKiosk && <Footer />}
+    </>
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RaceProvider>
         <Router>
           <div className="min-h-screen flex flex-col">
-            <Navbar />
-
-            {/* Ensures scroll to top on navigation */}
-            <ScrollToTop />
-
-            {/* Tracks page views on every route change */}
-            <AnalyticsTracker />
-
-            <main className="flex-grow">
+            <Layout>
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/contact" element={<Contact />} />
-
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/master-events" element={<MasterEvents />} />
 
@@ -79,10 +82,7 @@ export default function App() {
                 />
                 <Route path="/participant" element={<ParticipantPage />} />
 
-                {/* Kiosk Mode — Event-Specific */}
-		<Route path="/kiosk" element={<ResultsKiosk />} />
-
-                {/* Optional: Generic kiosk fallback (shows error if no event matched) */}
+                {/* Kiosk Mode - full screen, no navbar/footer */}
                 <Route path="/kiosk" element={<ResultsKiosk />} />
 
                 <Route
@@ -97,9 +97,7 @@ export default function App() {
                   }
                 />
               </Routes>
-            </main>
-
-            <Footer />
+            </Layout>
           </div>
         </Router>
       </RaceProvider>

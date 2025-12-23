@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// Updated: Reliable event selection + console debugging + forgiving results filter
+// Kiosk Mode with Access Pin → Event Select → Set Exit Pin → Full Kiosk
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -19,13 +19,12 @@ export default function ResultsKiosk() {
     loadingResults,
   } = useContext(RaceContext);
 
-  // Kiosk state machine
-  const [stage, setStage] = useState('access-pin'); // access-pin | event-select | set-exit-pin | kiosk
+  const [stage, setStage] = useState('access-pin');
   const [accessPinInput, setAccessPinInput] = useState('');
   const [exitPin, setExitPin] = useState('');
   const [exitPinConfirm, setExitPinConfirm] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [participant, setParticipant] = useState(null); // null | object | 'not-found'
+  const [participant, setParticipant] = useState(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [countdown, setCountdown] = useState(null);
   const [showExitPinModal, setShowExitPinModal] = useState(false);
@@ -34,10 +33,9 @@ export default function ResultsKiosk() {
   const timeoutRef = useRef(null);
   const AUTO_RESET_SECONDS = 10;
 
-  // Load from .env (add VITE_KIOSK_ACCESS_PIN to Vercel settings!)
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
-  // Restore session if returning
+  // Restore kiosk session
   useEffect(() => {
     const stored = sessionStorage.getItem('kioskExitPin');
     if (stored && selectedEvent) {
@@ -48,13 +46,12 @@ export default function ResultsKiosk() {
 
   // Debug logs
   useEffect(() => {
-    console.log('[Kiosk Debug] Events loaded:', events.length);
-    console.log('[Kiosk Debug] Results loaded:', results.length);
-    console.log('[Kiosk Debug] Selected event:', selectedEvent?.name || 'none');
-    console.log('[Kiosk Debug] Current stage:', stage);
+    console.log('[Kiosk] Events:', events.length);
+    console.log('[Kiosk] Results:', results.length);
+    console.log('[Kiosk] Selected Event:', selectedEvent?.name || 'none');
+    console.log('[Kiosk] Stage:', stage);
   }, [events, results, selectedEvent, stage]);
 
-  // Helpers
   const formatTime = (timeStr) => (timeStr?.trim() ? timeStr.trim() : '—');
   const formatPlace = (place) =>
     !place ? '—' : place === 1 ? '1st' : place === 2 ? '2nd' : place === 3 ? '3rd' : `${place}th`;
@@ -68,13 +65,9 @@ export default function ResultsKiosk() {
     });
   };
 
-  const getEventDisplayName = () => {
-    return selectedEvent?.name || 'Race Results';
-  };
-
+  const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
   const logoUrl = selectedEvent ? eventLogos[selectedEvent.id] || null : null;
 
-  // Search
   const performSearch = (query) => {
     if (!query.trim()) {
       setParticipant(null);
@@ -99,7 +92,6 @@ export default function ResultsKiosk() {
   const startCountdown = () => {
     setCountdown(AUTO_RESET_SECONDS);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
     const interval = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -120,13 +112,11 @@ export default function ResultsKiosk() {
     document.getElementById('kiosk-search-input')?.focus();
   };
 
-  // Focus inputs
   useEffect(() => {
     if (stage === 'access-pin') document.getElementById('access-pin-input')?.focus();
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // Lock navigation in kiosk mode
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const handlePopState = (e) => {
@@ -152,29 +142,25 @@ export default function ResultsKiosk() {
     }
   };
 
-  // Block shortcuts
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const block = (e) => {
-      if (e.key === 'Backspace' || (e.metaKey && e.key.toLowerCase() === 'r')) {
-        e.preventDefault();
-      }
+      if (e.key === 'Backspace' || (e.metaKey && e.key.toLowerCase() === 'r')) e.preventDefault();
     };
     window.addEventListener('keydown', block);
     return () => window.removeEventListener('keydown', block);
   }, [stage]);
 
-  // === RENDER STAGES ===
+  // === RENDER ===
 
-  // 1. Access Pin
   if (stage === 'access-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex items-center justify-center p-8">
-        <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-16 max-w-md w-full text-center">
-          <h1 className="text-5xl font-black text-gemini-dark-gray mb-12">
+        <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-12 max-w-sm w-full text-center">
+          <h1 className="text-4xl font-black text-gemini-dark-gray mb-8">
             Timing Team Access
           </h1>
-          <p className="text-2xl text-gray-700 mb-12">
+          <p className="text-xl text-gray-700 mb-8">
             Enter Access Pin to configure kiosk
           </p>
           <input
@@ -188,7 +174,7 @@ export default function ResultsKiosk() {
                 setStage('event-select');
               }
             }}
-            className="w-full text-6xl text-center tracking-widest px-8 py-8 border-4 border-gemini-blue rounded-2xl mb-12"
+            className="w-full text-5xl text-center tracking-widest px-8 py-6 border-4 border-gemini-blue rounded-2xl mb-8"
             autoFocus
           />
           <button
@@ -201,7 +187,7 @@ export default function ResultsKiosk() {
                 setAccessPinInput('');
               }
             }}
-            className="px-16 py-8 bg-gemini-blue text-white text-4xl font-bold rounded-full hover:scale-105 transition shadow-xl"
+            className="px-14 py-6 bg-gemini-blue text-white text-3xl font-bold rounded-full hover:scale-105 transition shadow-xl"
           >
             Enter
           </button>
@@ -210,16 +196,8 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 2. Event Select — now shows ALL events, with live participant count
   if (stage === 'event-select') {
-    // Sort all events by most recent first
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
-    console.log('[Kiosk Event Select] Total events available:', sortedEvents.length);
-    sortedEvents.forEach(e => {
-      const count = results.filter(r => r.event_id === e.id).length;
-      console.log(`[Kiosk Event] ${e.name} (ID: ${e.id}) — ${count} results`);
-    });
 
     return (
       <div className="fixed inset-0 bg-gray-50 flex flex-col">
@@ -229,15 +207,13 @@ export default function ResultsKiosk() {
         <div className="flex-1 overflow-y-auto p-8">
           {sortedEvents.length === 0 ? (
             <div className="text-center py-20">
-              <p className="text-3xl text-gray-600">No events loaded yet. Refresh page.</p>
+              <p className="text-3xl text-gray-600">No events loaded yet.</p>
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
               {sortedEvents.map((event) => {
                 const count = results.filter((r) => r.event_id === event.id).length;
                 const logo = eventLogos[event.id];
-                const isLoading = count === 0 && loadingResults;
-
                 return (
                   <button
                     key={event.id}
@@ -245,17 +221,13 @@ export default function ResultsKiosk() {
                       setSelectedEvent(event);
                       setStage('set-exit-pin');
                     }}
-                    className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl hover:scale-105 transition text-left relative"
+                    className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl hover:scale-105 transition text-left"
                   >
-                    {logo && (
-                      <img src={logo} alt="Logo" className="max-h-32 mx-auto mb-6 object-contain" />
-                    )}
-                    <h3 className="text-2xl font-bold text-gemini-dark-gray mb-3">
-                      {event.name}
-                    </h3>
+                    {logo && <img src={logo} alt="Logo" className="max-h-32 mx-auto mb-6 object-contain" />}
+                    <h3 className="text-2xl font-bold text-gemini-dark-gray mb-3">{event.name}</h3>
                     <p className="text-xl text-gray-600 mb-2">{formatDate(event.start_time)}</p>
                     <p className="text-lg font-medium text-gemini-blue">
-                      {isLoading ? 'Loading results...' : `${count} ${count === 1 ? 'finisher' : 'finishers'}`}
+                      {count > 0 ? `${count} ${count === 1 ? 'finisher' : 'finishers'}` : 'Results loading...'}
                     </p>
                   </button>
                 );
@@ -267,15 +239,12 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 3. Set Exit Pin
   if (stage === 'set-exit-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-gemini-blue to-gemini-blue/80 flex items-center justify-center p-8">
-        <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-16 max-w-md w-full text-center">
-          <h1 className="text-5xl font-black text-gemini-dark-gray mb-12">
-            Lock This iPad
-          </h1>
-          <p className="text-2xl text-gray-700 mb-12">
+        <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-12 max-w-sm w-full text-center">
+          <h1 className="text-4xl font-black text-gemini-dark-gray mb-8">Lock This iPad</h1>
+          <p className="text-xl text-gray-700 mb-8">
             Create a 4-digit PIN to exit kiosk mode later
           </p>
           <input
@@ -283,7 +252,7 @@ export default function ResultsKiosk() {
             placeholder="Enter PIN"
             value={exitPin}
             onChange={(e) => setExitPin(e.target.value.slice(0, 4))}
-            className="w-full text-6xl text-center tracking-widest px-8 py-8 border-4 border-gemini-blue rounded-2xl mb-8"
+            className="w-full text-5xl text-center tracking-widest px-8 py-6 border-4 border-gemini-blue rounded-2xl mb-6"
             autoFocus
           />
           <input
@@ -297,7 +266,7 @@ export default function ResultsKiosk() {
                 setStage('kiosk');
               }
             }}
-            className="w-full text-6xl text-center tracking-widest px-8 py-8 border-4 border-gemini-blue rounded-2xl mb-12"
+            className="w-full text-5xl text-center tracking-widest px-8 py-6 border-4 border-gemini-blue rounded-2xl mb-8"
           />
           <button
             onClick={() => {
@@ -308,7 +277,7 @@ export default function ResultsKiosk() {
                 alert('PINs must match and be 4 digits');
               }
             }}
-            className="px-16 py-8 bg-gemini-blue text-white text-4xl font-bold rounded-full hover:scale-105 transition shadow-xl"
+            className="px-14 py-6 bg-gemini-blue text-white text-3xl font-bold rounded-full hover:scale-105 transition shadow-xl"
           >
             Start Kiosk
           </button>
@@ -317,7 +286,7 @@ export default function ResultsKiosk() {
     );
   }
 
-  // 4. Full Kiosk Mode
+  // Full Kiosk Mode
   return (
     <>
       {showConfetti && <Confetti recycle={false} numberOfPieces={400} gravity={0.15} />}
@@ -422,19 +391,16 @@ export default function ResultsKiosk() {
         )}
       </div>
 
-      {/* Exit PIN Modal */}
       {showExitPinModal && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl p-12 text-center max-w-md">
-            <h3 className="text-4xl font-bold text-gemini-dark-gray mb-8">
-              Enter Exit PIN
-            </h3>
+          <div className="bg-white rounded-3xl p-12 text-center max-w-sm">
+            <h3 className="text-4xl font-bold text-gemini-dark-gray mb-8">Enter Exit PIN</h3>
             <input
               type="password"
               value={exitPinInput}
               onChange={(e) => setExitPinInput(e.target.value.slice(0, 4))}
               onKeyDown={(e) => e.key === 'Enter' && handleExitPinSubmit()}
-              className="text-6xl text-center tracking-widest px-8 py-6 border-4 border-gemini-blue rounded-2xl mb-8"
+              className="text-5xl text-center tracking-widest px-8 py-6 border-4 border-gemini-blue rounded-2xl mb-8"
               autoFocus
             />
             <div className="space-x-6">
