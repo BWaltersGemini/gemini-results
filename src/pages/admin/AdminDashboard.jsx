@@ -27,7 +27,7 @@ export default function AdminDashboard() {
   const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
 
   // UI state
-  const [activeTab, setActiveTab] = useState('events'); // events | masters | performance | website | email ← NEW
+  const [activeTab, setActiveTab] = useState('events'); // events | masters | performance | website | email
   const [saveStatus, setSaveStatus] = useState('');
 
   const adminSupabase = createAdminSupabaseClient();
@@ -231,7 +231,6 @@ export default function AdminDashboard() {
                   multiple
                   accept="image/*"
                   onChange={(e) => {
-                    // Simple placeholder - full upload logic can be added later
                     console.log('Ad upload:', e.target.files);
                   }}
                   className="mb-6 block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white"
@@ -246,7 +245,8 @@ export default function AdminDashboard() {
               </div>
             </section>
           )}
-          {activeTab === 'email' && <EmailCampaignsAdmin />}
+          {/* FIXED: Pass eventLogos to EmailCampaignsAdmin */}
+          {activeTab === 'email' && <EmailCampaignsAdmin eventLogos={eventLogos} />}
         </Suspense>
 
         {/* Global Save Button */}
