@@ -1,11 +1,8 @@
 // src/api/chronotrackapi.js
-// FINAL PRODUCTION VERSION — December 2025
-// • CONF = valid finisher (displayed in main results)
-// • DNF/DQ = shown in separate "Did Not Finish" collapsible table
-// • Full splits preserved
-// • Safe bracket fetching (no infinite loops)
-// • Batched entry_status calls (safe for 20k+ events)
-// • Returns { finishers, nonFinishers } for ResultsPage
+// FINAL — Stores both finishers and DNFs in Supabase
+// • CONF/FIN = ranked finishers (main results)
+// • DNF/DQ = stored with partial data, no rankings (shown in collapsible section)
+// • Safe for 20k+ events
 
 import axios from 'axios';
 
@@ -107,7 +104,6 @@ export const fetchRacesForEvent = async (eventId) => {
   }));
 };
 
-// SAFE BRACKET FETCHER
 const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   let allResults = [];
   let page = 1;
@@ -130,10 +126,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
 
       const results = res.data.bracket_results || [];
 
-      if (results.length === 0) {
-        console.log(`[ChronoTrack] ${bracketName} — empty page ${page}, stopping`);
-        break;
-      }
+      if (results.length === 0) break;
 
       const newResults = [];
       for (const r of results) {
@@ -161,11 +154,9 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
     }
   }
 
-  console.log(`[ChronoTrack] ${bracketName} FINAL: ${allResults.length} unique results`);
   return allResults;
 };
 
-// BATCHED ENTRY STATUS FETCH — safe for large events
 const fetchEntryStatusesInBatches = async (entryIds) => {
   if (entryIds.length === 0) return {};
 
@@ -193,7 +184,7 @@ const fetchEntryStatusesInBatches = async (entryIds) => {
           return { entryId, status: 'NOT_FOUND' };
         }
         console.warn(`[ChronoTrack] Entry status fetch failed for ${entryId}:`, err.message);
-        return { entryId, status: 'FIN' }; // Safe fallback
+        return { entryId, status: 'FIN' };
       }
     });
 
@@ -228,7 +219,6 @@ export const fetchResultsForEvent = async (eventId) => {
       distance: race.race_distance,
       distance_unit: race.race_distance_unit,
     }));
-    console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races`);
   } catch (err) {
     console.warn('[ChronoTrack] Failed to fetch races', err);
   }
@@ -243,7 +233,6 @@ export const fetchResultsForEvent = async (eventId) => {
       },
     });
     allBrackets = bracketsResponse.data.event_bracket || [];
-    console.log(`[ChronoTrack] Found ${allBrackets.length} total brackets`);
   } catch (err) {
     console.error('[ChronoTrack] Failed to fetch brackets', err);
     throw err;
@@ -262,11 +251,7 @@ export const fetchResultsForEvent = async (eventId) => {
     return b.bracket_wants_leaderboard === '1' && (name.includes('overall') || name.includes('all participants'));
   });
 
-  console.log(`[ChronoTrack] Processing ${genderBrackets.length} gender brackets`);
-  console.log(`[ChronoTrack] Processing ${divisionBrackets.length} division brackets`);
-  console.log(`[ChronoTrack] Processing ${overallBrackets.length} overall brackets`);
-
-  // === FETCH ALL INTERVALS ===
+  // Fetch intervals
   let rawIntervalResults = [];
   let page = 1;
   const maxPages = 40;
@@ -287,7 +272,6 @@ export const fetchResultsForEvent = async (eventId) => {
       if (results.length < 500) break;
       page++;
     }
-    console.log(`[ChronoTrack] Fetched ${rawIntervalResults.length} raw interval rows (interval=ALL)`);
   } catch (err) {
     console.error('[ChronoTrack] Failed to fetch intervals', err);
     throw err;
@@ -304,12 +288,11 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // Gender brackets — only full course
+  // Bracket processing (unchanged)
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
-    console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName})`);
 
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `GENDER "${name}"`, raceName);
 
@@ -321,7 +304,6 @@ export const fetchResultsForEvent = async (eventId) => {
     });
   }
 
-  // Division brackets — only full course
   for (const bracket of divisionBrackets) {
     const name = (bracket.bracket_name || '').trim();
     if (!name) continue;
@@ -330,7 +312,6 @@ export const fetchResultsForEvent = async (eventId) => {
 
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
-    console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName})`);
 
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `DIVISION "${name}"`, raceName);
 
@@ -343,7 +324,6 @@ export const fetchResultsForEvent = async (eventId) => {
     });
   }
 
-  // Overall fallback — only full course
   for (const bracket of overallBrackets) {
     const name = (bracket.bracket_name || '').trim();
     const raceId = bracket.race_id || 'unknown';
@@ -364,7 +344,7 @@ export const fetchResultsForEvent = async (eventId) => {
     });
   }
 
-  // === GROUP CANDIDATES BY ENTRY_ID ===
+  // Group by entry_id
   const participantsByEntry = {};
   rawIntervalResults.forEach(row => {
     const entryId = row.results_entry_id;
@@ -385,11 +365,9 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   });
 
-  // Candidates = anyone with a full course row
   const candidates = Object.values(participantsByEntry).filter(p => p.fullCourse !== null);
   const entryIds = candidates.map(p => p.fullCourse.results_entry_id).filter(Boolean);
 
-  // Fetch official status
   const entryStatuses = await fetchEntryStatusesInBatches(entryIds);
 
   const finishers = [];
@@ -445,20 +423,39 @@ export const fetchResultsForEvent = async (eventId) => {
       country,
       splits,
       entry_id: entryId || null,
-      _status: status, // internal debug
+      _status: status,
     };
 
     if (['DNF', 'DQ'].includes(status)) {
-      // Clear rankings
       participant.place = null;
       participant.gender_place = null;
       participant.age_group_place = null;
       nonFinishers.push(participant);
     } else {
-      // CONF and FIN are valid
       finishers.push(participant);
     }
   });
+
+  // Store BOTH in Supabase
+  const allToStore = [...finishers, ...nonFinishers];
+  if (allToStore.length > 0) {
+    const uniqueMap = new Map();
+    allToStore.forEach(record => {
+      const key = record.entry_id || `${record.event_id}-${record.bib}`;
+      uniqueMap.set(key, record);
+    });
+    const finalToStore = Array.from(uniqueMap.values());
+
+    const { error } = await supabase
+      .from('chronotrack_results')
+      .upsert(finalToStore, { onConflict: 'event_id,entry_id' });
+
+    if (error) {
+      console.error('[ChronoTrack] Upsert failed:', error);
+    } else {
+      console.log(`[ChronoTrack] Stored ${finishers.length} finishers + ${nonFinishers.length} DNF/DQ in Supabase`);
+    }
+  }
 
   console.log(`[ChronoTrack] Final: ${finishers.length} finishers | ${nonFinishers.length} DNF/DQ`);
 

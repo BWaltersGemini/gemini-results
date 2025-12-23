@@ -1,4 +1,5 @@
-// src/context/RaceContext.jsx (FINAL — Supports finishers + nonFinishers object)
+// src/context/RaceContext.jsx
+// FINAL — Continuous Auto-Looping Live Polling + Deletion Support + Supports finishers + nonFinishers object
 import { createContext, useState, useEffect } from 'react';
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
@@ -10,16 +11,14 @@ export function RaceProvider({ children }) {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [races, setRaces] = useState([]);
-  const [results, setResults] = useState({ finishers: [], nonFinishers: [] }); // ← Now an object
+  const [results, setResults] = useState({ finishers: [], nonFinishers: [] });
   const [loading, setLoading] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [error, setError] = useState(null);
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
-
   // Admin-triggered forced refresh
   const [resultsVersion, setResultsVersion] = useState(0);
-
   // Global config — loaded fresh from Supabase
   const [masterGroups, setMasterGroups] = useState({});
   const [editedEvents, setEditedEvents] = useState({});
@@ -28,10 +27,8 @@ export function RaceProvider({ children }) {
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [ads, setAds] = useState([]);
   const [hiddenRaces, setHiddenRaces] = useState({});
-
   // Per-event live auto-fetch toggle (default ON)
   const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
-
   // Load global config fresh on mount
   useEffect(() => {
     const loadConfig = async () => {
@@ -43,12 +40,12 @@ export function RaceProvider({ children }) {
       setShowAdsPerMaster(config.showAdsPerMaster || {});
       setAds(config.ads || []);
       setHiddenRaces(config.hiddenRaces || {});
+      // Load per-event live auto-fetch settings — defaults to true
       setLiveAutoFetchPerEvent(config.liveAutoFetchPerEvent || {});
       console.log('[RaceContext] Fresh global config loaded from Supabase');
     };
     loadConfig();
   }, []);
-
   // Load all events from ChronoTrack
   useEffect(() => {
     let aborted = false;
@@ -73,7 +70,6 @@ export function RaceProvider({ children }) {
     loadEvents();
     return () => { aborted = true; };
   }, []);
-
   // Load races for selected event
   useEffect(() => {
     if (!selectedEvent) {
@@ -132,7 +128,6 @@ export function RaceProvider({ children }) {
     loadRaces();
     return () => { aborted = true; };
   }, [selectedEvent]);
-
   // Results loading + continuous auto-looping live polling
   useEffect(() => {
     if (!selectedEvent) {
@@ -151,15 +146,20 @@ export function RaceProvider({ children }) {
     const isRaceDayFallback = !endTime && startDateStr === todayStr;
     const isLive = isActiveWindow || isRaceDayFallback;
     const isAutoFetchEnabled = liveAutoFetchPerEvent[selectedEvent.id] !== false;
-
-    console.log(`[RaceContext] Live detection for event ${selectedEvent.id}: isLive=${isLive}, autoFetch=${isAutoFetchEnabled}`);
-
+    console.log(`[RaceContext] Live detection for event ${selectedEvent.id} (${selectedEvent.name || 'Unknown'}):`,
+      `\n Current time: ${new Date(now * 1000).toLocaleString()}`,
+      `\n Start time: ${startTime ? new Date(startTime * 1000).toLocaleString() : 'null'}`,
+      `\n End time: ${endTime ? new Date(endTime * 1000).toLocaleString() : 'null'}`,
+      `\n Active window: ${isActiveWindow}`,
+      `\n Race day fallback: ${isRaceDayFallback}`,
+      `\n → isLive: ${isLive}`,
+      `\n Auto-fetch enabled: ${isAutoFetchEnabled}`
+    );
     if (!aborted) setIsLiveRace(isLive);
-
     const loadResults = async (forceFresh = false) => {
       if (aborted) return;
       try {
-        // Load cached finishers for instant UI
+        // Load cache first for instant UI
         let cachedFinishers = [];
         let start = 0;
         const pageSize = 1000;
@@ -178,35 +178,59 @@ export function RaceProvider({ children }) {
           setResults({ finishers: cachedFinishers, nonFinishers: [] });
           console.log(`[RaceContext] Displaying cached finishers (${cachedFinishers.length} rows)`);
         }
-
         if (forceFresh) {
           console.log('[RaceContext] Starting background live fetch from ChronoTrack...');
-          const fresh = await fetchResultsForEvent(selectedEvent.id); // ← Now returns { finishers, nonFinishers }
-
-          if (fresh && (fresh.finishers.length > 0 || fresh.nonFinishers.length > 0)) {
-            // Upsert only finishers into Supabase (DNFs not stored)
-            const toUpsert = fresh.finishers.map(r => ({
-              event_id: selectedEvent.id,
-              entry_id: r.entry_id ?? null,
-              race_id: r.race_id || null,
-              bib: r.bib || null,
-              first_name: r.first_name || null,
-              last_name: r.last_name || null,
-              gender: r.gender || null,
-              age: r.age ?? null,
-              city: r.city || null,
-              state: r.state || null,
-              country: r.country || null,
-              chip_time: r.chip_time || null,
-              clock_time: r.clock_time || null,
-              place: r.place ?? null,
-              gender_place: r.gender_place ?? null,
-              age_group_name: r.age_group_name || null,
-              age_group_place: r.age_group_place ?? null,
-              pace: r.pace || null,
-              splits: r.splits || [],
-              race_name: r.race_name ?? null,
-            }));
+          const fresh = await fetchResultsForEvent(selectedEvent.id);
+          if (fresh.finishers.length > 0 || fresh.nonFinishers.length > 0) {
+            // Upsert both finishers and nonFinishers
+            const toUpsert = [
+              ...fresh.finishers.map(r => ({
+                event_id: selectedEvent.id,
+                entry_id: r.entry_id ?? null,
+                race_id: r.race_id || null,
+                bib: r.bib || null,
+                first_name: r.first_name || null,
+                last_name: r.last_name || null,
+                gender: r.gender || null,
+                age: r.age ?? null,
+                city: r.city || null,
+                state: r.state || null,
+                country: r.country || null,
+                chip_time: r.chip_time || null,
+                clock_time: r.clock_time || null,
+                place: r.place ?? null,
+                gender_place: r.gender_place ?? null,
+                age_group_name: r.age_group_name || null,
+                age_group_place: r.age_group_place ?? null,
+                pace: r.pace || null,
+                splits: r.splits || [],
+                race_name: r.race_name ?? null,
+                _status: 'FIN',
+              })),
+              ...fresh.nonFinishers.map(r => ({
+                event_id: selectedEvent.id,
+                entry_id: r.entry_id ?? null,
+                race_id: r.race_id || null,
+                bib: r.bib || null,
+                first_name: r.first_name || null,
+                last_name: r.last_name || null,
+                gender: r.gender || null,
+                age: r.age ?? null,
+                city: r.city || null,
+                state: r.state || null,
+                country: r.country || null,
+                chip_time: r.chip_time || null,
+                clock_time: r.clock_time || null,
+                place: null,
+                gender_place: null,
+                age_group_name: r.age_group_name || null,
+                age_group_place: null,
+                pace: r.pace || null,
+                splits: r.splits || [],
+                race_name: r.race_name ?? null,
+                _status: 'DNF',
+              })),
+            ];
 
             if (toUpsert.length > 0) {
               const uniqueMap = new Map();
@@ -222,19 +246,19 @@ export function RaceProvider({ children }) {
 
               if (upsertError) {
                 console.error('[RaceContext] Upsert failed:', upsertError);
+              } else {
+                console.log('[RaceContext] Upsert successful');
               }
             }
 
-            // Always update UI with fresh finishers + nonFinishers
             if (!aborted) {
               setResults(fresh);
-              console.log(`[RaceContext] Live update: ${fresh.finishers.length} finishers, ${fresh.nonFinishers.length} DNF/DQ`);
+              console.log('[RaceContext] Live update complete');
             }
           } else {
             console.warn('[RaceContext] Fresh fetch returned no results');
           }
         }
-
         const divisions = [...new Set(cachedFinishers.map(r => r.age_group_name).filter(Boolean))].sort();
         if (!aborted) setUniqueDivisions(divisions);
       } catch (err) {
@@ -245,34 +269,33 @@ export function RaceProvider({ children }) {
         if (!forceFresh && !aborted) setLoadingResults(false);
       }
     };
-
     // Initial load
     loadResults(resultsVersion > 0);
-
-    // Continuous live polling
+    // Continuous auto-looping live polling
     const continuousLiveFetch = async () => {
       if (!isLive || !isAutoFetchEnabled || aborted) return;
       try {
+        console.log('[RaceContext] Starting next live fetch cycle...');
         await loadResults(true);
       } catch (err) {
         console.error('[RaceContext] Live fetch cycle error:', err);
       }
       setTimeout(continuousLiveFetch, 5000);
     };
-
     if (isLive && isAutoFetchEnabled) {
       continuousLiveFetch();
-      console.log('[RaceContext] Continuous live polling started');
+      console.log('[RaceContext] Continuous live polling started (5s delay between fetches)');
+    } else {
+      console.log(`[RaceContext] Live polling disabled for event ${selectedEvent.id} (isLive: ${isLive}, auto-fetch: ${isAutoFetchEnabled})`);
     }
-
-    return () => { aborted = true; };
+    return () => {
+      aborted = true;
+    };
   }, [selectedEvent, resultsVersion, liveAutoFetchPerEvent]);
-
   const refreshResults = () => {
     console.log('[RaceContext] Admin triggered forced refresh');
     setResultsVersion(prev => prev + 1);
   };
-
   return (
     <RaceContext.Provider
       value={{
@@ -280,7 +303,7 @@ export function RaceProvider({ children }) {
         selectedEvent,
         setSelectedEvent,
         races,
-        results, // Now { finishers, nonFinishers }
+        results,
         loading,
         loadingResults,
         error,

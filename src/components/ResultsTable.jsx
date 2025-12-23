@@ -1,4 +1,14 @@
-// src/components/ResultsTable.jsx (FINAL — Supports DNF styling + no rankings for DNFs)
+// src/components/ResultsTable.jsx
+// FINAL — Complete ResultsTable Component (December 2025)
+// Features:
+// • Clean main table for official finishers (ranked)
+// • Special styling for DNF/DQ table (red accent, no rankings)
+// • Mobile cards with clear "Did Not Finish" message
+// • Highlighted row support
+// • Pagination controls (desktop)
+// • Load more button (mobile)
+// • Fully compatible with new { finishers, nonFinishers } system
+
 import { useNavigate } from 'react-router-dom';
 
 export default function ResultsTable({
@@ -12,7 +22,7 @@ export default function ResultsTable({
   isMobile,
   highlightedBib,
   raceId,
-  isDnfTable = false, // New prop to detect if this is the DNF section
+  isDnfTable = false, // True when rendering the "Did Not Finish" section
 }) {
   const navigate = useNavigate();
 
@@ -55,17 +65,11 @@ export default function ResultsTable({
   const displayedData = data.slice(startIdx, endIdx);
   const pageOptions = [25, 50, 100, 200];
 
-  // Common row classes for DNF styling
-  const dnfRowClass = isDnfTable
-    ? 'bg-red-50 hover:bg-red-100 text-gray-600 italic'
-    : '';
-
   if (isMobile) {
     return (
       <div className="space-y-6">
         {displayedData.map((r) => {
           const isHighlighted = highlightedBib && String(r.bib) === String(highlightedBib);
-          const showRankings = !isDnfTable;
 
           return (
             <div
@@ -74,12 +78,12 @@ export default function ResultsTable({
               data-race-id={raceId}
               className={`bg-white rounded-3xl shadow-xl border-2 p-6 cursor-pointer transition-all duration-200 active:scale-98 ${
                 isHighlighted ? 'border-primary shadow-2xl ring-4 ring-primary/20' : 'border-gray-200'
-              } ${dnfRowClass}`}
+              } ${isDnfTable ? 'bg-red-50 border-red-300' : ''}`}
               onClick={() => handleRowClick(r)}
             >
               <div className="flex justify-between items-center mb-4">
                 <div className="text-4xl font-black text-primary">
-                  {showRankings && r.place ? formatPlace(r.place) : '—'}
+                  {isDnfTable ? 'DNF' : (r.place ? formatPlace(r.place) : '—')}
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-brand-dark">Bib {r.bib || '—'}</div>
@@ -90,7 +94,14 @@ export default function ResultsTable({
                 <span className="text-xl text-gray-400">→</span>
               </h3>
 
-              {showRankings ? (
+              {isDnfTable ? (
+                <div className="text-center py-4">
+                  <p className="text-2xl font-bold text-red-600">Did Not Finish</p>
+                  <p className="text-lg text-gray-600 mt-2">
+                    Last recorded time: {r.chip_time || '—'}
+                  </p>
+                </div>
+              ) : (
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div className="bg-primary/10 rounded-xl py-4">
                     <div className="text-2xl font-bold text-primary">{r.chip_time || '—'}</div>
@@ -100,11 +111,6 @@ export default function ResultsTable({
                     <div className="text-2xl font-bold text-brand-dark">{r.pace || '—'}</div>
                     <div className="text-sm text-gray-700">Pace</div>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-2xl font-bold text-red-600">Did Not Finish</p>
-                  <p className="text-lg text-gray-600 mt-2">Last recorded: {r.chip_time || '—'}</p>
                 </div>
               )}
             </div>
@@ -128,6 +134,7 @@ export default function ResultsTable({
   // Desktop Table
   return (
     <div>
+      {/* Pagination Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-8 px-6">
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={() => setCurrentPage(1)} disabled={safeCurrentPage === 1} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
@@ -161,6 +168,7 @@ export default function ResultsTable({
         </div>
       </div>
 
+      {/* Table */}
       <div className="overflow-x-auto -mx-6 px-6">
         <table className="w-full text-left">
           <thead className={`font-bold uppercase text-sm tracking-wider ${isDnfTable ? 'bg-red-100 text-red-800' : 'bg-primary/10 text-brand-dark'}`}>
@@ -183,7 +191,6 @@ export default function ResultsTable({
           <tbody className="divide-y divide-gray-200">
             {displayedData.map((r) => {
               const isHighlighted = highlightedBib && String(r.bib) === String(highlightedBib);
-              const showRankings = !isDnfTable;
 
               return (
                 <tr
@@ -192,11 +199,11 @@ export default function ResultsTable({
                   data-race-id={raceId}
                   className={`hover:bg-primary/5 cursor-pointer transition duration-200 group ${
                     isHighlighted ? 'bg-primary/10 font-bold ring-2 ring-primary/30' : ''
-                  } ${dnfRowClass}`}
+                  } ${isDnfTable ? 'bg-red-50' : ''}`}
                   onClick={() => handleRowClick(r)}
                 >
                   <td className="px-6 py-5 font-black text-xl text-primary">
-                    {showRankings && r.place ? formatPlace(r.place) : '—'}
+                    {isDnfTable ? 'DNF' : (r.place ? formatPlace(r.place) : '—')}
                   </td>
                   <td className="px-6 py-5 font-semibold text-lg text-brand-dark">{r.bib || '—'}</td>
                   <td className="px-6 py-5 font-semibold text-brand-dark group-hover:text-primary group-hover:underline transition">
@@ -205,12 +212,7 @@ export default function ResultsTable({
                       <span className="text-gray-400 text-sm opacity-0 group-hover:opacity-100 transition">→</span>
                     </span>
                   </td>
-                  {!showRankings && (
-                    <td colSpan="2" className="px-6 py-5 text-center text-red-600 font-bold italic">
-                      Did Not Finish
-                    </td>
-                  )}
-                  {showRankings && (
+                  {!isDnfTable && (
                     <>
                       <td className="px-6 py-5 font-medium text-brand-dark">
                         {r.gender_place ? formatPlace(r.gender_place) : '—'}
@@ -220,9 +222,7 @@ export default function ResultsTable({
                           <span>
                             {formatPlace(r.age_group_place)} {r.age_group_name || ''}
                           </span>
-                        ) : (
-                          '—'
-                        )}
+                        ) : '—'}
                       </td>
                     </>
                   )}
@@ -239,6 +239,7 @@ export default function ResultsTable({
         </table>
       </div>
 
+      {/* Bottom Pagination Info */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mt-12 px-6">
         <div className="text-lg text-brand-dark">
           Showing {startIdx + 1}–{endIdx} of {safeTotalResults} results
