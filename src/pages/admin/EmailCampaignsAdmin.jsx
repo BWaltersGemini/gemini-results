@@ -6,8 +6,7 @@ import { fetchEmailsForEntries } from '../../api/chronotrackAdminApi';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
-// Version banner
-console.log('%c🟢 EMAIL CAMPAIGNS v4.2 — FINAL POLISHED & PERFECT', 'color: white; background: #dc2626; font-size: 16px; padding: 8px; border-radius: 4px;');
+console.log('%c🟢 EMAIL CAMPAIGNS — SIMPLE & CLEAN STATS VERSION', 'color: white; background: #16a34a; font-size: 16px; padding: 8px; border-radius: 4px;');
 
 const ordinal = (n) => {
   if (!n) return '';
@@ -38,13 +37,12 @@ export default function EmailCampaignsAdmin() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [results, setResults] = useState([]);
   const [emailList, setEmailList] = useState([]);
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
   const [buildingList, setBuildingList] = useState(false);
   const [progress, setProgress] = useState({ processed: 0, total: 0, found: 0 });
 
-  const [subject, setSubject] = useState('{{first_name}}, You Absolutely Crushed {{event_name}}! 🎉');
+  const [subject, setSubject] = useState('{{first_name}}, You Absolutely Crushed {{event_name}}!');
   const [html, setHtml] = useState(`
 <!DOCTYPE html>
 <html>
@@ -53,29 +51,22 @@ export default function EmailCampaignsAdmin() {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Congratulations!</title>
 </head>
-<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, sans-serif;">
+<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, Helvetica, sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4; padding:20px 0;">
     <tr>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background:#ffffff; border-radius:20px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.1);">
           <!-- Hero -->
           <tr>
-            <td style="background:linear-gradient(135deg, #001f3f, #2563eb); color:#ffffff; padding:60px 20px; text-align:center;">
+            <td style="background:#001f3f; color:#ffffff; padding:60px 20px; text-align:center;">
               <h1 style="font-size:56px; font-weight:900; margin:0; color:#ffffff;">CONGRATULATIONS!</h1>
               <h2 style="font-size:48px; margin:30px 0 20px; font-weight:700; color:#ffffff;">{{first_name}}</h2>
-              <p style="font-size:28px; margin:10px 0; color:#ffffff; opacity:0.9;">You conquered the {{race_name}}!</p>
+              <p style="font-size:28px; margin:10px 0; color:#ffffff;">You conquered the {{race_name}}!</p>
               <div style="margin:50px 0;">
-                <p style="font-size:24px; margin:0; color:#ffffff; opacity:0.9;">Official Chip Time</p>
+                <p style="font-size:24px; margin:0; color:#ffffff;">Official Chip Time</p>
                 <p style="font-size:80px; font-weight:900; margin:20px 0; color:#ffffff; line-height:1;">{{chip_time}}</p>
-                <p style="font-size:24px; margin:0; color:#ffffff; opacity:0.9;">Pace: {{pace}}</p>
+                <p style="font-size:24px; margin:0; color:#ffffff;">Pace: {{pace}}</p>
               </div>
-            </td>
-          </tr>
-
-          <!-- Logo -->
-          <tr>
-            <td style="text-align:center; padding:40px 20px; background:#ffffff;">
-              <img src="{{event_logo}}" alt="Gemini Timing" style="max-width:320px; height:auto; border-radius:16px;" />
             </td>
           </tr>
 
@@ -85,7 +76,7 @@ export default function EmailCampaignsAdmin() {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <div style="background:#ffffff; border:6px solid #2563eb; border-radius:24px; padding:40px; max-width:520px; margin:0 auto; box-shadow:0 20px 40px rgba(37,99,235,0.2);">
+                    <div style="background:#ffffff; border:6px solid #2563eb; border-radius:24px; padding:40px;">
                       <h3 style="font-size:32px; font-weight:800; color:#001f3f; text-align:center; margin-bottom:40px;">Your Race Highlights</h3>
                       <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
@@ -114,26 +105,23 @@ export default function EmailCampaignsAdmin() {
           <!-- Race Story -->
           <tr>
             <td style="padding:40px 20px; text-align:center;">
-              <div style="background:linear-gradient(to right, #dbeafe, #fef3c7, #d9f99d); padding:40px; border-radius:24px; max-width:480px; margin:0 auto;">
-                <p style="font-size:32px; font-weight:900; color:#1e3a8a; margin:0; line-height:1.4;">
+              <div style="background:#dbeafe; padding:40px; border-radius:24px; max-width:480px; margin:0 auto;">
+                <p style="font-size:30px; font-weight:900; color:#1e40af; margin:0; line-height:1.4;">
                   {{race_story}}
                 </p>
               </div>
             </td>
           </tr>
 
-          <!-- Splits Table -->
-          {{splits_table}}
-
-          <!-- Upcoming Events -->
+          <!-- CTA Buttons -->
           <tr>
-            <td style="padding:40px 20px; background:#f8fafc; text-align:center;">
-              <h3 style="font-size:28px; font-weight:700; color:#001f3f; margin-bottom:30px;">Your Next Challenge Awaits</h3>
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  {{upcoming_events}}
-                </tr>
-              </table>
+            <td style="padding:40px 20px; text-align:center; background:#ffffff;">
+              <p style="margin-bottom:30px; font-size:20px; color:#001f3f;">
+                <a href="https://geminitiming.com" style="background:#2563eb; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">View All Results</a>
+              </p>
+              <p style="font-size:20px; color:#001f3f;">
+                <a href="https://youkeepmoving.com" style="background:#16a34a; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">Find Your Next Event</a>
+              </p>
             </td>
           </tr>
 
@@ -172,22 +160,6 @@ export default function EmailCampaignsAdmin() {
     loadEvents();
   }, []);
 
-  useEffect(() => {
-    const loadUpcoming = async () => {
-      try {
-        const res = await fetch('https://youkeepmoving.com/wp-json/tribe/events/v1/events?per_page=6&status=publish');
-        const data = await res.json();
-        const future = (data.events || [])
-          .filter(e => new Date(e.start_date) > new Date())
-          .slice(0, 3);
-        setUpcomingEvents(future);
-      } catch (err) {
-        console.error('Failed to load upcoming events');
-      }
-    };
-    loadUpcoming();
-  }, []);
-
   const handleSelectEvent = async (eventId) => {
     const event = events.find(e => e.id === eventId);
     if (!event) return;
@@ -222,7 +194,7 @@ export default function EmailCampaignsAdmin() {
     }
   };
 
-  const replacePlaceholders = (template, person, participant, event, splitsTable = '', upcomingCards = '') => {
+  const replacePlaceholders = (template, person, participant, event) => {
     if (!person || !participant || !event) return template;
 
     const raceStory = getRaceStory(participant.splits || [], participant.place);
@@ -237,79 +209,7 @@ export default function EmailCampaignsAdmin() {
       .replace(/{{pace}}/g, participant.pace || '')
       .replace(/{{race_name}}/g, participant.race_name || event.name || '')
       .replace(/{{event_name}}/g, event.name || '')
-      .replace(/{{event_date}}/g, new Date(event.start_time * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
-      .replace(/{{event_logo}}/g, '/GRR.png')
-      .replace(/{{race_story}}/g, raceStory)
-      .replace(/{{splits_table}}/g, splitsTable)
-      .replace(/{{upcoming_events}}/g, upcomingCards);
-  };
-
-  const generateSplitsTable = (splits) => {
-    if (!splits || splits.length === 0) return '';
-
-    let table = `
-    <tr>
-      <td style="padding:40px 20px; background:#f8fafc;">
-        <h3 style="font-size:32px; font-weight:800; color:#001f3f; text-align:center; margin-bottom:30px;">Your Race Splits</h3>
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:white; border-radius:16px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.05);">
-          <thead style="background:#001f3f; color:white;">
-            <tr>
-              <th style="padding:20px; text-align:left;">Split</th>
-              <th style="padding:20px; text-align:center;">Time</th>
-              <th style="padding:20px; text-align:center;">Rank</th>
-              <th style="padding:20px; text-align:center;">Change</th>
-              <th style="padding:20px; text-align:center;">Pace</th>
-            </tr>
-          </thead>
-          <tbody>`;
-
-    splits.forEach((split, i, arr) => {
-      const prevPlace = i > 0 ? arr[i - 1].place : null;
-      let change = '';
-      if (prevPlace && split.place) {
-        const diff = prevPlace - split.place;
-        if (diff > 0) change = `<span style="color:#16a34a; font-weight:bold;">↑${diff}</span>`;
-        else if (diff < 0) change = `<span style="color:#dc2626; font-weight:bold;">↓${Math.abs(diff)}</span>`;
-        else change = '<span style="color:#6b7280;">–</span>';
-      }
-
-      table += `
-      <tr>
-        <td style="padding:20px; border-bottom:1px solid #eee;">${split.name}</td>
-        <td style="padding:20px; border-bottom:1px solid #eee; text-align:center;">${split.time || '—'}</td>
-        <td style="padding:20px; border-bottom:1px solid #eee; text-align:center; font-weight:bold;">${split.place ? `#${split.place}` : '—'}</td>
-        <td style="padding:20px; border-bottom:1px solid #eee; text-align:center;">${change}</td>
-        <td style="padding:20px; border-bottom:1px solid #eee; text-align:center;">${split.pace || '—'}</td>
-      </tr>`;
-    });
-
-    table += `
-          </tbody>
-        </table>
-        <p style="text-align:center; color:#666; margin-top:20px;">↑ Gained positions • ↓ Lost positions • – Held steady</p>
-      </td>
-    </tr>`;
-
-    return table;
-  };
-
-  const generateUpcomingCards = () => {
-    if (upcomingEvents.length === 0) return '';
-
-    return upcomingEvents.map(event => `
-      <td style="padding:10px;">
-        <table width="260" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.08);">
-          ${event.image?.url ? `<tr><td><img src="${event.image.url}" alt="${event.title.rendered}" style="width:260px; height:160px; object-cover;" /></td></tr>` : '<tr><td style="height:160px; background:#e5e7eb;"></td></tr>'}
-          <tr>
-            <td style="padding:20px; text-align:center;">
-              <p style="font-size:18px; font-weight:bold; color:#001f3f; margin:0 0 10px;">${event.title.rendered || event.title}</p>
-              <p style="color:#6b7280; font-size:16px; margin:0 0 15px;">${new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-              <a href="${event.url}" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:bold;">Register →</a>
-            </td>
-          </tr>
-        </table>
-      </td>
-    `).join('');
+      .replace(/{{race_story}}/g, raceStory);
   };
 
   const sendTestEmail = async () => {
@@ -320,10 +220,7 @@ export default function EmailCampaignsAdmin() {
     try {
       const samplePerson = emailList[0] || { firstName: 'Test' };
       const sampleParticipant = results[0] || {};
-      const splitsTable = generateSplitsTable(sampleParticipant.splits || []);
-      const upcomingCards = generateUpcomingCards();
-
-      const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent, splitsTable, upcomingCards);
+      const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent);
 
       await sendViaApi([testEmail], '[TEST] ' + subject, renderedHtml);
       alert('Test email sent! Check your inbox.');
@@ -341,16 +238,13 @@ export default function EmailCampaignsAdmin() {
     let sent = 0;
     let failed = 0;
 
-    const upcomingCards = generateUpcomingCards();
-
     try {
       for (const person of emailList) {
         const participant = results.find(r =>
           r.first_name?.toLowerCase() === person.firstName?.toLowerCase()
         ) || results[0];
 
-        const splitsTable = generateSplitsTable(participant.splits || []);
-        const renderedHtml = replacePlaceholders(html, person, participant, selectedEvent, splitsTable, upcomingCards);
+        const renderedHtml = replacePlaceholders(html, person, participant, selectedEvent);
 
         try {
           await sendViaApi([person.email], subject, renderedHtml);
@@ -386,9 +280,9 @@ export default function EmailCampaignsAdmin() {
 
   return (
     <section className="space-y-12">
-      <div className="bg-green-100 border-2 border-green-500 rounded-xl p-6 text-center">
-        <p className="text-green-800 font-black text-2xl">🟢 FINAL v4.3 — BOLD, CLEAN, PERFECT</p>
-        <p className="text-green-700 text-lg mt-2">Visible hero • First name only • GRR.png logo • Framed stats • No split filler • Subtle upcoming events</p>
+      <div className="bg-blue-100 border-2 border-blue-500 rounded-xl p-6 text-center">
+        <p className="text-blue-800 font-black text-2xl">🟦 SIMPLE & CLEAN STATS EMAIL — LIVE</p>
+        <p className="text-blue-700 text-lg mt-2">Hero • Stats • Story • CTAs • No images or extras</p>
       </div>
 
       <h2 className="text-5xl font-black text-gemini-dark-gray text-center mb-12">Post-Race Email Campaigns</h2>
@@ -433,7 +327,7 @@ export default function EmailCampaignsAdmin() {
       {emailList.length > 0 && (
         <>
           <div className="bg-white rounded-3xl shadow-2xl p-10">
-            <h3 className="text-3xl font-bold mb-8">3. Design Your Email</h3>
+            <h3 className="text-3xl font-bold mb-8">3. Email Template</h3>
             <input
               type="text"
               value={subject}
@@ -450,22 +344,15 @@ export default function EmailCampaignsAdmin() {
               <div
                 className="border-4 border-gemini-blue/20 rounded-3xl overflow-hidden"
                 dangerouslySetInnerHTML={{
-                  __html: replacePlaceholders(
-                    html,
-                    emailList[0] || {},
-                    results[0] || {},
-                    selectedEvent,
-                    generateSplitsTable(results[0]?.splits || []),
-                    generateUpcomingCards()
-                  )
+                  __html: replacePlaceholders(html, emailList[0] || {}, results[0] || {}, selectedEvent)
                 }}
               />
             </div>
 
             {/* Send Panel */}
             <div className="bg-gradient-to-br from-gemini-blue to-[#80ccd6] rounded-3xl shadow-2xl p-10 text-white">
-              <h3 className="text-4xl font-black mb-8 text-center">Launch Your Campaign</h3>
-              <p className="text-2xl text-center mb-12">Ready to inspire <strong>{emailList.length}</strong> runners?</p>
+              <h3 className="text-4xl font-black mb-8 text-center">Launch Campaign</h3>
+              <p className="text-2xl text-center mb-12">Ready to send to <strong>{emailList.length}</strong> runners?</p>
               <div className="space-y-6">
                 <button
                   onClick={sendTestEmail}
