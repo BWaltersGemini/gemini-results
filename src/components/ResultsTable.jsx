@@ -1,29 +1,25 @@
-// src/components/ResultsTable.jsx (FINAL — New Palette + Mobile/Desktop Consistency)
+// src/components/ResultsTable.jsx (COMPLETE — With data attributes for scroll targeting)
 import { useNavigate } from 'react-router-dom';
-import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsTable({
   data = [],
-  onNameClick,
-  isMobile,
-  highlightedBib,
-  highlightedRowRef,
+  totalResults = 0,
   currentPage = 1,
   setCurrentPage,
   pageSize = 50,
   setPageSize,
-  totalResults = 0
+  onNameClick,
+  isMobile,
+  highlightedBib,
+  raceId,
 }) {
   const navigate = useNavigate();
 
-  // Proper ordinal suffix (1st, 2nd, 3rd, 4th, etc.)
   const formatPlace = (place) => {
     if (!place || place < 1) return '—';
     const num = Number(place);
     if (isNaN(num)) return '—';
-    if (num % 100 >= 11 && num % 100 <= 13) {
-      return `${num}th`;
-    }
+    if (num % 100 >= 11 && num % 100 <= 13) return `${num}th`;
     switch (num % 10) {
       case 1: return `${num}st`;
       case 2: return `${num}nd`;
@@ -33,15 +29,10 @@ export default function ResultsTable({
   };
 
   const handleRowClick = (participant) => {
-    if (onNameClick) {
-      onNameClick(participant);
-    }
+    if (onNameClick) onNameClick(participant);
   };
 
-  const getRowKey = (r) => {
-    if (r.entry_id) return r.entry_id;
-    return `${r.bib || 'unknown'}-${r.race_id || 'overall'}`;
-  };
+  const getRowKey = (r) => (r.entry_id ? r.entry_id : `${r.bib || 'unknown'}-${r.race_id || 'overall'}`);
 
   if (data.length === 0) {
     return (
@@ -52,7 +43,6 @@ export default function ResultsTable({
     );
   }
 
-  // Pagination logic
   const safeTotalResults = Number(totalResults) || 0;
   const safePageSize = Number(pageSize) || 50;
   const totalPages = safePageSize > 0 ? Math.ceil(safeTotalResults / safePageSize) : 1;
@@ -63,15 +53,6 @@ export default function ResultsTable({
 
   const pageOptions = [25, 50, 100, 200];
 
-  const goToFirstPage = () => setCurrentPage(1);
-  const goToLastPage = () => setCurrentPage(totalPages);
-  const handlePageSizeChange = (e) => {
-    const newSize = Number(e.target.value);
-    setPageSize(newSize);
-    setCurrentPage(1);
-  };
-
-  // Mobile View
   if (isMobile) {
     return (
       <div className="space-y-6">
@@ -80,7 +61,8 @@ export default function ResultsTable({
           return (
             <div
               key={getRowKey(r)}
-              ref={isHighlighted ? highlightedRowRef : null}
+              data-bib={r.bib}
+              data-race-id={raceId}
               className={`bg-white rounded-3xl shadow-xl border-2 p-6 cursor-pointer transition-all duration-200 active:scale-98 ${
                 isHighlighted ? 'border-primary shadow-2xl ring-4 ring-primary/20' : 'border-gray-200'
               }`}
@@ -94,16 +76,13 @@ export default function ResultsTable({
                   <div className="text-2xl font-bold text-brand-dark">Bib {r.bib || '—'}</div>
                 </div>
               </div>
-
-              {/* Name with subtle right arrow */}
               <h3 className="text-3xl font-bold text-brand-dark mb-3 flex items-center gap-2">
                 {r.first_name} {r.last_name}
                 <span className="text-xl text-gray-400">→</span>
               </h3>
-
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div className="bg-primary/10 rounded-xl py-4">
-                  <div className="text-2xl font-bold text-primary">{formatChronoTime(r.chip_time)}</div>
+                  <div className="text-2xl font-bold text-primary">{r.chip_time || '—'}</div>
                   <div className="text-sm text-gray-700">Time</div>
                 </div>
                 <div className="bg-brand-light rounded-xl py-4">
@@ -114,8 +93,6 @@ export default function ResultsTable({
             </div>
           );
         })}
-
-        {/* Load More (Mobile) */}
         {endIdx < safeTotalResults && (
           <div className="text-center mt-10">
             <button
@@ -130,50 +107,32 @@ export default function ResultsTable({
     );
   }
 
-  // Desktop View
+  // Desktop
   return (
     <div>
-      {/* Top Pagination */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-8 px-6">
         <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={goToFirstPage}
-            disabled={safeCurrentPage === 1}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(1)} disabled={safeCurrentPage === 1} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             First
           </button>
-          <button
-            onClick={() => setCurrentPage(Math.max(1, safeCurrentPage - 1))}
-            disabled={safeCurrentPage === 1}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(Math.max(1, safeCurrentPage - 1))} disabled={safeCurrentPage === 1} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             ← Prev
           </button>
           <span className="text-brand-dark font-medium">
             Page <strong>{safeCurrentPage}</strong> of <strong>{totalPages}</strong>
           </span>
-          <button
-            onClick={() => setCurrentPage(Math.min(totalPages, safeCurrentPage + 1))}
-            disabled={safeCurrentPage === totalPages}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(Math.min(totalPages, safeCurrentPage + 1))} disabled={safeCurrentPage === totalPages} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             Next →
           </button>
-          <button
-            onClick={goToLastPage}
-            disabled={safeCurrentPage === totalPages}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(totalPages)} disabled={safeCurrentPage === totalPages} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             Last
           </button>
         </div>
-
         <div className="flex items-center gap-3">
           <span className="text-brand-dark font-medium">Show:</span>
           <select
             value={safePageSize}
-            onChange={handlePageSizeChange}
+            onChange={(e) => setPageSize(Number(e.target.value))}
             className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-primary/30"
           >
             {pageOptions.map(size => (
@@ -184,7 +143,6 @@ export default function ResultsTable({
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto -mx-6 px-6">
         <table className="w-full text-left">
           <thead className="bg-primary/10 text-brand-dark font-bold uppercase text-sm tracking-wider">
@@ -206,7 +164,8 @@ export default function ResultsTable({
               return (
                 <tr
                   key={getRowKey(r)}
-                  ref={isHighlighted ? highlightedRowRef : null}
+                  data-bib={r.bib}
+                  data-race-id={raceId}
                   className={`hover:bg-primary/5 cursor-pointer transition duration-200 group ${
                     isHighlighted ? 'bg-primary/10 font-bold ring-2 ring-primary/30' : ''
                   }`}
@@ -234,7 +193,7 @@ export default function ResultsTable({
                       '—'
                     )}
                   </td>
-                  <td className="px-6 py-5 font-semibold text-brand-dark">{formatChronoTime(r.chip_time)}</td>
+                  <td className="px-6 py-5 font-semibold text-brand-dark">{r.chip_time || '—'}</td>
                   <td className="px-6 py-5 text-brand-dark">{r.pace || '—'}</td>
                   <td className="px-6 py-5 text-brand-dark">{r.age || '—'}</td>
                   <td className="px-6 py-5 text-gray-600">
@@ -247,41 +206,24 @@ export default function ResultsTable({
         </table>
       </div>
 
-      {/* Bottom Pagination */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mt-12 px-6">
         <div className="text-lg text-brand-dark">
           Showing {startIdx + 1}–{endIdx} of {safeTotalResults} results
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={goToFirstPage}
-            disabled={safeCurrentPage === 1}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(1)} disabled={safeCurrentPage === 1} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             First
           </button>
-          <button
-            onClick={() => setCurrentPage(Math.max(1, safeCurrentPage - 1))}
-            disabled={safeCurrentPage === 1}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(Math.max(1, safeCurrentPage - 1))} disabled={safeCurrentPage === 1} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             ← Prev
           </button>
           <span className="text-brand-dark font-medium">
             Page <strong>{safeCurrentPage}</strong> of <strong>{totalPages}</strong>
           </span>
-          <button
-            onClick={() => setCurrentPage(Math.min(totalPages, safeCurrentPage + 1))}
-            disabled={safeCurrentPage === totalPages}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(Math.min(totalPages, safeCurrentPage + 1))} disabled={safeCurrentPage === totalPages} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             Next →
           </button>
-          <button
-            onClick={goToLastPage}
-            disabled={safeCurrentPage === totalPages}
-            className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md"
-          >
+          <button onClick={() => setCurrentPage(totalPages)} disabled={safeCurrentPage === totalPages} className="px-5 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition shadow-md">
             Last
           </button>
         </div>
@@ -289,7 +231,7 @@ export default function ResultsTable({
           <span className="text-brand-dark font-medium">Show:</span>
           <select
             value={safePageSize}
-            onChange={handlePageSizeChange}
+            onChange={(e) => setPageSize(Number(e.target.value))}
             className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-primary/30"
           >
             {pageOptions.map(size => (

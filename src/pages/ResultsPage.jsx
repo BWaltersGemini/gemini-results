@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FINAL — Fixed TDZ error by moving globalFilteredResults up)
+// src/pages/ResultsPage.jsx (COMPLETE — Precise scroll to first matching row + all features)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -27,7 +27,7 @@ export default function ResultsPage() {
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const prevSearchQueryRef = useRef(''); // Track changes to query
+  const prevSearchQueryRef = useRef('');
 
   const [liveToast, setLiveToast] = useState(null);
 
@@ -37,12 +37,10 @@ export default function ResultsPage() {
   const [expandedRaces, setExpandedRaces] = useState({});
   const [racePagination, setRacePagination] = useState({});
 
-  // Refs
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
-  const raceSectionRefs = useRef({}); // One ref per race section
 
-  // GLOBAL FILTERED RESULTS — MOVED UP to avoid TDZ in useEffect below
+  // GLOBAL FILTERED RESULTS — declared early
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -50,7 +48,7 @@ export default function ResultsPage() {
       )
     : results;
 
-  // Live results toast
+  // Live toast
   useEffect(() => {
     const handler = (e) => {
       const count = e.detail?.count || 1;
@@ -81,50 +79,47 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // Reset pagination on search change
+  // Reset pagination on search
   useEffect(() => {
     setExpandedRaces({});
     setRacePagination({});
   }, [searchQuery]);
 
-  // AUTO-SCROLL TO FIRST MATCHING RESULT WHEN SEARCH CHANGES
+  // PRECISE SCROLL TO FIRST MATCHING ROW
   useEffect(() => {
-    // Only run when query actually changes
     if (searchQuery === prevSearchQueryRef.current) return;
     prevSearchQueryRef.current = searchQuery;
 
-    // If search is cleared, go to top of results
     if (!searchQuery.trim()) {
       resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
 
-    // If no results, still scroll to the empty state message
     if (globalFilteredResults.length === 0) {
       resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
 
-    // Find the first matching participant
     const firstMatch = globalFilteredResults[0];
-    if (!firstMatch) return;
+    const raceId = firstMatch.race_id;
 
-    const matchingRaceId = firstMatch.race_id;
-    const targetRaceSection = raceSectionRefs.current[matchingRaceId];
-
-    if (targetRaceSection) {
-      // Offset to account for sticky search bar (~140px total height)
-      const offset = 140;
-      const topPos = targetRaceSection.getBoundingClientRect().top + window.pageYOffset - offset;
-
-      window.scrollTo({ top: topPos, behavior: 'smooth' });
-    } else {
-      // Fallback: just go to results area
-      resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!expandedRaces[raceId]) {
+      setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
     }
-  }, [searchQuery, globalFilteredResults]);
 
-  // Back-to-top visibility
+    setTimeout(() => {
+      const row = document.querySelector(`[data-bib="${firstMatch.bib}"][data-race-id="${raceId}"]`);
+      if (row) {
+        const offset = 100;
+        const topPos = row.getBoundingClientRect().top + window.pageYOffset - offset;
+        window.scrollTo({ top: topPos, behavior: 'smooth' });
+      } else {
+        resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
+  }, [searchQuery, globalFilteredResults, expandedRaces]);
+
+  // Back-to-top
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
@@ -313,7 +308,6 @@ export default function ResultsPage() {
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
 
-          {/* Upcoming Events */}
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-brand-dark mb-12">Upcoming Events</h2>
             {loadingUpcoming ? (
@@ -435,7 +429,7 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Race Jump Links */}
+        {/* Jump Links */}
         {displayedRaces.length > 1 && (
           <div className="flex flex-wrap justify-center gap-4 mb-12">
             {displayedRaces.map((race) => (
@@ -508,12 +502,7 @@ export default function ResultsPage() {
               };
 
               return (
-                <section
-                  key={race.race_id}
-                  id={`race-${race.race_id}`}
-                  ref={(el) => (raceSectionRefs.current[race.race_id] = el)}
-                  className="mb-24"
-                >
+                <section key={race.race_id} id={`race-${race.race_id}`} className="mb-24">
                   <div className="flex justify-between items-center mb-8">
                     <h2 className="text-4xl font-bold text-brand-dark">
                       {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
@@ -555,6 +544,7 @@ export default function ResultsPage() {
                       onNameClick={handleNameClick}
                       isMobile={window.innerWidth < 768}
                       highlightedBib={highlightedBib}
+                      raceId={race.race_id}
                     />
                   )}
                 </section>
