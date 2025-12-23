@@ -147,7 +147,7 @@ export default function EmailCampaignsAdmin() {
         </div>
       )}
 
-      {/* Step 3: Email List Preview */}
+      {/* Step 3: Email List Preview — FIXED SAFE RENDERING */}
       {emailList.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h3 className="text-2xl font-bold mb-6">
@@ -165,12 +165,18 @@ export default function EmailCampaignsAdmin() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {emailList.slice(0, 100).map((p, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">{p.fullName || '—'}</td>
-                    <td className="px-6 py-4 font-mono text-sm">{p.email}</td>
-                  </tr>
-                ))}
+                {emailList.slice(0, 100).map((person, i) => {
+                  const displayName = person.fullName ||
+                    `${person.firstName || ''} ${person.lastName || ''}`.trim() ||
+                    'Name not available';
+
+                  return (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">{displayName}</td>
+                      <td className="px-6 py-4 font-mono text-sm">{person.email}</td>
+                    </tr>
+                  );
+                })}
                 {emailList.length > 100 && (
                   <tr>
                     <td colSpan={2} className="px-6 py-4 text-center text-gray-500 italic">

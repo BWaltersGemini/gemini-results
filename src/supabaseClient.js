@@ -13,33 +13,54 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Public client — used by all public-facing code (results, config reads, etc.)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false, // No user authentication needed for public access
-  },
-});
+// Singleton instances
+let publicClient = null;
+let adminClient = null;
 
-// Admin client factory — ONLY import this in AdminPage.jsx and MasterEvents.jsx
+/**
+ * Public Supabase client (anon key) — used everywhere in the app
+ * Created only once to prevent multiple GoTrueClient warnings
+ */
+export const supabase = (() => {
+  if (!publicClient) {
+    publicClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false, // No user auth needed
+      },
+    });
+  }
+  return publicClient;
+})();
+
+/**
+ * Admin Supabase client factory (service_role key)
+ * Returns the same instance on every call — avoids multiple auth clients
+ */
 export const createAdminSupabaseClient = () => {
+  if (adminClient) {
+    return adminClient;
+  }
+
   if (!supabaseServiceRoleKey) {
     console.error(
       'VITE_SUPABASE_SERVICE_ROLE_KEY is missing in .env! ' +
-      'Admin saves will fail due to RLS. Add the service_role key from Supabase → Settings → API.'
+      'Admin actions will fail due to RLS. Add the service_role key from Supabase → Settings → API.'
     );
-    // Fallback to public client (writes will fail with 401/RLS error)
+    // Fallback to public client (writes will be blocked by RLS)
     return supabase;
   }
 
-  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+  adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
     global: {
       headers: {
-        'x-client-info': 'admin-client', // Helpful for debugging in Supabase logs
+        'x-client-info': 'admin-client', // Helpful for Supabase logs
       },
     },
   });
+
+  return adminClient;
 };
