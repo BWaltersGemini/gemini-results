@@ -1,5 +1,4 @@
-// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop + AdminDashboard route)
-
+// src/App.jsx (UPDATED — With GA4 tracking + ScrollToTop + Kiosk Mode routes)
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
@@ -12,9 +11,10 @@ import Services from './pages/Services';
 import Products from './pages/Products';
 import ResultsPage from './pages/ResultsPage';
 import Contact from './pages/Contact';
-import AdminDashboard from './pages/admin/AdminDashboard'; // ← NEW: Updated import
+import AdminDashboard from './pages/admin/AdminDashboard';
 import ParticipantPage from './pages/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
+import ResultsKiosk from './pages/ResultsKiosk'; // ← NEW: Kiosk Mode
 
 // Import react-ga4 for Google Analytics 4
 import ReactGA from 'react-ga4';
@@ -29,13 +29,12 @@ const queryClient = new QueryClient({
   },
 });
 
-// Initialize GA4 once (your Measurement ID)
+// Initialize GA4 once (replace with your actual Measurement ID if different)
 ReactGA.initialize('G-3Y6ME9XWPR');
 
 // Component to track page views on route changes
 function AnalyticsTracker() {
   const location = useLocation();
-
   useEffect(() => {
     ReactGA.send({
       hitType: 'pageview',
@@ -43,7 +42,6 @@ function AnalyticsTracker() {
       title: document.title,
     });
   }, [location]);
-
   return null;
 }
 
@@ -67,19 +65,26 @@ export default function App() {
                 <Route path="/services" element={<Services />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/contact" element={<Contact />} />
-                <Route path="/admin" element={<AdminDashboard />} /> {/* ← Updated route */}
+
+                <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/master-events" element={<MasterEvents />} />
 
+                {/* Standard Results Pages */}
                 <Route path="/results" element={<ResultsPage />} />
                 <Route path="/results/:masterKey/:year" element={<ResultsPage />} />
                 <Route path="/results/:masterKey/:year/:raceSlug" element={<ResultsPage />} />
-
                 <Route
                   path="/results/:masterKey/:year/:raceSlug/bib/:bib"
                   element={<ParticipantPage />}
                 />
-
                 <Route path="/participant" element={<ParticipantPage />} />
+
+                {/* Kiosk Mode — Event-Specific */}
+                <Route path="/kiosk/:masterKey/:year" element={<ResultsKiosk />} />
+                <Route path="/kiosk/:masterKey/:year/bib/:bib" element={<ResultsKiosk />} />
+
+                {/* Optional: Generic kiosk fallback (shows error if no event matched) */}
+                <Route path="/kiosk" element={<ResultsKiosk />} />
 
                 <Route
                   path="/race-directors-hub"
