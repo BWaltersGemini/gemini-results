@@ -1,10 +1,9 @@
-// src/pages/admin/AdminDashboard.jsx
-// Main Admin Dashboard - Login, Tab Navigation, Shared State & Save Controls
+// src/pages/admin/AdminDashboard.jsx (FINAL — New Red/Turquoise Brand Palette)
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { loadAppConfig } from '../../utils/appConfig';
 import { createAdminSupabaseClient } from '../../supabaseClient';
 
-// Lazy-load the heavy tabs for better performance
+// Lazy-load tabs for performance
 const EventsAdmin = lazy(() => import('./EventsAdmin'));
 const MastersAdmin = lazy(() => import('./MastersAdmin'));
 const PerformanceAdmin = lazy(() => import('./PerformanceAdmin'));
@@ -17,7 +16,7 @@ export default function AdminDashboard() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  // Shared global config state (passed down to child tabs)
+  // Shared global config
   const [masterGroups, setMasterGroups] = useState({});
   const [editedEvents, setEditedEvents] = useState({});
   const [hiddenRaces, setHiddenRaces] = useState({});
@@ -32,7 +31,7 @@ export default function AdminDashboard() {
 
   const adminSupabase = createAdminSupabaseClient();
 
-  // Load all config from Supabase on login
+  // Load config from Supabase
   const loadGlobalConfig = async () => {
     const config = await loadAppConfig();
     setMasterGroups(config.masterGroups || {});
@@ -44,7 +43,7 @@ export default function AdminDashboard() {
     setLiveAutoFetchPerEvent(config.liveAutoFetchPerEvent || {});
   };
 
-  // Auto-save individual config keys
+  // Auto-save individual keys
   const autoSaveConfig = async (key, value) => {
     try {
       const { error } = await adminSupabase
@@ -60,7 +59,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Bulk save all changes
+  // Bulk save all
   const saveAllChanges = async () => {
     try {
       await Promise.all([
@@ -79,7 +78,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Check login status on mount
+  // Check login on mount
   useEffect(() => {
     const loggedIn = localStorage.getItem('adminLoggedIn') === 'true';
     setIsLoggedIn(loggedIn);
@@ -89,37 +88,40 @@ export default function AdminDashboard() {
   // Login Screen
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-center text-gemini-dark-gray mb-8">Admin Login</h1>
-          {error && <p className="text-red-600 text-center mb-4">{error}</p>}
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full p-4 border border-gray-300 rounded-xl mb-4"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-4 border border-gray-300 rounded-xl mb-6"
-          />
-          <button
-            onClick={() => {
-              if (username === 'admin' && password === 'gemini2025') {
-                localStorage.setItem('adminLoggedIn', 'true');
-                setIsLoggedIn(true);
-              } else {
-                setError('Invalid credentials');
-              }
-            }}
-            className="w-full bg-gemini-blue text-white py-4 rounded-xl font-bold hover:bg-gemini-blue/90 transition"
-          >
-            Login
-          </button>
+      <div className="min-h-screen bg-brand-light flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-12 border-2 border-primary/20">
+          <h1 className="text-5xl font-black text-center text-brand-dark mb-12">Admin Login</h1>
+          {error && <p className="text-primary font-bold text-center mb-8 text-2xl">{error}</p>}
+          <div className="space-y-8">
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-8 py-6 text-2xl border-4 border-gray-300 rounded-2xl focus:outline-none focus:border-primary focus:ring-8 focus:ring-primary/20"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-8 py-6 text-2xl border-4 border-gray-300 rounded-2xl focus:outline-none focus:border-primary focus:ring-8 focus:ring-primary/20"
+            />
+            <button
+              onClick={() => {
+                if (username === 'admin' && password === 'gemini2025') {
+                  localStorage.setItem('adminLoggedIn', 'true');
+                  setIsLoggedIn(true);
+                  setError(null);
+                } else {
+                  setError('Invalid credentials');
+                }
+              }}
+              className="w-full bg-primary text-white py-6 text-3xl font-black rounded-2xl hover:bg-primary/90 transition shadow-2xl transform hover:scale-105"
+            >
+              Login
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -127,17 +129,17 @@ export default function AdminDashboard() {
 
   // Logged-in Dashboard
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
+    <div className="min-h-screen bg-brand-light py-12 px-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex justify-between items-center mb-12">
-          <h1 className="text-4xl font-bold text-gemini-dark-gray">Admin Dashboard</h1>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-8 mb-12">
+          <h1 className="text-5xl font-black text-brand-dark">Admin Dashboard</h1>
           <button
             onClick={() => {
               localStorage.removeItem('adminLoggedIn');
               setIsLoggedIn(false);
             }}
-            className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
+            className="px-10 py-5 bg-red-600 text-white text-xl font-bold rounded-2xl hover:bg-red-700 transition shadow-xl"
           >
             Logout
           </button>
@@ -145,57 +147,67 @@ export default function AdminDashboard() {
 
         {/* Save Status Toast */}
         {saveStatus && (
-          <div className="fixed top-24 right-8 z-50 bg-gemini-blue text-white px-8 py-4 rounded-2xl shadow-2xl animate-pulse text-lg font-semibold">
+          <div className="fixed top-24 right-8 z-50 bg-primary text-white px-10 py-6 rounded-3xl shadow-2xl animate-pulse text-2xl font-black">
             {saveStatus}
           </div>
         )}
 
         {/* Tab Navigation */}
-        <div className="flex flex-wrap gap-2 mb-10 bg-gray-100 p-2 rounded-xl w-fit">
+        <div className="flex flex-wrap gap-4 mb-12 bg-white p-4 rounded-3xl shadow-2xl border border-primary/20">
           <button
             onClick={() => setActiveTab('events')}
-            className={`px-8 py-3 rounded-lg font-semibold transition ${
-              activeTab === 'events' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            className={`px-10 py-5 text-xl font-bold rounded-2xl transition shadow-md ${
+              activeTab === 'events'
+                ? 'bg-primary text-white'
+                : 'bg-brand-light text-brand-dark hover:bg-primary/10'
             }`}
           >
             Events
           </button>
           <button
             onClick={() => setActiveTab('masters')}
-            className={`px-8 py-3 rounded-lg font-semibold transition ${
-              activeTab === 'masters' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            className={`px-10 py-5 text-xl font-bold rounded-2xl transition shadow-md ${
+              activeTab === 'masters'
+                ? 'bg-primary text-white'
+                : 'bg-brand-light text-brand-dark hover:bg-primary/10'
             }`}
           >
             Masters
           </button>
           <button
             onClick={() => setActiveTab('performance')}
-            className={`px-8 py-3 rounded-lg font-semibold transition ${
-              activeTab === 'performance' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            className={`px-10 py-5 text-xl font-bold rounded-2xl transition shadow-md ${
+              activeTab === 'performance'
+                ? 'bg-primary text-white'
+                : 'bg-brand-light text-brand-dark hover:bg-primary/10'
             }`}
           >
             Performance
           </button>
           <button
             onClick={() => setActiveTab('website')}
-            className={`px-8 py-3 rounded-lg font-semibold transition ${
-              activeTab === 'website' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            className={`px-10 py-5 text-xl font-bold rounded-2xl transition shadow-md ${
+              activeTab === 'website'
+                ? 'bg-primary text-white'
+                : 'bg-brand-light text-brand-dark hover:bg-primary/10'
             }`}
           >
             Website
           </button>
           <button
             onClick={() => setActiveTab('email')}
-            className={`px-8 py-3 rounded-lg font-semibold transition ${
-              activeTab === 'email' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            className={`px-10 py-5 text-xl font-bold rounded-2xl transition shadow-md ${
+              activeTab === 'email'
+                ? 'bg-primary text-white'
+                : 'bg-brand-light text-brand-dark hover:bg-primary/10'
             }`}
           >
             Email Campaigns
           </button>
         </div>
 
-        {/* Lazy-loaded Tab Content */}
-        <Suspense fallback={<div className="text-center py-20 text-xl text-gray-600">Loading tab...</div>}>
+        {/* Tab Content */}
+        <Suspense fallback={<div className="text-center py-32 text-3xl text-brand-dark">Loading tab...</div>}>
           {activeTab === 'events' && (
             <EventsAdmin
               masterGroups={masterGroups}
@@ -220,12 +232,12 @@ export default function AdminDashboard() {
               autoSaveConfig={autoSaveConfig}
             />
           )}
-          {activeTab === 'performance' && <PerformanceAdmin />}
+          {activeTab === 'performance' && <PerformanceAdmin masterGroups={masterGroups} />}
           {activeTab === 'website' && (
             <section className="space-y-12">
-              <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
-              <div className="bg-white rounded-2xl shadow-lg p-8">
-                <h3 className="text-2xl font-bold mb-6">Advertisements</h3>
+              <h2 className="text-4xl font-black text-brand-dark mb-12">Website Management</h2>
+              <div className="bg-white rounded-3xl shadow-2xl p-12 border border-primary/20">
+                <h3 className="text-3xl font-black text-brand-dark mb-8">Advertisements</h3>
                 <input
                   type="file"
                   multiple
@@ -233,19 +245,18 @@ export default function AdminDashboard() {
                   onChange={(e) => {
                     console.log('Ad upload:', e.target.files);
                   }}
-                  className="mb-6 block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white"
+                  className="block w-full text-lg text-gray-700 file:mr-8 file:py-5 file:px-10 file:rounded-full file:border-0 file:text-lg file:font-bold file:bg-primary file:text-white hover:file:bg-primary/90 transition mb-10"
                 />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
                   {ads.map((ad, i) => (
-                    <div key={i} className="rounded-xl overflow-hidden shadow-md hover:shadow-xl transition">
-                      <img src={ad} alt={`Ad ${i + 1}`} className="w-full h-48 object-cover" />
+                    <div key={i} className="bg-brand-light rounded-3xl shadow-xl overflow-hidden border-2 border-primary/20 hover:shadow-2xl hover:border-primary/40 transition">
+                      <img src={ad} alt={`Ad ${i + 1}`} className="w-full h-auto" />
                     </div>
                   ))}
                 </div>
               </div>
             </section>
           )}
-          {/* FIXED: Pass eventLogos to EmailCampaignsAdmin */}
           {activeTab === 'email' && <EmailCampaignsAdmin eventLogos={eventLogos} />}
         </Suspense>
 
@@ -253,7 +264,7 @@ export default function AdminDashboard() {
         <div className="text-center mt-20">
           <button
             onClick={saveAllChanges}
-            className="px-20 py-6 bg-gemini-blue text-white text-2xl font-bold rounded-full hover:bg-gemini-blue/90 shadow-2xl transition transform hover:scale-105"
+            className="px-24 py-8 bg-primary text-white text-4xl font-black rounded-full hover:bg-primary/90 shadow-2xl transition transform hover:scale-105"
           >
             Save All Changes to Supabase
           </button>

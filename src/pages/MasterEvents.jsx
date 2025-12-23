@@ -1,4 +1,4 @@
-// src/pages/MasterEvents.jsx (FULLY FIXED — Uses start_time only, no more crashes)
+// src/pages/MasterEvents.jsx (FINAL — New Red/Turquoise Brand Palette)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents } from '../api/chronotrackapi.js';
@@ -18,7 +18,6 @@ export default function MasterEvents() {
   const [hiddenMasters, setHiddenMasters] = useState([]);
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [eventLogos, setEventLogos] = useState({});
-
   const [chronoEvents, setChronoEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -156,17 +155,17 @@ export default function MasterEvents() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gemini-light-gray pt-32 py-12">
-        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow">
-          <h2 className="text-3xl font-bold mb-6 text-center">Admin Login</h2>
-          {error && <p className="text-gemini-red mb-4">{error}</p>}
-          <form onSubmit={handleLogin}>
+      <div className="min-h-screen bg-brand-light pt-32 py-12 flex items-center justify-center">
+        <div className="max-w-md w-full mx-auto bg-white p-10 rounded-3xl shadow-2xl border border-primary/20">
+          <h2 className="text-4xl font-black text-center text-brand-dark mb-8">Admin Login</h2>
+          {error && <p className="text-primary font-bold text-center mb-6 text-xl">{error}</p>}
+          <form onSubmit={handleLogin} className="space-y-6">
             <input
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
               placeholder="Username"
-              className="w-full p-4 mb-4 rounded-lg border border-gray-300"
+              className="w-full p-5 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
               required
             />
             <input
@@ -174,10 +173,13 @@ export default function MasterEvents() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Password"
-              className="w-full p-4 mb-6 rounded-lg border border-gray-300"
+              className="w-full p-5 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
               required
             />
-            <button type="submit" className="w-full bg-gemini-blue text-white p-4 rounded-lg hover:bg-gemini-blue/90">
+            <button
+              type="submit"
+              className="w-full bg-primary text-white py-5 text-2xl font-bold rounded-xl hover:bg-primary/90 transition shadow-xl"
+            >
               Login
             </button>
           </form>
@@ -187,20 +189,25 @@ export default function MasterEvents() {
   }
 
   return (
-    <div className="min-h-screen bg-gemini-light-gray pt-32 pb-20 px-6">
+    <div className="min-h-screen bg-brand-light pt-32 pb-20 px-6">
       <div className="max-w-7xl mx-auto">
         <button
           onClick={() => navigate('/admin')}
-          className="mb-8 bg-gray-600 text-white px-6 py-3 rounded-xl hover:bg-gray-700"
+          className="mb-8 bg-brand-dark text-white px-8 py-4 rounded-xl hover:bg-brand-dark/90 font-bold transition shadow-lg"
         >
           ← Back to Admin Dashboard
         </button>
 
-        <h1 className="text-5xl font-bold text-center mb-16 text-gemini-dark-gray">
+        <h1 className="text-5xl font-black text-center mb-16 text-brand-dark">
           Manage Master Events
         </h1>
 
-        {loading && <p className="text-center text-3xl">Loading events...</p>}
+        {loading && (
+          <div className="text-center py-20">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary"></div>
+            <p className="mt-8 text-2xl text-brand-dark">Loading events...</p>
+          </div>
+        )}
 
         <section className="space-y-12">
           {Object.keys(masterGroups).map(masterKey => {
@@ -209,84 +216,82 @@ export default function MasterEvents() {
             const logo = eventLogos[masterKey];
 
             return (
-              <div key={masterKey} className="mb-12 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
+              <div key={masterKey} className="p-10 bg-white rounded-3xl shadow-2xl border border-primary/20">
                 <div className="flex flex-col space-y-6 mb-8">
                   <div>
-                    <span className="text-sm text-gray-500">Key:</span>
-                    <span className="ml-2 font-mono text-sm bg-gray-100 px-2 py-1 rounded">{masterKey}</span>
+                    <span className="text-sm text-gray-500">Master Key:</span>
+                    <span className="ml-3 font-mono text-sm bg-gray-100 px-3 py-1 rounded-lg">{masterKey}</span>
                   </div>
-
                   <input
                     type="text"
                     value={displayName}
                     onChange={e => handleEditName(masterKey, e.target.value)}
-                    className="text-3xl font-bold p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gemini-blue"
+                    className="text-4xl font-black p-5 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
                     placeholder="Master Event Display Name"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-10">
                   <div>
-                    <label className="block font-medium mb-3 text-lg">Upload Logo</label>
+                    <label className="block text-lg font-bold text-brand-dark mb-4">Upload Logo</label>
                     <input
                       type="file"
                       onChange={e => handleFileUpload(e, masterKey)}
                       accept="image/*"
-                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90"
+                      className="block w-full text-sm text-gray-600 file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-primary file:text-white hover:file:bg-primary/90 transition"
                     />
                     {logo && (
-                      <img src={logo} alt={`${displayName} Logo`} className="mt-6 max-h-40 rounded-xl shadow-lg" />
+                      <img src={logo} alt={`${displayName} Logo`} className="mt-8 max-h-48 rounded-2xl shadow-xl border border-primary/10" />
                     )}
                   </div>
 
-                  <div className="flex flex-col justify-center space-y-6">
-                    <label className="flex items-center text-lg">
+                  <div className="flex flex-col justify-center space-y-8">
+                    <label className="flex items-center text-xl">
                       <input
                         type="checkbox"
                         checked={!hiddenMasters.includes(masterKey)}
                         onChange={() => toggleMasterVisibility(masterKey)}
-                        className="mr-4 h-6 w-6 text-gemini-blue rounded"
+                        className="mr-6 h-8 w-8 text-primary rounded focus:ring-primary/30"
                       />
-                      <span>Visible in App</span>
+                      <span className="font-bold text-brand-dark">Visible in Public App</span>
                     </label>
-
-                    <label className="flex items-center text-lg">
+                    <label className="flex items-center text-xl">
                       <input
                         type="checkbox"
                         checked={!!showAdsPerMaster[masterKey]}
                         onChange={() => toggleShowAds(masterKey)}
-                        className="mr-4 h-6 w-6 text-gemini-blue rounded"
+                        className="mr-6 h-8 w-8 text-primary rounded focus:ring-primary/30"
                       />
-                      <span>Show Ads on This Series</span>
+                      <span className="font-bold text-brand-dark">Show Ads on This Series</span>
                     </label>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-2xl font-bold mb-6 text-gemini-dark-gray">
+                  <h3 className="text-3xl font-black text-brand-dark mb-6">
                     Linked Event Years ({linkedEvents.length})
                   </h3>
                   {linkedEvents.length > 0 ? (
-                    <ul className="space-y-4">
+                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {linkedEvents.map(event => (
-                        <li key={event.id} className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex justify-between items-center">
-                          <span className="font-medium">{formatDate(event.start_time)}</span>
-                          <span className="text-gray-700">{editedEvents[event.id]?.name || event.name}</span>
+                        <li key={event.id} className="bg-brand-light/50 p-6 rounded-2xl border border-primary/10 flex justify-between items-center shadow-md">
+                          <span className="font-bold text-brand-dark">{formatDate(event.start_time)}</span>
+                          <span className="text-brand-dark">{editedEvents[event.id]?.name || event.name}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-gray-500 italic">No events currently linked to this master.</p>
+                    <p className="text-gray-500 italic text-lg">No events currently linked to this master.</p>
                   )}
                 </div>
               </div>
             );
           })}
 
-          <div className="text-center mt-16">
+          <div className="text-center mt-20">
             <button
               onClick={handleSaveChanges}
-              className="bg-gemini-blue text-white px-16 py-6 rounded-full text-2xl font-bold hover:bg-gemini-blue/90 shadow-2xl transition"
+              className="bg-primary text-white px-20 py-8 rounded-full text-3xl font-black hover:bg-primary/90 shadow-2xl transition transform hover:scale-105"
             >
               Save All Changes to Supabase
             </button>

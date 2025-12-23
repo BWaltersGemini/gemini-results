@@ -1,6 +1,4 @@
-// src/pages/admin/EventsAdmin.jsx
-// Full standalone Events tab for the split Admin Dashboard
-
+// src/pages/admin/EventsAdmin.jsx (FINAL — New Red/Turquoise Brand Palette)
 import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
 import { createAdminSupabaseClient } from '../../supabaseClient';
@@ -82,9 +80,6 @@ export default function EventsAdmin({
       const sorted = freshEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
       const authHeader = await getAuthHeader();
       const updatedEvents = [];
-      let endTimeSuccess = 0;
-      let endTimeFail = 0;
-
       for (const event of sorted) {
         let endTime = null;
         try {
@@ -95,13 +90,9 @@ export default function EventsAdmin({
           const eventData = response.data.event;
           if (eventData?.event_end_time) {
             endTime = parseInt(eventData.event_end_time, 10);
-            endTimeSuccess++;
-          } else {
-            endTimeFail++;
           }
         } catch (err) {
           console.warn(`Failed to fetch end_time for event ${event.id}`, err);
-          endTimeFail++;
         }
         updatedEvents.push({
           id: event.id,
@@ -111,43 +102,13 @@ export default function EventsAdmin({
           races: event.races || [],
         });
       }
-
       const { error } = await adminSupabase.from('chronotrack_events').upsert(updatedEvents, { onConflict: 'id' });
       if (error) throw error;
-
       setChronoEvents(updatedEvents);
     } catch (err) {
       console.error('Refresh failed:', err);
     } finally {
       setFetchingEvents(false);
-    }
-  };
-
-  // Update single event end time
-  const updateEndTimeForEvent = async (eventId) => {
-    setUpdatingEndTime(eventId);
-    try {
-      const authHeader = await getAuthHeader();
-      const response = await axios.get(`/chrono-api/api/event/${eventId}`, {
-        headers: { Authorization: authHeader },
-        params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
-      });
-      const eventData = response.data.event;
-      if (eventData?.event_end_time) {
-        const endTime = parseInt(eventData.event_end_time, 10);
-        const { error } = await adminSupabase
-          .from('chronotrack_events')
-          .update({ event_end_time: endTime })
-          .eq('id', eventId);
-        if (error) throw error;
-        setChronoEvents((prev) =>
-          prev.map((e) => (e.id === eventId ? { ...e, event_end_time: endTime } : e))
-        );
-      }
-    } catch (err) {
-      console.error('Update end time failed:', err);
-    } finally {
-      setUpdatingEndTime(null);
     }
   };
 
@@ -167,6 +128,7 @@ export default function EventsAdmin({
       }
       setBulkProgress({ current: i + 1, total: chronoEvents.length });
     }
+    alert(`Bulk publish complete: ${success} succeeded, ${fail} failed`);
     setPublishingAll(false);
   };
 
@@ -176,14 +138,12 @@ export default function EventsAdmin({
     try {
       const fresh = await fetchResultsForEvent(eventId);
       if (fresh.length === 0) return;
-
       const seen = new Map();
       fresh.forEach((r) => {
         const key = r.entry_id || `${r.bib || ''}-${r.race_id || ''}`;
         if (!seen.has(key)) seen.set(key, r);
       });
       const deduped = Array.from(seen.values());
-
       const toUpsert = deduped.map((r) => ({
         event_id: eventId,
         race_id: r.race_id || null,
@@ -206,12 +166,10 @@ export default function EventsAdmin({
         entry_id: r.entry_id ?? null,
         race_name: r.race_name ?? null,
       }));
-
       const { error } = await adminSupabase
         .from('chronotrack_results')
         .upsert(toUpsert, { onConflict: 'event_id,entry_id' });
       if (error) throw error;
-
       setParticipantCounts((prev) => ({ ...prev, [eventId]: deduped.length }));
     } catch (err) {
       console.error('Publish failed:', err);
@@ -350,7 +308,6 @@ export default function EventsAdmin({
   };
 
   const groupedEvents = groupEventsByYearMonth();
-
   const toggleYear = (year) => setExpandedYears((prev) => ({ ...prev, [year]: !prev[year] }));
   const toggleMonth = (yearMonth) => setExpandedMonths((prev) => ({ ...prev, [yearMonth]: !prev[yearMonth] }));
   const toggleEventExpansion = (eventId) => setExpandedEvents((prev) => ({ ...prev, [eventId]: !prev[eventId] }));
@@ -359,29 +316,29 @@ export default function EventsAdmin({
 
   return (
     <section className="space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-3xl font-bold text-gemini-dark-gray">Events ({displayedCount} shown)</h2>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+        <h2 className="text-4xl font-black text-brand-dark">Events ({displayedCount} shown)</h2>
         <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={hideMasteredEvents}
               onChange={(e) => setHideMasteredEvents(e.target.checked)}
-              className="h-5 w-5 text-gemini-blue rounded"
+              className="h-6 w-6 text-accent rounded focus:ring-accent/30"
             />
-            <span className="font-medium text-gray-700">Hide Mastered Events</span>
+            <span className="font-bold text-brand-dark">Hide Mastered Events</span>
           </label>
           <button
             onClick={fetchLatestFromChronoTrack}
             disabled={fetchingEvents}
-            className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition"
+            className="px-8 py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-60 transition shadow-xl"
           >
-            {fetchingEvents ? 'Refreshing...' : 'Refresh Events & End Times'}
+            {fetchingEvents ? 'Refreshing Events...' : 'Refresh Events & End Times'}
           </button>
           <button
             onClick={publishAllEvents}
             disabled={publishingAll}
-            className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 disabled:opacity-50 transition"
+            className="px-8 py-4 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 disabled:opacity-60 transition shadow-xl"
           >
             {publishingAll
               ? `Publishing... (${bulkProgress.current}/${bulkProgress.total})`
@@ -394,31 +351,31 @@ export default function EventsAdmin({
       {Object.entries(groupedEvents)
         .sort(([a], [b]) => b - a)
         .map(([year, months]) => (
-          <div key={year} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div key={year} className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-primary/10">
             <button
               onClick={() => toggleYear(year)}
-              className="w-full px-8 py-6 text-left text-2xl font-bold text-gemini-dark-gray hover:bg-gemini-blue/5 transition flex justify-between items-center"
+              className="w-full px-10 py-6 text-left text-3xl font-black text-brand-dark hover:bg-primary/5 transition flex justify-between items-center"
             >
               <span>{year}</span>
-              <span className="text-3xl">{expandedYears[year] ? '−' : '+'}</span>
+              <span className="text-4xl font-bold text-primary">{expandedYears[year] ? '−' : '+'}</span>
             </button>
 
             {expandedYears[year] && (
-              <div className="border-t border-gray-200">
+              <div className="border-t-4 border-primary/20">
                 {Object.entries(months)
                   .sort(([a], [b]) => new Date(`1 ${b} ${year}`) - new Date(`1 ${a} ${year}`))
                   .map(([month, events]) => (
                     <div key={`${year}-${month}`}>
                       <button
                         onClick={() => toggleMonth(`${year}-${month}`)}
-                        className="w-full px-12 py-4 text-left text-xl font-semibold text-gray-700 hover:bg-gray-50 transition flex justify-between items-center"
+                        className="w-full px-14 py-5 text-left text-2xl font-bold text-brand-dark hover:bg-brand-light transition flex justify-between items-center"
                       >
                         <span>{month}</span>
-                        <span className="text-2xl">{expandedMonths[`${year}-${month}`] ? '−' : '+'}</span>
+                        <span className="text-3xl font-bold text-primary">{expandedMonths[`${year}-${month}`] ? '−' : '+'}</span>
                       </button>
 
                       {expandedMonths[`${year}-${month}`] && (
-                        <div className="pb-6">
+                        <div className="pb-8">
                           {events.map((event) => {
                             const currentMaster = getCurrentMasterForEvent(event.id);
                             if (hideMasteredEvents && currentMaster) return null;
@@ -437,37 +394,38 @@ export default function EventsAdmin({
                             const isAutoFetchEnabled = isCurrentlyLive ? liveAutoFetchPerEvent[event.id] !== false : false;
 
                             return (
-                              <div key={event.id} className="mx-6 my-4 bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
+                              <div key={event.id} className="mx-8 my-6 bg-brand-light/30 rounded-2xl overflow-hidden border border-primary/20 shadow-lg">
                                 <div
                                   onClick={() => toggleEventExpansion(event.id)}
-                                  className="p-5 cursor-pointer hover:bg-gemini-blue/5 transition flex justify-between items-center"
+                                  className="p-6 cursor-pointer hover:bg-primary/10 transition flex justify-between items-center"
                                 >
                                   <div>
-                                    <h4 className="text-xl font-bold text-gemini-dark-gray">{displayName}</h4>
-                                    <p className="text-gray-600">
+                                    <h4 className="text-2xl font-black text-brand-dark">{displayName}</h4>
+                                    <p className="text-lg text-gray-600 mt-1">
                                       {formatDate(event.start_time)} • <strong>{count} participants</strong>
+                                      {isCurrentlyLive && <span className="ml-4 text-green-600 font-bold">● LIVE</span>}
                                     </p>
                                     {currentMaster && (
-                                      <p className="text-sm text-gemini-blue font-medium mt-1">Master: {currentMaster}</p>
+                                      <p className="text-sm font-bold text-accent mt-2">Master Series: {currentMaster}</p>
                                     )}
                                   </div>
-                                  <span className="text-xl">{expandedEvents[event.id] ? '−' : '+'}</span>
+                                  <span className="text-3xl font-bold text-primary">{expandedEvents[event.id] ? '−' : '+'}</span>
                                 </div>
 
                                 {expandedEvents[event.id] && (
-                                  <div className="p-6 bg-white border-t border-gray-200">
+                                  <div className="p-8 bg-white border-t-4 border-primary/30">
                                     {/* Master Assignment */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
                                       <div>
-                                        <label className="block text-lg font-semibold text-gray-700 mb-2">Master Event</label>
-                                        <div className="flex gap-3">
+                                        <label className="block text-xl font-bold text-brand-dark mb-3">Master Series</label>
+                                        <div className="flex gap-4">
                                           <input
                                             type="text"
                                             list="master-keys"
                                             placeholder="Type or select master"
                                             value={newMasterKeys[event.id] || ''}
                                             onChange={(e) => setNewMasterKeys((prev) => ({ ...prev, [event.id]: e.target.value }))}
-                                            className="flex-1 px-4 py-3 border border-gray-300 rounded-xl"
+                                            className="flex-1 px-6 py-4 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 text-lg"
                                           />
                                           <datalist id="master-keys">
                                             {Object.keys(masterGroups).map((key) => (
@@ -476,54 +434,57 @@ export default function EventsAdmin({
                                           </datalist>
                                           <button
                                             onClick={() => assignToMaster(event.id, newMasterKeys[event.id] || currentMaster)}
-                                            className="px-6 py-3 bg-gemini-blue text-white rounded-xl hover:bg-gemini-blue/90 font-medium transition"
+                                            className="px-8 py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition shadow-lg"
                                           >
                                             Assign
                                           </button>
                                           {currentMaster && (
                                             <button
                                               onClick={() => unlinkFromMaster(event.id)}
-                                              className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
+                                              className="px-8 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition shadow-lg"
                                             >
                                               Unlink
                                             </button>
                                           )}
                                         </div>
                                       </div>
+
                                       <div>
-                                        <label className="block text-lg font-semibold text-gray-700 mb-2">Display Name</label>
+                                        <label className="block text-xl font-bold text-brand-dark mb-3">Event Display Name</label>
                                         <input
                                           type="text"
                                           value={displayName}
                                           onChange={(e) => handleEditEventName(event.id, e.target.value)}
-                                          className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                                          className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
                                         />
                                       </div>
                                     </div>
 
                                     {/* Action Buttons */}
-                                    <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mb-8">
-                                      <label className="flex items-center gap-4 cursor-pointer">
+                                    <div className="flex flex-col sm:flex-row justify-center items-center gap-8 mb-10">
+                                      <label className="flex items-center gap-6 cursor-pointer">
                                         <input
                                           type="checkbox"
                                           checked={isAutoFetchEnabled}
                                           onChange={() => toggleLiveAutoFetch(event.id)}
-                                          className="h-7 w-7 text-green-600 rounded focus:ring-green-500"
+                                          className="h-10 w-10 text-accent rounded focus:ring-accent/30"
                                         />
-                                        <span className="text-xl font-bold text-gray-800">
+                                        <span className="text-2xl font-black text-brand-dark">
                                           Live Auto-Fetch {isAutoFetchEnabled ? 'ON' : 'OFF'}
                                         </span>
                                       </label>
+
                                       <button
                                         onClick={() => refreshAndPublishResults(event.id)}
                                         disabled={refreshingEvent === event.id}
-                                        className="px-10 py-4 bg-green-600 text-white text-xl font-bold rounded-xl hover:bg-green-700 disabled:opacity-50 transition shadow-lg"
+                                        className="px-12 py-6 bg-green-600 text-white text-2xl font-black rounded-xl hover:bg-green-700 disabled:opacity-60 transition shadow-2xl"
                                       >
                                         {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
                                       </button>
+
                                       <button
                                         onClick={() => handleDeleteEvent(event.id, displayName)}
-                                        className="px-10 py-4 bg-red-600 text-white text-xl font-bold rounded-xl hover:bg-red-700 transition shadow-lg"
+                                        className="px-12 py-6 bg-red-600 text-white text-2xl font-black rounded-xl hover:bg-red-700 transition shadow-2xl"
                                       >
                                         Delete Event
                                       </button>
@@ -532,26 +493,26 @@ export default function EventsAdmin({
                                     {/* Races */}
                                     {event.races && event.races.length > 0 && (
                                       <div>
-                                        <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">Races ({event.races.length})</h4>
-                                        <div className="space-y-3">
+                                        <h4 className="text-2xl font-black text-brand-dark mb-6">Races ({event.races.length})</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                           {event.races.map((race) => (
-                                            <div key={race.race_id} className="flex items-center justify-between bg-gray-50 p-4 rounded-xl">
-                                              <div className="flex items-center gap-4 flex-1">
+                                            <div key={race.race_id} className="flex items-center justify-between bg-white p-5 rounded-xl border border-primary/10 shadow-md">
+                                              <div className="flex items-center gap-6 flex-1">
                                                 <input
                                                   type="checkbox"
                                                   checked={!(hiddenRaces[event.id] || []).includes(race.race_id)}
                                                   onChange={() => toggleRaceVisibility(event.id, race.race_id)}
-                                                  className="h-5 w-5 text-gemini-blue rounded"
+                                                  className="h-6 w-6 text-accent rounded focus:ring-accent/30"
                                                 />
                                                 <input
                                                   type="text"
                                                   value={editedEvents[event.id]?.races?.[race.race_id] || race.race_name}
                                                   onChange={(e) => handleEditRaceName(event.id, race.race_id, e.target.value)}
-                                                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                                  className="flex-1 px-5 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 text-lg"
                                                 />
                                               </div>
                                               {race.distance && (
-                                                <span className="text-gray-600 ml-4">
+                                                <span className="text-gray-600 ml-6 font-medium">
                                                   {race.distance} {race.distance_unit || 'm'}
                                                 </span>
                                               )}

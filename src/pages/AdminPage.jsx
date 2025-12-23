@@ -1,4 +1,4 @@
-// src/pages/AdminPage.jsx (FULL & COMPLETE — With Per-Event Live Auto-Fetch Toggle)
+// src/pages/admin/AdminPage.jsx (FINAL — New Red/Turquoise Brand Palette)
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchEvents as fetchChronoEvents, fetchResultsForEvent } from '../api/chronotrackapi';
@@ -24,7 +24,6 @@ export default function AdminPage() {
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [eventLogos, setEventLogos] = useState({});
   const [ads, setAds] = useState([]);
-
   const [expandedEvents, setExpandedEvents] = useState({});
   const [chronoEvents, setChronoEvents] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
@@ -37,8 +36,6 @@ export default function AdminPage() {
   const [newMasterKeys, setNewMasterKeys] = useState({});
   const [saveStatus, setSaveStatus] = useState('');
   const [hideMasteredEvents, setHideMasteredEvents] = useState(true);
-
-  // NEW: Per-event live auto-fetch toggle (default ON)
   const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
 
   const adminSupabase = createAdminSupabaseClient();
@@ -52,8 +49,6 @@ export default function AdminPage() {
     setShowAdsPerMaster(config.showAdsPerMaster || {});
     setAds(config.ads || []);
     setHiddenRaces(config.hiddenRaces || {});
-
-    // Load per-event live auto-fetch settings — defaults to true if not set
     setLiveAutoFetchPerEvent(config.liveAutoFetchPerEvent || {});
   };
 
@@ -107,6 +102,7 @@ export default function AdminPage() {
           .order('start_time', { ascending: false });
         if (eventsError) throw eventsError;
         setChronoEvents(cachedEvents || []);
+
         const counts = {};
         for (const event of cachedEvents || []) {
           const { count: adminCount, error: countError } = await adminSupabase
@@ -348,9 +344,11 @@ export default function AdminPage() {
           contentType: file.type,
         });
       if (uploadError) throw uploadError;
+
       const { data: { publicUrl } } = adminSupabase.storage
         .from('logos')
         .getPublicUrl(`public/${masterKey}`);
+
       const updatedLogos = { ...eventLogos, [masterKey]: publicUrl };
       setEventLogos(updatedLogos);
       await autoSaveConfig('eventLogos', updatedLogos);
@@ -369,6 +367,7 @@ export default function AdminPage() {
         .from('logos')
         .remove([`public/${masterKey}`]);
       if (error && error.message !== 'Object not found') throw error;
+
       const updatedLogos = { ...eventLogos };
       delete updatedLogos[masterKey];
       setEventLogos(updatedLogos);
@@ -502,7 +501,6 @@ export default function AdminPage() {
     }
   };
 
-  // Toggle per-event live auto-fetch
   const toggleLiveAutoFetch = (eventId) => {
     setLiveAutoFetchPerEvent(prev => ({
       ...prev,
@@ -512,37 +510,40 @@ export default function AdminPage() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-center text-gemini-dark-gray mb-8">Admin Login</h1>
-          {error && <p className="text-red-600 text-center mb-4">{error}</p>}
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full p-4 border border-gray-300 rounded-xl mb-4"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-4 border border-gray-300 rounded-xl mb-6"
-          />
-          <button
-            onClick={() => {
-              if (username === 'admin' && password === 'gemini2025') {
-                localStorage.setItem('adminLoggedIn', 'true');
-                setIsLoggedIn(true);
-              } else {
-                setError('Invalid credentials');
-              }
-            }}
-            className="w-full bg-gemini-blue text-white py-4 rounded-xl font-bold hover:bg-gemini-blue/90 transition"
-          >
-            Login
-          </button>
+      <div className="min-h-screen bg-brand-light flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-12 border-4 border-primary/20">
+          <h1 className="text-5xl font-black text-center text-brand-dark mb-12">Admin Login</h1>
+          {error && <p className="text-primary font-bold text-center mb-8 text-2xl">{error}</p>}
+          <div className="space-y-8">
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-8 py-6 text-2xl border-4 border-gray-300 rounded-2xl focus:outline-none focus:border-primary focus:ring-8 focus:ring-primary/20"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-8 py-6 text-2xl border-4 border-gray-300 rounded-2xl focus:outline-none focus:border-primary focus:ring-8 focus:ring-primary/20"
+            />
+            <button
+              onClick={() => {
+                if (username === 'admin' && password === 'gemini2025') {
+                  localStorage.setItem('adminLoggedIn', 'true');
+                  setIsLoggedIn(true);
+                  setError(null);
+                } else {
+                  setError('Invalid credentials');
+                }
+              }}
+              className="w-full bg-primary text-white py-6 text-3xl font-black rounded-2xl hover:bg-primary/90 transition shadow-2xl transform hover:scale-105"
+            >
+              Login
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -553,71 +554,77 @@ export default function AdminPage() {
     : chronoEvents;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
+    <div className="min-h-screen bg-brand-light py-12 px-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-12">
-          <h1 className="text-4xl font-bold text-gemini-dark-gray">Admin Dashboard</h1>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-8 mb-12">
+          <h1 className="text-5xl font-black text-brand-dark">Admin Dashboard</h1>
           <button
             onClick={() => {
               localStorage.removeItem('adminLoggedIn');
               setIsLoggedIn(false);
             }}
-            className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
+            className="px-12 py-6 bg-red-600 text-white text-2xl font-black rounded-2xl hover:bg-red-700 transition shadow-2xl"
           >
             Logout
           </button>
         </div>
 
         {saveStatus && (
-          <div className="fixed top-24 right-8 z-50 bg-gemini-blue text-white px-8 py-4 rounded-2xl shadow-2xl animate-pulse text-lg font-semibold">
+          <div className="fixed top-24 right-8 z-50 bg-primary text-white px-12 py-6 rounded-3xl shadow-2xl animate-pulse text-2xl font-black">
             {saveStatus}
           </div>
         )}
 
-        <div className="flex space-x-1 mb-8 bg-gray-100 p-1 rounded-xl w-fit">
+        <div className="flex flex-wrap gap-6 mb-12 bg-white p-6 rounded-3xl shadow-2xl border-4 border-primary/20">
           <button
             onClick={() => setActiveTab('events')}
-            className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'events' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+            className={`px-12 py-6 text-2xl font-black rounded-2xl transition shadow-xl ${
+              activeTab === 'events'
+                ? 'bg-primary text-white'
+                : 'bg-brand-light text-brand-dark hover:bg-primary/10'
+            }`}
           >
             Events & Masters
           </button>
           <button
             onClick={() => setActiveTab('website')}
-            className={`px-8 py-3 rounded-lg font-semibold transition ${activeTab === 'website' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+            className={`px-12 py-6 text-2xl font-black rounded-2xl transition shadow-xl ${
+              activeTab === 'website'
+                ? 'bg-primary text-white'
+                : 'bg-brand-light text-brand-dark hover:bg-primary/10'
+            }`}
           >
             Website
           </button>
         </div>
 
         {activeTab === 'events' && (
-          <section className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <h2 className="text-3xl font-bold text-gemini-dark-gray">
+          <section className="space-y-10">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8">
+              <h2 className="text-4xl font-black text-brand-dark">
                 ChronoTrack Events ({displayedEvents.length} shown of {chronoEvents.length})
               </h2>
-              <div className="flex flex-wrap items-center gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="flex flex-wrap items-center gap-6">
+                <label className="flex items-center gap-4 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={hideMasteredEvents}
                     onChange={(e) => setHideMasteredEvents(e.target.checked)}
-                    className="h-5 w-5 text-gemini-blue rounded"
+                    className="h-8 w-8 text-accent rounded focus:ring-accent/30"
                   />
-                  <span className="text-gray-700 font-medium">Hide Events with Masters</span>
+                  <span className="text-xl font-bold text-brand-dark">Hide Events with Masters</span>
                 </label>
-
                 <button
                   onClick={fetchLatestFromChronoTrack}
                   disabled={fetchingEvents}
-                  className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition"
+                  className="px-10 py-6 bg-primary text-white text-xl font-black rounded-2xl hover:bg-primary/90 disabled:opacity-60 transition shadow-2xl"
                 >
-                  {fetchingEvents ? 'Refreshing...' : 'Refresh Events & End Times'}
+                  {fetchingEvents ? 'Refreshing Events...' : 'Refresh Events & End Times'}
                 </button>
-
                 <button
                   onClick={publishAllEvents}
                   disabled={publishingAll}
-                  className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 disabled:opacity-50 transition"
+                  className="px-10 py-6 bg-orange-600 text-white text-xl font-black rounded-2xl hover:bg-orange-700 disabled:opacity-60 transition shadow-2xl"
                 >
                   {publishingAll
                     ? `Publishing... (${bulkProgress.current}/${bulkProgress.total})`
@@ -627,13 +634,13 @@ export default function AdminPage() {
             </div>
 
             {displayedEvents.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-2xl shadow">
-                <p className="text-xl text-gray-600">
+              <div className="text-center py-32 bg-white rounded-3xl shadow-2xl border-4 border-primary/20">
+                <p className="text-3xl text-brand-dark">
                   {hideMasteredEvents
                     ? 'All events assigned to masters or no events available.'
                     : 'No events cached yet.'}
                 </p>
-                <p className="text-gray-500 mt-2">Click "Refresh Events & End Times" to load from ChronoTrack.</p>
+                <p className="text-xl text-gray-500 mt-6">Click "Refresh Events & End Times" to load from ChronoTrack.</p>
               </div>
             ) : (
               displayedEvents.map((event) => {
@@ -641,38 +648,33 @@ export default function AdminPage() {
                 const displayName = editedEvents[event.id]?.name || event.name;
                 const count = participantCounts[event.id] || 0;
 
-                // Per-event live auto-fetch status — default ON
                 const now = Math.floor(Date.now() / 1000);
                 const startTime = event.start_time ? parseInt(event.start_time, 10) : null;
-		const endTime = event.event_end_time ? parseInt(event.event_end_time, 10) : null;
-
-		const isRaceWindowActive = startTime && endTime && now >= startTime && now <= endTime;
-		const isRaceDayToday = !endTime && startTime
-  		  ? new Date(startTime * 1000).toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
-  		  : false;
-
-		const isCurrentlyLive = isRaceWindowActive || isRaceDayToday;
-
-		// Auto-disable if race is over AND admin hasn't manually overridden
-		const isAutoFetchEnabled = isCurrentlyLive 
-  		  ? (liveAutoFetchPerEvent[event.id] !== false) // default ON during race
-  		  : false; // force OFF after race ends
+                const endTime = event.event_end_time ? parseInt(event.event_end_time, 10) : null;
+                const isRaceWindowActive = startTime && endTime && now >= startTime && now <= endTime;
+                const isRaceDayToday = !endTime && startTime
+                  ? new Date(startTime * 1000).toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
+                  : false;
+                const isCurrentlyLive = isRaceWindowActive || isRaceDayToday;
+                const isAutoFetchEnabled = isCurrentlyLive
+                  ? (liveAutoFetchPerEvent[event.id] !== false)
+                  : false;
 
                 return (
-                  <div key={event.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                  <div key={event.id} className="bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-primary/20">
                     <div
-                      className="p-6 cursor-pointer hover:bg-gemini-blue/5 transition flex justify-between items-center"
+                      className="p-8 cursor-pointer hover:bg-primary/5 transition flex justify-between items-center"
                       onClick={() => toggleEventExpansion(event.id)}
                     >
                       <div>
-                        <h3 className="text-2xl font-bold text-gemini-dark-gray">
+                        <h3 className="text-3xl font-black text-brand-dark">
                           {displayName}
                         </h3>
-                        <p className="text-gray-600 mt-2 flex flex-wrap items-center gap-4">
+                        <p className="text-xl text-gray-600 mt-3 flex flex-wrap items-center gap-6">
                           <span>
                             <strong>Start:</strong> {formatDateTime(event.start_time)}
                           </span>
-                          <span className="flex items-center gap-2">
+                          <span className="flex items-center gap-3">
                             <strong>End:</strong> {formatDateTime(event.event_end_time)}
                             {!event.event_end_time && (
                               <button
@@ -681,52 +683,53 @@ export default function AdminPage() {
                                   updateEndTimeForEvent(event.id);
                                 }}
                                 disabled={updatingEndTime === event.id}
-                                className="px-4 py-1 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 transition"
+                                className="px-6 py-2 bg-accent text-brand-dark text-sm font-bold rounded-lg hover:bg-accent/90 disabled:opacity-60 transition"
                               >
                                 {updatingEndTime === event.id ? 'Updating...' : 'Update End Time'}
                               </button>
                             )}
                           </span>
                         </p>
-                        <p className="text-gray-600 mt-1">
+                        <p className="text-lg text-gray-600 mt-2">
                           ID: {event.id} • <strong>{count} participants published</strong>
+                          {isCurrentlyLive && <span className="ml-6 text-green-600 font-black text-2xl">● LIVE</span>}
                         </p>
                         {currentMaster && (
-                          <p className="text-sm text-gemini-blue font-medium mt-2">
+                          <p className="text-lg font-bold text-accent mt-3">
                             Master: {currentMaster}
                           </p>
                         )}
                       </div>
-                      <span className="text-2xl text-gray-400">{expandedEvents[event.id] ? '−' : '+'}</span>
+                      <span className="text-5xl font-black text-primary">{expandedEvents[event.id] ? '−' : '+'}</span>
                     </div>
 
                     {expandedEvents[event.id] && (
-                      <div className="px-6 pb-6 border-t border-gray-200">
+                      <div className="px-10 pb-10 border-t-8 border-primary/30 bg-brand-light/30">
                         {currentMaster && (
-                          <div className="mb-8 p-6 bg-gradient-to-r from-gemini-blue/10 to-gemini-blue/5 rounded-xl border border-gemini-blue/30">
-                            <div className="flex justify-between items-center mb-6">
-                              <h4 className="text-xl font-bold text-gemini-dark-gray">
-                                Master Event: <span className="text-gemini-blue">{currentMaster}</span>
+                          <div className="my-10 p-8 bg-white rounded-3xl shadow-xl border-4 border-accent/20">
+                            <div className="flex justify-between items-center mb-8">
+                              <h4 className="text-3xl font-black text-brand-dark">
+                                Master Event: <span className="text-accent">{currentMaster}</span>
                               </h4>
                               <button
                                 onClick={() => handleDeleteMaster(currentMaster)}
-                                className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
+                                className="px-10 py-5 bg-red-600 text-white text-xl font-black rounded-2xl hover:bg-red-700 transition shadow-xl"
                               >
                                 Delete Master
                               </button>
                             </div>
-                            <div className="mb-6">
-                              <h5 className="text-lg font-semibold text-gray-700 mb-3">Master Logo</h5>
+                            <div className="mb-10">
+                              <h5 className="text-2xl font-black text-brand-dark mb-6">Master Logo</h5>
                               {eventLogos[currentMaster] ? (
-                                <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-10">
                                   <img
                                     src={eventLogos[currentMaster]}
                                     alt="Master Logo"
-                                    className="h-32 rounded-lg shadow-md"
+                                    className="max-h-48 rounded-2xl shadow-2xl border-4 border-primary/20"
                                   />
                                   <button
                                     onClick={() => handleRemoveLogo(currentMaster)}
-                                    className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
+                                    className="px-10 py-5 bg-red-600 text-white text-xl font-black rounded-2xl hover:bg-red-700 transition shadow-xl"
                                   >
                                     Remove Logo
                                   </button>
@@ -736,13 +739,13 @@ export default function AdminPage() {
                                   type="file"
                                   accept="image/*"
                                   onChange={(e) => handleLogoUpload(e, currentMaster)}
-                                  className="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gemini-blue file:text-white hover:file:bg-gemini-blue/90 cursor-pointer"
+                                  className="block w-full text-lg text-gray-700 file:mr-8 file:py-6 file:px-12 file:rounded-full file:border-0 file:text-lg file:font-black file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition"
                                 />
                               )}
                             </div>
                             <div>
-                              <h5 className="text-lg font-semibold text-gray-700 mb-3">Ads Visibility</h5>
-                              <label className="flex items-center gap-4 cursor-pointer">
+                              <h5 className="text-2xl font-black text-brand-dark mb-6">Ads Visibility</h5>
+                              <label className="flex items-center gap-8 cursor-pointer">
                                 <input
                                   type="checkbox"
                                   checked={!!showAdsPerMaster[currentMaster]}
@@ -751,27 +754,27 @@ export default function AdminPage() {
                                     setShowAdsPerMaster(updated);
                                     autoSaveConfig('showAdsPerMaster', updated);
                                   }}
-                                  className="h-6 w-6 text-gemini-blue rounded focus:ring-gemini-blue"
+                                  className="h-10 w-10 text-accent rounded focus:ring-accent/30"
                                 />
-                                <span className="text-lg font-medium text-gray-800">
-                                  {showAdsPerMaster[currentMaster] ? 'Show ads' : 'Hide ads'} on this master event
+                                <span className="text-2xl font-black text-brand-dark">
+                                  {showAdsPerMaster[currentMaster] ? 'Show Ads' : 'Hide Ads'} on this master event
                                 </span>
                               </label>
                             </div>
                           </div>
                         )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mt-10">
                           <div>
-                            <label className="block text-lg font-semibold text-gray-700 mb-2">Master Event</label>
-                            <div className="flex gap-3">
+                            <label className="block text-2xl font-black text-brand-dark mb-4">Master Event</label>
+                            <div className="flex gap-6">
                               <input
                                 type="text"
                                 list="master-keys"
                                 placeholder="Type or select master"
                                 value={newMasterKeys[event.id] || ''}
                                 onChange={(e) => setNewMasterKeys(prev => ({ ...prev, [event.id]: e.target.value }))}
-                                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl"
+                                className="flex-1 px-8 py-6 text-xl border-4 border-gray-300 rounded-2xl focus:outline-none focus:border-primary focus:ring-8 focus:ring-primary/20"
                               />
                               <datalist id="master-keys">
                                 {Object.keys(masterGroups).map(key => (
@@ -780,41 +783,41 @@ export default function AdminPage() {
                               </datalist>
                               <button
                                 onClick={() => assignToMaster(event.id, newMasterKeys[event.id] || currentMaster)}
-                                className="px-6 py-3 bg-gemini-blue text-white rounded-xl hover:bg-gemini-blue/90 font-medium transition"
+                                className="px-12 py-6 bg-primary text-white text-xl font-black rounded-2xl hover:bg-primary/90 transition shadow-xl"
                               >
                                 Assign
                               </button>
                               {currentMaster && (
                                 <button
                                   onClick={() => unlinkFromMaster(event.id)}
-                                  className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition"
+                                  className="px-12 py-6 bg-red-600 text-white text-xl font-black rounded-2xl hover:bg-red-700 transition shadow-xl"
                                 >
                                   Unlink
                                 </button>
                               )}
                             </div>
                           </div>
+
                           <div>
-                            <label className="block text-lg font-semibold text-gray-700 mb-2">Display Name</label>
+                            <label className="block text-2xl font-black text-brand-dark mb-4">Display Name</label>
                             <input
                               type="text"
                               value={displayName}
                               onChange={(e) => handleEditEventName(event.id, e.target.value)}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                              className="w-full px-8 py-6 text-xl border-4 border-gray-300 rounded-2xl focus:outline-none focus:border-primary focus:ring-8 focus:ring-primary/20"
                             />
                           </div>
                         </div>
 
-                        <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-6">
-                          {/* Per-event Live Auto-Fetch Toggle */}
-                          <label className="flex items-center gap-4 cursor-pointer">
+                        <div className="mt-12 flex flex-col sm:flex-row justify-center items-center gap-10">
+                          <label className="flex items-center gap-8 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={isAutoFetchEnabled}
                               onChange={() => toggleLiveAutoFetch(event.id)}
-                              className="h-7 w-7 text-green-600 rounded focus:ring-green-500"
+                              className="h-12 w-12 text-green-600 rounded focus:ring-green-500"
                             />
-                            <span className="text-xl font-bold text-gray-800">
+                            <span className="text-3xl font-black text-brand-dark">
                               Live Auto-Fetch {isAutoFetchEnabled ? 'ON' : 'OFF'}
                             </span>
                           </label>
@@ -822,41 +825,41 @@ export default function AdminPage() {
                           <button
                             onClick={() => refreshAndPublishResults(event.id)}
                             disabled={refreshingEvent === event.id}
-                            className="px-10 py-4 bg-green-600 text-white text-xl font-bold rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition shadow-lg"
+                            className="px-16 py-8 bg-green-600 text-white text-3xl font-black rounded-full hover:bg-green-700 disabled:opacity-60 transition shadow-2xl"
                           >
                             {refreshingEvent === event.id ? 'Publishing...' : 'Refresh & Publish Results'}
                           </button>
 
                           <button
                             onClick={() => handleDeleteEvent(event.id, displayName)}
-                            className="px-10 py-4 bg-red-600 text-white text-xl font-bold rounded-xl hover:bg-red-700 transition shadow-lg"
+                            className="px-16 py-8 bg-red-600 text-white text-3xl font-black rounded-full hover:bg-red-700 transition shadow-2xl"
                           >
                             Delete Event
                           </button>
                         </div>
 
                         {event.races && event.races.length > 0 && (
-                          <div className="mt-8">
-                            <h4 className="text-xl font-bold text-gemini-dark-gray mb-4">Races ({event.races.length})</h4>
-                            <div className="space-y-3">
+                          <div className="mt-12">
+                            <h4 className="text-3xl font-black text-brand-dark mb-8">Races ({event.races.length})</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               {event.races.map((race) => (
-                                <div key={race.race_id} className="flex items-center justify-between bg-gray-50 p-4 rounded-xl">
-                                  <div className="flex items-center gap-4 flex-1">
+                                <div key={race.race_id} className="flex items-center justify-between bg-white p-6 rounded-2xl border-4 border-primary/10 shadow-xl">
+                                  <div className="flex items-center gap-8 flex-1">
                                     <input
                                       type="checkbox"
                                       checked={!(hiddenRaces[event.id] || []).includes(race.race_id)}
                                       onChange={() => toggleRaceVisibility(event.id, race.race_id)}
-                                      className="h-5 w-5 text-gemini-blue rounded"
+                                      className="h-8 w-8 text-accent rounded focus:ring-accent/30"
                                     />
                                     <input
                                       type="text"
                                       value={editedEvents[event.id]?.races?.[race.race_id] || race.race_name}
                                       onChange={(e) => handleEditRaceName(event.id, race.race_id, e.target.value)}
-                                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                      className="flex-1 px-8 py-5 text-xl border-4 border-gray-300 rounded-2xl focus:outline-none focus:border-primary focus:ring-8 focus:ring-primary/20"
                                     />
                                   </div>
                                   {race.distance && (
-                                    <span className="text-gray-600 ml-4">
+                                    <span className="text-xl font-bold text-gray-600 ml-8">
                                       {race.distance} {race.distance_unit || 'm'}
                                     </span>
                                   )}
@@ -867,7 +870,7 @@ export default function AdminPage() {
                         )}
 
                         {(!event.races || event.races.length === 0) && (
-                          <div className="mt-8 text-center text-gray-500 italic">
+                          <div className="mt-12 text-center text-gray-500 italic text-2xl">
                             No races embedded for this event.
                           </div>
                         )}
@@ -881,15 +884,21 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'website' && (
-          <section className="space-y-12">
-            <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <h3 className="text-2xl font-bold mb-6">Advertisements</h3>
-              <input type="file" onChange={(e) => handleFileUpload(e, 'ad')} accept="image/*" multiple className="mb-6" />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <section className="space-y-16">
+            <h2 className="text-5xl font-black text-brand-dark mb-12">Website Management</h2>
+            <div className="bg-white rounded-3xl shadow-2xl p-16 border-4 border-primary/20">
+              <h3 className="text-4xl font-black text-brand-dark mb-12">Advertisements</h3>
+              <input
+                type="file"
+                onChange={(e) => handleFileUpload(e, 'ad')}
+                accept="image/*"
+                multiple
+                className="block w-full text-xl text-gray-700 file:mr-10 file:py-6 file:px-12 file:rounded-full file:border-0 file:text-xl file:font-black file:bg-primary file:text-white hover:file:bg-primary/90 transition mb-12"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
                 {ads.map((ad, i) => (
-                  <div key={i} className="rounded-xl overflow-hidden shadow-md hover:shadow-xl transition">
-                    <img src={ad} alt={`Ad ${i + 1}`} className="w-full h-48 object-cover" />
+                  <div key={i} className="bg-brand-light rounded-3xl shadow-2xl overflow-hidden border-4 border-primary/20 hover:shadow-3xl hover:border-primary/40 transition">
+                    <img src={ad} alt={`Ad ${i + 1}`} className="w-full h-auto" />
                   </div>
                 ))}
               </div>
@@ -897,12 +906,12 @@ export default function AdminPage() {
           </section>
         )}
 
-        <div className="text-center mt-16">
+        <div className="text-center mt-20">
           <button
             onClick={saveAllChanges}
-            className="px-16 py-6 bg-gemini-blue text-white text-2xl font-bold rounded-full hover:bg-gemini-blue/90 shadow-2xl transition transform hover:scale-105"
+            className="px-32 py-12 bg-primary text-white text-5xl font-black rounded-full hover:bg-primary/90 shadow-2xl transition transform hover:scale-110"
           >
-            Save All Other Changes to Supabase
+            Save All Changes to Supabase
           </button>
         </div>
       </div>
