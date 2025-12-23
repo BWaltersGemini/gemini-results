@@ -53,28 +53,28 @@ export default function EmailCampaignsAdmin() {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Congratulations!</title>
 </head>
-<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, Helvetica, sans-serif;">
+<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4; padding:20px 0;">
     <tr>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background:#ffffff; border-radius:20px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.1);">
           <!-- Hero -->
           <tr>
-            <td style="background:linear-gradient(135deg, #001f3f, #2563eb); color:white; padding:60px 20px; text-align:center;">
-              <h1 style="font-size:56px; font-weight:900; margin:0; color:white;">CONGRATULATIONS!</h1>
-              <h2 style="font-size:48px; margin:30px 0 20px; font-weight:700; color:white;">{{first_name}}</h2>
-              <p style="font-size:28px; margin:10px 0; color:white; opacity:0.9;">You conquered the {{race_name}}!</p>
+            <td style="background:linear-gradient(135deg, #001f3f, #2563eb); color:#ffffff; padding:60px 20px; text-align:center;">
+              <h1 style="font-size:56px; font-weight:900; margin:0; color:#ffffff;">CONGRATULATIONS!</h1>
+              <h2 style="font-size:48px; margin:30px 0 20px; font-weight:700; color:#ffffff;">{{first_name}}</h2>
+              <p style="font-size:28px; margin:10px 0; color:#ffffff; opacity:0.9;">You conquered the {{race_name}}!</p>
               <div style="margin:50px 0;">
-                <p style="font-size:24px; margin:0; color:white; opacity:0.9;">Official Chip Time</p>
-                <p style="font-size:80px; font-weight:900; margin:20px 0; color:white; line-height:1;">{{chip_time}}</p>
-                <p style="font-size:24px; margin:0; color:white; opacity:0.9;">Pace: {{pace}}</p>
+                <p style="font-size:24px; margin:0; color:#ffffff; opacity:0.9;">Official Chip Time</p>
+                <p style="font-size:80px; font-weight:900; margin:20px 0; color:#ffffff; line-height:1;">{{chip_time}}</p>
+                <p style="font-size:24px; margin:0; color:#ffffff; opacity:0.9;">Pace: {{pace}}</p>
               </div>
             </td>
           </tr>
 
           <!-- Logo -->
           <tr>
-            <td style="text-align:center; padding:40px 20px; background:white;">
+            <td style="text-align:center; padding:40px 20px; background:#ffffff;">
               <img src="{{event_logo}}" alt="Gemini Timing" style="max-width:320px; height:auto; border-radius:16px;" />
             </td>
           </tr>
@@ -85,7 +85,7 @@ export default function EmailCampaignsAdmin() {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <div style="background:white; border:6px solid #2563eb; border-radius:24px; padding:40px; max-width:520px; margin:0 auto; box-shadow:0 20px 40px rgba(37,99,235,0.2);">
+                    <div style="background:#ffffff; border:6px solid #2563eb; border-radius:24px; padding:40px; max-width:520px; margin:0 auto; box-shadow:0 20px 40px rgba(37,99,235,0.2);">
                       <h3 style="font-size:32px; font-weight:800; color:#001f3f; text-align:center; margin-bottom:40px;">Your Race Highlights</h3>
                       <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
@@ -131,13 +131,7 @@ export default function EmailCampaignsAdmin() {
               <h3 style="font-size:28px; font-weight:700; color:#001f3f; margin-bottom:30px;">Your Next Challenge Awaits</h3>
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td align="center">
-                    <table cellpadding="0" cellspacing="0">
-                      <tr>
-                        {{upcoming_events}}
-                      </tr>
-                    </table>
-                  </td>
+                  {{upcoming_events}}
                 </tr>
               </table>
             </td>
@@ -145,7 +139,7 @@ export default function EmailCampaignsAdmin() {
 
           <!-- Footer -->
           <tr>
-            <td style="background:#001f3f; color:white; padding:40px 20px; text-align:center;">
+            <td style="background:#001f3f; color:#ffffff; padding:40px 20px; text-align:center;">
               <p style="font-size:20px; margin:0 0 10px;">— The Gemini Timing Team</p>
               <p style="margin:0;">
                 <a href="https://geminitiming.com" style="color:#60a5fa; font-size:18px; text-decoration:none;">geminitiming.com</a>
@@ -244,18 +238,18 @@ export default function EmailCampaignsAdmin() {
       .replace(/{{race_name}}/g, participant.race_name || event.name || '')
       .replace(/{{event_name}}/g, event.name || '')
       .replace(/{{event_date}}/g, new Date(event.start_time * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
-      .replace(/{{event_logo}}/g, '/GRR.png') // Always use GRR.png from public folder
+      .replace(/{{event_logo}}/g, '/GRR.png')
       .replace(/{{race_story}}/g, raceStory)
       .replace(/{{splits_table}}/g, splitsTable)
       .replace(/{{upcoming_events}}/g, upcomingCards);
   };
 
   const generateSplitsTable = (splits) => {
-    if (!splits || splits.length === 0) return ''; // Completely hidden if no splits
+    if (!splits || splits.length === 0) return '';
 
     let table = `
     <tr>
-      <td style="padding:40px 20px; background:white;">
+      <td style="padding:40px 20px; background:#f8fafc;">
         <h3 style="font-size:32px; font-weight:800; color:#001f3f; text-align:center; margin-bottom:30px;">Your Race Splits</h3>
         <table width="100%" cellpadding="0" cellspacing="0" style="background:white; border-radius:16px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.05);">
           <thead style="background:#001f3f; color:white;">
@@ -300,19 +294,17 @@ export default function EmailCampaignsAdmin() {
   };
 
   const generateUpcomingCards = () => {
-    if (upcomingEvents.length === 0) {
-      return '<p style="text-align:center; color:#666;">Check back soon for upcoming races!</p>';
-    }
+    if (upcomingEvents.length === 0) return '';
 
     return upcomingEvents.map(event => `
-      <td style="padding:15px;">
-        <table width="260" cellpadding="0" cellspacing="0" style="background:white; border-radius:16px; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.08);">
-          ${event.image?.url ? `<tr><td><img src="${event.image.url}" alt="${event.title.rendered}" style="width:100%; height:160px; object-cover;" /></td></tr>` : '<tr><td style="height:160px; background:#e5e7eb; display:flex; align-items:center; justify-content:center;"><p style="color:#9ca3af;">No Image</p></td></tr>'}
+      <td style="padding:10px;">
+        <table width="260" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.08);">
+          ${event.image?.url ? `<tr><td><img src="${event.image.url}" alt="${event.title.rendered}" style="width:260px; height:160px; object-cover;" /></td></tr>` : '<tr><td style="height:160px; background:#e5e7eb;"></td></tr>'}
           <tr>
-            <td style="padding:20px;">
-              <h4 style="font-size:18px; font-weight:bold; color:#001f3f; margin:0 0 10px;">${event.title.rendered || event.title}</h4>
+            <td style="padding:20px; text-align:center;">
+              <p style="font-size:18px; font-weight:bold; color:#001f3f; margin:0 0 10px;">${event.title.rendered || event.title}</p>
               <p style="color:#6b7280; font-size:16px; margin:0 0 15px;">${new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-              <a href="${event.url}" target="_blank" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:16px;">Register →</a>
+              <a href="${event.url}" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:bold;">Register →</a>
             </td>
           </tr>
         </table>
@@ -395,7 +387,7 @@ export default function EmailCampaignsAdmin() {
   return (
     <section className="space-y-12">
       <div className="bg-green-100 border-2 border-green-500 rounded-xl p-6 text-center">
-        <p className="text-green-800 font-black text-2xl">🟢 FINAL v4.2 — BOLD, CLEAN, PERFECT</p>
+        <p className="text-green-800 font-black text-2xl">🟢 FINAL v4.3 — BOLD, CLEAN, PERFECT</p>
         <p className="text-green-700 text-lg mt-2">Visible hero • First name only • GRR.png logo • Framed stats • No split filler • Subtle upcoming events</p>
       </div>
 
