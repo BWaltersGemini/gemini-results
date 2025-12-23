@@ -1,4 +1,4 @@
-// src/pages/ResultsPage.jsx (FULLY UPDATED — Fixed Pagination + Auto-Expand on Page Change)
+// src/pages/ResultsPage.jsx (COMPLETE FINAL VERSION — Fixed Search + Pagination + Back-to-Top Button Visibility)
 import { useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -14,7 +14,6 @@ export default function ResultsPage() {
     events = [],
     results = [],
     loadingResults,
-    uniqueDivisions = [],
     eventLogos = {},
     ads = [],
     setSelectedEvent,
@@ -32,22 +31,20 @@ export default function ResultsPage() {
 
   const prevMasterKeyRef = useRef(masterKey);
 
-  // Division filter & highlight from ParticipantPage
-  const divisionFilterFromState = location.state?.divisionFilter;
+  // Highlight from ParticipantPage
   const highlightBibFromState = location.state?.highlightBib;
-  const [activeDivisionFilter, setActiveDivisionFilter] = useState(divisionFilterFromState || '');
   const [highlightedBib, setHighlightedBib] = useState(highlightBibFromState || null);
 
   // Per-race top 5 / view all toggle
   const [expandedRaces, setExpandedRaces] = useState({});
-  // Per-race pagination state (only active when "View All" is used)
+  // Per-race pagination state
   const [racePagination, setRacePagination] = useState({});
 
   // Refs
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
 
-  // Live toast listener
+  // Live toast
   useEffect(() => {
     const handler = (e) => {
       const count = e.detail?.count || 1;
@@ -66,11 +63,10 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // Reset states when changing master series
+  // Reset on master change
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
-      setActiveDivisionFilter('');
       setHighlightedBib(null);
       setExpandedRaces({});
       setRacePagination({});
@@ -91,20 +87,27 @@ export default function ResultsPage() {
     }
   }, [searchQuery]);
 
-  // Back-to-top button visibility
+  // FIXED: Back-to-top button visibility
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
-        if (window.scrollY > 600) {
+        const scrolled = window.scrollY || document.documentElement.scrollTop;
+        if (scrolled > 600) {
           backToTopRef.current.style.opacity = '1';
           backToTopRef.current.style.visibility = 'visible';
+          backToTopRef.current.style.pointerEvents = 'auto';
         } else {
           backToTopRef.current.style.opacity = '0';
           backToTopRef.current.style.visibility = 'hidden';
+          backToTopRef.current.style.pointerEvents = 'none';
         }
       }
     };
+
     window.addEventListener('scroll', handleScroll);
+    // Trigger on mount in case page is already scrolled
+    handleScroll();
+
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -146,15 +149,12 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Select event based on URL params
+  // Event selection from URL
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
     const urlSlug = slugify(decodeURIComponent(masterKey));
-    const storedMasterKey = Object.keys(masterGroups).find(
-      (key) => slugify(key) === urlSlug
-    );
-
+    const storedMasterKey = Object.keys(masterGroups).find((key) => slugify(key) === urlSlug);
     if (!storedMasterKey) return;
 
     const groupEventIds = (masterGroups[storedMasterKey] || []).map(String);
@@ -167,18 +167,9 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Build races list
+  // Races logic — only show races that have matching results (especially important during search)
   const embeddedRaces = selectedEvent?.races || [];
-  const racesWithFinishers = embeddedRaces.filter((race) =>
-    results.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
-  );
 
-  let displayedRaces = racesWithFinishers;
-  if (raceSlug) {
-    displayedRaces = racesWithFinishers.filter((race) => slugify(race.race_name) === raceSlug);
-  }
-
-  // Global search filter
   const globalFilteredResults = searchQuery
     ? results.filter(r =>
         r.bib?.toString().includes(searchQuery) ||
@@ -186,10 +177,22 @@ export default function ResultsPage() {
       )
     : results;
 
-  // Logo logic
-  const currentMasterKey = Object.keys(masterGroups).find(key =>
-    masterGroups[key]?.includes(String(selectedEvent?.id))
+  const racesWithFinishers = embeddedRaces.filter((race) =>
+    results.some((r) => r.race_id === race.race_id && r.chip_time && r.chip_time.trim() !== '')
   );
+
+  const racesWithSearchMatches = embeddedRaces.filter((race) =>
+    globalFilteredResults.some((r) => r.race_id === race.race_id)
+  );
+
+  let displayedRaces = searchQuery ? racesWithSearchMatches : racesWithFinishers;
+
+  if (raceSlug) {
+    displayedRaces = displayedRaces.filter((race) => slugify(race.race_name) === raceSlug);
+  }
+
+  // Logo
+  const currentMasterKey = Object.keys(masterGroups).find(key => masterGroups[key]?.includes(String(selectedEvent?.id)));
   const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
   const fallbackLogo = selectedEvent ? eventLogos[selectedEvent.id] : null;
   const displayLogo = masterLogo || fallbackLogo;
@@ -204,17 +207,12 @@ export default function ResultsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Participant click handler
   const handleNameClick = (participant) => {
     if (!participant || !selectedEvent) return;
 
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
-      ids.includes(String(selectedEvent.id))
-    );
-    if (foundMaster) {
-      masterSlug = slugify(foundMaster[0]);
-    }
+    const foundMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(String(selectedEvent.id)));
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
 
     const eventYear = getYearFromEvent(selectedEvent);
     const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
@@ -226,7 +224,7 @@ export default function ResultsPage() {
     });
   };
 
-  // Available years for selector
+  // Year selector
   let availableYears = [];
   if (currentMasterKey) {
     const linkedEventIds = (masterGroups[currentMasterKey] || []).map(String);
@@ -239,15 +237,15 @@ export default function ResultsPage() {
     navigate(`/results/${masterKey}/${newYear}${raceSlug ? '/' + raceSlug : ''}`);
   };
 
-  // MASTER SERIES LANDING PAGE (no event selected)
+  // MASTER LANDING PAGE
   if (!selectedEvent) {
-    const visibleMasters = Object.keys(masterGroups).filter((key) => !hiddenMasters.includes(key));
+    const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
 
     const masterEventTiles = visibleMasters
       .map((storedKey) => {
         const displayName = editedEvents[storedKey]?.name || storedKey;
         const eventIds = (masterGroups[storedKey] || []).map(String);
-        const masterEvents = events.filter((e) => e && e.id && eventIds.includes(String(e.id)));
+        const masterEvents = events.filter(e => e && e.id && eventIds.includes(String(e.id)));
         if (masterEvents.length === 0) return null;
 
         const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
@@ -281,7 +279,7 @@ export default function ResultsPage() {
                     {master.logo ? (
                       <img src={master.logo} alt={master.displayName} className="max-h-52 max-w-full object-contain" />
                     ) : (
-                      <span className="text-8xl text-gray-300 group-hover:text-primary transition">Finish Flag</span>
+                      <span className="text-8xl text-gray-300 group-hover:text-primary transition">🏁</span>
                     )}
                   </div>
                   <div className="p-8 text-center">
@@ -343,11 +341,11 @@ export default function ResultsPage() {
 
   // EVENT RESULTS PAGE
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
+    <div className="min-h-screen bg-gradient-to-b from-brand-light to-white relative">
       {/* Live Toast */}
       {liveToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-4 animate-pulse text-xl font-bold">
-          <span>Party Popper</span>
+          <span>🎉</span>
           <span>{liveToast.message}</span>
         </div>
       )}
@@ -453,20 +451,31 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Results Sections */}
+        {/* Results */}
         <div ref={resultsSectionRef}>
           {displayedRaces.length === 0 ? (
             <div className="text-center py-32">
-              <div className="text-6xl mb-8">Finish Flag</div>
-              <h2 className="text-4xl font-bold text-brand-dark mb-4">No Results Yet</h2>
-              <p className="text-2xl text-gray-600 mb-8">
-                {isLiveRace ? 'The race is live — finishers will appear here soon!' : 'Timing has not started yet.'}
-              </p>
-              {isLiveRace && (
-                <div className="flex items-center justify-center gap-4 text-2xl text-green-600 font-bold">
-                  <div className="w-4 h-4 bg-green-600 rounded-full animate-ping"></div>
-                  Live Updates Active
-                </div>
+              <div className="text-6xl mb-8">🏁</div>
+              {searchQuery ? (
+                <>
+                  <h2 className="text-4xl font-bold text-brand-dark mb-4">
+                    No participants found matching "{searchQuery}"
+                  </h2>
+                  <p className="text-2xl text-gray-600">Try a different bib number or name.</p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-4xl font-bold text-brand-dark mb-4">No Results Yet</h2>
+                  <p className="text-2xl text-gray-600 mb-8">
+                    {isLiveRace ? 'The race is live — finishers will appear here soon!' : 'Timing has not started yet.'}
+                  </p>
+                  {isLiveRace && (
+                    <div className="flex items-center justify-center gap-4 text-2xl text-green-600 font-bold">
+                      <div className="w-4 h-4 bg-green-600 rounded-full animate-ping"></div>
+                      Live Updates Active
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -474,26 +483,16 @@ export default function ResultsPage() {
               const raceResults = globalFilteredResults.filter(r => r.race_id === race.race_id);
               const sorted = [...raceResults].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
-              // Pagination state
               const racePag = racePagination[race.race_id] || { currentPage: 1, pageSize: 50 };
               const { currentPage, pageSize } = racePag;
 
               const setCurrentPage = (page) => {
-                // Auto-expand to full view when user paginates beyond page 1
-                if (page !== 1 || pageSize !== 50) {
+                if (page > 1 || pageSize !== 50) {
                   setExpandedRaces(prev => ({ ...prev, [race.race_id]: true }));
                 }
                 setRacePagination(prev => ({
                   ...prev,
                   [race.race_id]: { ...prev[race.race_id], currentPage: page }
-                }));
-              };
-
-              const setPageSize = (size) => {
-                setExpandedRaces(prev => ({ ...prev, [race.race_id]: true }));
-                setRacePagination(prev => ({
-                  ...prev,
-                  [race.race_id]: { pageSize: size, currentPage: 1 }
                 }));
               };
 
@@ -520,34 +519,24 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  {/* Results Table */}
                   <ResultsTable
                     data={displayResults}
                     totalResults={sorted.length}
                     currentPage={currentPage}
                     setCurrentPage={setCurrentPage}
                     pageSize={pageSize}
-                    setPageSize={setPageSize}
                     onNameClick={handleNameClick}
                     isMobile={window.innerWidth < 768}
                     highlightedBib={highlightedBib}
                   />
 
-                  {/* Full Pagination Controls (only when in full/paginated view) */}
+                  {/* Pagination */}
                   {isPaginatedView && sorted.length > pageSize && (
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mt-12 p-8 bg-gray-50 rounded-2xl">
-                      <button
-                        onClick={() => setCurrentPage(1)}
-                        disabled={currentPage === 1}
-                        className="px-8 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg"
-                      >
+                      <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-8 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg">
                         First
                       </button>
-                      <button
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="px-10 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg"
-                      >
+                      <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1} className="px-10 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg">
                         ← Previous
                       </button>
 
@@ -557,24 +546,16 @@ export default function ResultsPage() {
                         <span className="hidden sm:inline ml-4">| Page {currentPage} of {totalPages}</span>
                       </span>
 
-                      <button
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={currentPage >= totalPages}
-                        className="px-10 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg"
-                      >
+                      <button onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage >= totalPages} className="px-10 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg">
                         Next →
                       </button>
-                      <button
-                        onClick={() => setCurrentPage(totalPages)}
-                        disabled={currentPage >= totalPages}
-                        className="px-8 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg"
-                      >
+                      <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage >= totalPages} className="px-8 py-4 bg-primary text-white rounded-full font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-lg">
                         Last
                       </button>
                     </div>
                   )}
 
-                  {/* Fallback "View All" link when still in top-5 mode */}
+                  {/* Fallback View All */}
                   {!isPaginatedView && sorted.length > 5 && (
                     <div className="text-center mt-10">
                       <button
@@ -597,10 +578,7 @@ export default function ResultsPage() {
             <h3 className="text-4xl font-bold text-center text-brand-dark mb-12">Our Sponsors</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
               {ads.map((ad, i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-3xl shadow-xl overflow-hidden border border-primary/20 hover:shadow-2xl transition"
-                >
+                <div key={i} className="bg-white rounded-3xl shadow-xl overflow-hidden border border-primary/20 hover:shadow-2xl transition">
                   <img src={ad} alt="Sponsor" className="w-full h-auto" />
                 </div>
               ))}
@@ -609,11 +587,11 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top Button */}
+      {/* Back to Top Button — NOW FIXED */}
       <button
         ref={backToTopRef}
         onClick={scrollToTop}
-        className="fixed bottom-8 right-8 bg-primary text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-4xl hover:scale-110 hover:bg-primary/90 transition-all duration-300 z-50 opacity-0 invisible"
+        className="fixed bottom-8 right-8 z-50 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center text-4xl hover:scale-110 hover:bg-primary/90 transition-all duration-300 opacity-0 invisible pointer-events-none"
         aria-label="Back to top"
       >
         ↑
