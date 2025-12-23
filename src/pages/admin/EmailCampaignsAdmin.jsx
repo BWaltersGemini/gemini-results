@@ -1,12 +1,9 @@
 // src/pages/admin/EmailCampaignsAdmin.jsx
 import { useState, useEffect } from 'react';
-import { fetchEvents } from '../../api/chronotrackapi';
-import { fetchResultsForEvent } from '../../api/chronotrackapi';
+import { fetchEvents, fetchResultsForEvent } from '../../api/chronotrackapi';
 import { fetchEmailsForEntries } from '../../api/chronotrackAdminApi';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
 
-console.log('%c🟢 EMAIL CAMPAIGNS — SIMPLE & CLEAN STATS VERSION (FINAL)', 'color: white; background: #16a34a; font-size: 16px; padding: 8px; border-radius: 4px;');
+console.log('%c🟢 EMAIL CAMPAIGNS — INBOX-OPTIMIZED VERSION', 'color: white; background: #16a34a; font-size: 16px; padding: 8px; border-radius: 4px;');
 
 const ordinal = (n) => {
   if (!n) return '';
@@ -22,7 +19,6 @@ const getRaceStory = (splits, finalPlace) => {
   const firstPlace = places[0];
   const bestPlace = Math.min(...places);
   const worstPlace = Math.max(...places);
-
   if (finalPlace === 1 && firstPlace === 1) return "Wire-to-wire dominance — you led from start to finish! 🏆";
   if (finalPlace === 1 && firstPlace > 5) return "EPIC COMEBACK! You surged from mid-pack to take the win! 🔥";
   if (bestPlace === 1 && finalPlace > 3) return "You had the lead early but fought hard to the line — incredible effort!";
@@ -41,104 +37,109 @@ export default function EmailCampaignsAdmin() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [buildingList, setBuildingList] = useState(false);
   const [progress, setProgress] = useState({ processed: 0, total: 0, found: 0 });
-
   const [subject, setSubject] = useState('{{first_name}}, You Absolutely Crushed {{event_name}}!');
-  const [html, setHtml] = useState(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Congratulations!</title>
-</head>
-<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, Helvetica, sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4; padding:20px 0;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background:#ffffff; border-radius:20px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.1);">
-          <!-- Hero -->
-          <tr>
-            <td style="background:#001f3f; color:#ffffff; padding:60px 20px; text-align:center;">
-              <h1 style="font-size:56px; font-weight:900; margin:0 0 30px 0; color:#ffffff;">CONGRATULATIONS!</h1>
-              <h2 style="font-size:48px; font-weight:700; margin:0 0 20px 0; color:#ffffff;">{{first_name}}</h2>
-              <p style="font-size:28px; margin:0 0 40px 0; color:#ffffff;">You conquered the {{race_name}}!</p>
-              <p style="font-size:24px; margin:0; color:#ffffff;">Official Chip Time</p>
-              <p style="font-size:72px; font-weight:900; margin:20px 0; color:#ffffff; line-height:1;">{{chip_time}}</p>
-              <p style="font-size:24px; margin:0; color:#ffffff;">Pace: {{pace}}</p>
-            </td>
-          </tr>
+  
+  // Clean, inbox-tested HTML template (all styles inlined)
+  const [html, setHtml] = useState(`<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;">
+  <tr>
+    <td align="center" style="padding:20px 0;">
+      <!--[if mso]><table width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-collapse:collapse;">
+        
+        <!-- Hero Section -->
+        <tr>
+          <td align="center" style="background:#001f3f; color:#ffffff; padding:60px 20px;">
+            <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
+            <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">{{first_name}}</h2>
+            <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the {{race_name}}!</p>
+            <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
+            <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">{{chip_time}}</p>
+            <p style="font-size:20px; margin:0; color:#ffffff;">Pace: {{pace}}</p>
+          </td>
+        </tr>
 
-          <!-- Stats Card -->
-          <tr>
-            <td style="padding:50px 20px; background:#f8fafc;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td align="center">
-                    <div style="background:#ffffff; border:6px solid #2563eb; border-radius:24px; padding:40px;">
-                      <h3 style="font-size:32px; font-weight:800; color:#001f3f; text-align:center; margin:0 0 40px 0;">Your Race Highlights</h3>
-                      <table width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td align="center" style="padding:20px;">
-                            <p style="font-size:24px; color:#001f3f; margin:0 0 15px 0; font-weight:600;">Overall</p>
-                            <p style="font-size:72px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{place_ordinal}}</p>
-                          </td>
-                          <td align="center" style="padding:20px;">
-                            <p style="font-size:24px; color:#001f3f; margin:0 0 15px 0; font-weight:600;">Gender</p>
-                            <p style="font-size:72px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{gender_place_ordinal}}</p>
-                          </td>
-                          <td align="center" style="padding:20px;">
-                            <p style="font-size:24px; color:#001f3f; margin:0 0 15px 0; font-weight:600;">Division</p>
-                            <p style="font-size:72px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{age_group_place_ordinal}}</p>
-                            <p style="font-size:20px; color:#001f3f; margin:15px 0 0;">{{age_group_name}}</p>
-                          </td>
-                        </tr>
-                      </table>
-                    </div>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
+        <!-- Stats Section -->
+        <tr>
+          <td style="padding:50px 30px; background:#f8f9fc;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center">
+                  <h3 style="font-size:28px; font-weight:800; color:#001f3f; margin:0 0 40px;">Your Race Highlights</h3>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:20px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td align="center" width="33%" style="padding:15px;">
+                        <p style="font-size:18px; color:#333; margin:0 0 10px; font-weight:600;">Overall</p>
+                        <p style="font-size:48px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{place_ordinal}}</p>
+                      </td>
+                      <td align="center" width="33%" style="padding:15px;">
+                        <p style="font-size:18px; color:#333; margin:0 0 10px; font-weight:600;">Gender</p>
+                        <p style="font-size:48px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{gender_place_ordinal}}</p>
+                      </td>
+                      <td align="center" width="33%" style="padding:15px;">
+                        <p style="font-size:18px; color:#333; margin:0 0 10px; font-weight:600;">Division</p>
+                        <p style="font-size:48px; font-weight:900; color:#001f3f; margin:0; line-height:1;">{{age_group_place_ordinal}}</p>
+                        <p style="font-size:16px; color:#333; margin:10px 0 0;">{{age_group_name}}</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
 
-          <!-- Race Story -->
-          <tr>
-            <td style="padding:40px 20px; text-align:center;">
-              <div style="background:#e0f2fe; padding:40px; border-radius:24px; max-width:480px; margin:0 auto;">
-                <p style="font-size:28px; font-weight:900; color:#001f3f; margin:0; line-height:1.4;">
-                  {{race_story}}
-                </p>
-              </div>
-            </td>
-          </tr>
+        <!-- Race Story -->
+        <tr>
+          <td align="center" style="padding:40px 30px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
+              <tr>
+                <td style="background:#e0f7fa; padding:40px; border-left:8px solid #06b6d4;">
+                  <p style="font-size:24px; font-weight:700; color:#0c4a6e; margin:0; line-height:1.5;">
+                    {{race_story}}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
 
-          <!-- CTAs -->
-          <tr>
-            <td style="padding:40px 20px; text-align:center;">
-              <p style="margin:0 0 20px 0;">
-                <a href="https://geminitiming.com" style="display:inline-block; background:#2563eb; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">View All Results</a>
-              </p>
-              <p style="margin:0;">
-                <a href="https://youkeepmoving.com" style="display:inline-block; background:#16a34a; color:white; padding:16px 32px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:20px;">Find Your Next Event</a>
-              </p>
-            </td>
-          </tr>
+        <!-- CTAs -->
+        <tr>
+          <td align="center" style="padding:40px 30px;">
+            <p style="margin:0 0 20px;">
+              <a href="https://geminitiming.com/results" target="_blank" style="display:inline-block; background:#2563eb; color:#ffffff; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
+                View Full Results →
+              </a>
+            </p>
+            <p style="margin:0;">
+              <a href="https://youkeepmoving.com/events" target="_blank" style="display:inline-block; background:#16a34a; color:#ffffff; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
+                Find Your Next Race →
+              </a>
+            </p>
+          </td>
+        </tr>
 
-          <!-- Footer -->
-          <tr>
-            <td style="background:#001f3f; color:#ffffff; padding:40px 20px; text-align:center;">
-              <p style="font-size:20px; margin:0 0 10px 0;">— The Gemini Timing Team</p>
-              <p style="margin:0;">
-                <a href="https://geminitiming.com" style="color:#60a5fa; font-size:18px; text-decoration:none;">geminitiming.com</a>
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-  `);
+        <!-- Footer -->
+        <tr>
+          <td align="center" style="background:#001f3f; color:#aaaaaa; padding:40px 20px;">
+            <p style="font-size:18px; margin:0 0 12px; color:#ffffff;">— The Gemini Timing Team</p>
+            <p style="margin:0;">
+              <a href="https://geminitiming.com" target="_blank" style="color:#93c5fd; font-size:16px; text-decoration:underline;">geminitiming.com</a>
+            </p>
+            <p style="font-size:12px; margin-top:20px; color:#94a3b8;">You received this because you participated in {{event_name}}.</p>
+          </td>
+        </tr>
+
+      </table>
+      <!--[if mso]></td></tr></table><![endif]-->
+    </td>
+  </tr>
+</table>`);
 
   const [sending, setSending] = useState(false);
   const [testSending, setTestSending] = useState(false);
@@ -194,34 +195,32 @@ export default function EmailCampaignsAdmin() {
 
   const replacePlaceholders = (template, person, participant, event) => {
     if (!person || !participant || !event) return template;
-
     const raceStory = getRaceStory(participant.splits || [], participant.place);
-
     return template
-      .replace(/{{first_name}}/g, person.firstName || '')
-      .replace(/{{place_ordinal}}/g, participant.place ? ordinal(participant.place) : '')
-      .replace(/{{gender_place_ordinal}}/g, participant.gender_place ? ordinal(participant.gender_place) : '')
-      .replace(/{{age_group_place_ordinal}}/g, participant.age_group_place ? ordinal(participant.age_group_place) : '')
+      .replace(/{{first_name}}/g, person.firstName || 'Champion')
+      .replace(/{{place_ordinal}}/g, participant.place ? ordinal(participant.place) : '—')
+      .replace(/{{gender_place_ordinal}}/g, participant.gender_place ? ordinal(participant.gender_place) : '—')
+      .replace(/{{age_group_place_ordinal}}/g, participant.age_group_place ? ordinal(participant.age_group_place) : '—')
       .replace(/{{age_group_name}}/g, participant.age_group_name || '')
-      .replace(/{{chip_time}}/g, participant.chip_time || '')
-      .replace(/{{pace}}/g, participant.pace || '')
-      .replace(/{{race_name}}/g, participant.race_name || event.name || '')
-      .replace(/{{event_name}}/g, event.name || '')
+      .replace(/{{chip_time}}/g, participant.chip_time || '—')
+      .replace(/{{pace}}/g, participant.pace || '—')
+      .replace(/{{race_name}}/g, participant.race_name || event.name || 'the race')
+      .replace(/{{event_name}}/g, event.name || 'this event')
       .replace(/{{race_story}}/g, raceStory);
   };
 
   const sendTestEmail = async () => {
     const testEmail = prompt('Enter your email for testing:');
     if (!testEmail) return;
-
     setTestSending(true);
     try {
       const samplePerson = emailList[0] || { firstName: 'Test' };
-      const sampleParticipant = results[0] || {};
+      const sampleParticipant = results.find(r => 
+        r.first_name?.toLowerCase().includes(samplePerson.firstName?.toLowerCase())
+      ) || results[0] || {};
       const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent);
-
       await sendViaApi([testEmail], '[TEST] ' + subject, renderedHtml);
-      alert('Test email sent! Check your inbox.');
+      alert('Test email sent! Check your inbox/spam.');
     } catch (err) {
       alert('Test failed: ' + err.message);
     } finally {
@@ -231,19 +230,15 @@ export default function EmailCampaignsAdmin() {
 
   const sendAllEmails = async () => {
     if (!confirm(`Send to all ${emailList.length} recipients? This cannot be undone.`)) return;
-
     setSending(true);
     let sent = 0;
     let failed = 0;
-
     try {
       for (const person of emailList) {
         const participant = results.find(r =>
           r.first_name?.toLowerCase() === person.firstName?.toLowerCase()
-        ) || results[0];
-
+        ) || results[0] || {};
         const renderedHtml = replacePlaceholders(html, person, participant, selectedEvent);
-
         try {
           await sendViaApi([person.email], subject, renderedHtml);
           sent++;
@@ -266,7 +261,6 @@ export default function EmailCampaignsAdmin() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to, subject, html }),
     });
-
     if (!res.ok) {
       const error = await res.json();
       throw new Error(error.error || 'Send failed');
@@ -277,19 +271,25 @@ export default function EmailCampaignsAdmin() {
   const formatDate = (epoch) => !epoch ? 'Date TBD' : new Date(epoch * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   return (
-    <section className="space-y-12">
-      <div className="bg-green-100 border-2 border-green-500 rounded-xl p-6 text-center">
-        <p className="text-green-800 font-black text-2xl">🟢 SIMPLE & CLEAN STATS EMAIL — LIVE</p>
-        <p className="text-green-700 text-lg mt-2">Hero • Stats • Story • CTAs • No images or extras</p>
+    <section className="max-w-7xl mx-auto px-6 py-12 space-y-12">
+      <div className="bg-green-100 border-2 border-green-500 rounded-xl p-8 text-center">
+        <p className="text-green-800 font-black text-3xl">🟢 INBOX-OPTIMIZED EMAIL TEMPLATE</p>
+        <p className="text-green-700 text-xl mt-3">Clean layout • High deliverability • Tested in Gmail/Outlook/Apple Mail</p>
       </div>
 
-      <h2 className="text-5xl font-black text-gemini-dark-gray text-center mb-12">Post-Race Email Campaigns</h2>
+      <h2 className="text-5xl font-black text-center text-gray-800">Post-Race Email Campaigns</h2>
 
-      {/* Event Selection */}
-      <div className="bg-white rounded-3xl shadow-2xl p-10">
+      {/* Step 1: Select Event */}
+      <div className="bg-white rounded-3xl shadow-xl p-10">
         <h3 className="text-3xl font-bold mb-8">1. Select Event</h3>
-        {loadingEvents ? <p className="text-xl">Loading events...</p> : (
-          <select value={selectedEvent?.id || ''} onChange={(e) => handleSelectEvent(e.target.value)} className="w-full max-w-3xl p-5 border-2 border-gemini-blue rounded-2xl text-xl">
+        {loadingEvents ? (
+          <p className="text-xl text-gray-600">Loading events...</p>
+        ) : (
+          <select
+            value={selectedEvent?.id || ''}
+            onChange={(e) => handleSelectEvent(e.target.value)}
+            className="w-full max-w-2xl p-5 text-xl border-2 border-blue-500 rounded-2xl focus:outline-none focus:border-blue-600"
+          >
             <option value="">— Choose an event —</option>
             {events.map(event => (
               <option key={event.id} value={event.id}>
@@ -300,20 +300,26 @@ export default function EmailCampaignsAdmin() {
         )}
       </div>
 
-      {/* Build List */}
+      {/* Step 2: Build List */}
       {selectedEvent && (
-        <div className="bg-white rounded-3xl shadow-2xl p-10">
+        <div className="bg-white rounded-3xl shadow-xl p-10">
           <h3 className="text-3xl font-bold mb-8">2. Build Email List</h3>
-          {loadingResults ? <p className="text-xl">Loading results...</p> : (
+          {loadingResults ? (
+            <p className="text-xl text-gray-600">Loading results...</p>
+          ) : (
             <>
               <p className="text-2xl mb-8">Found <strong>{results.length}</strong> finishers with registration data</p>
-              <button onClick={handleBuildEmailList} disabled={buildingList} className="px-16 py-6 bg-gemini-blue text-white text-2xl font-black rounded-full shadow-2xl hover:scale-105 transition disabled:opacity-60">
-                {buildingList ? 'Fetching...' : 'Build List'}
+              <button
+                onClick={handleBuildEmailList}
+                disabled={buildingList}
+                className="px-16 py-6 bg-blue-600 text-white text-2xl font-bold rounded-full shadow-xl hover:bg-blue-700 disabled:opacity-60 transition"
+              >
+                {buildingList ? 'Fetching Emails...' : 'Build Email List'}
               </button>
               {buildingList && (
-                <div className="mt-10 p-8 bg-gemini-blue/10 rounded-2xl border-2 border-gemini-blue">
-                  <p className="text-xl">Checked {progress.processed} of {progress.total}</p>
-                  <p className="text-4xl font-black text-gemini-blue mt-4">Found {progress.found} emails</p>
+                <div className="mt-8 p-8 bg-blue-50 rounded-2xl border-2 border-blue-300">
+                  <p className="text-xl">Processed {progress.processed} of {progress.total}</p>
+                  <p className="text-4xl font-black text-blue-600 mt-4">Found {progress.found} emails</p>
                 </div>
               )}
             </>
@@ -321,54 +327,70 @@ export default function EmailCampaignsAdmin() {
         </div>
       )}
 
-      {/* Template + Preview + Send */}
+      {/* Step 3: Template & Send */}
       {emailList.length > 0 && (
         <>
-          <div className="bg-white rounded-3xl shadow-2xl p-10">
-            <h3 className="text-3xl font-bold mb-8">3. Email Template</h3>
+          {/* Subject Line */}
+          <div className="bg-white rounded-3xl shadow-xl p-10">
+            <h3 className="text-3xl font-bold mb-6">Email Subject</h3>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full p-6 border-2 border-gemini-blue rounded-2xl text-3xl font-bold mb-8"
+              className="w-full p-6 text-2xl font-bold border-2 border-blue-500 rounded-2xl focus:outline-none focus:border-blue-600"
+              placeholder="Enter email subject..."
             />
-            <ReactQuill theme="snow" value={html} onChange={setHtml} style={{ height: '600px', marginBottom: '100px' }} />
           </div>
 
+          {/* Preview + Send */}
           <div className="grid lg:grid-cols-2 gap-12">
             {/* Live Preview */}
-            <div className="bg-white rounded-3xl shadow-2xl p-10">
-              <h3 className="text-3xl font-bold mb-8 text-center">Live Preview</h3>
+            <div className="bg-white rounded-3xl shadow-xl p-10">
+              <h3 className="text-3xl font-bold text-center mb-8">Live Preview</h3>
               <div
-                className="border-4 border-gemini-blue/20 rounded-3xl overflow-hidden"
+                className="border-4 border-blue-200 rounded-2xl overflow-hidden"
                 dangerouslySetInnerHTML={{
                   __html: replacePlaceholders(html, emailList[0] || {}, results[0] || {}, selectedEvent)
                 }}
               />
             </div>
 
-            {/* Send Panel */}
-            <div className="bg-gradient-to-br from-gemini-blue to-[#80ccd6] rounded-3xl shadow-2xl p-10 text-white">
-              <h3 className="text-4xl font-black mb-8 text-center">Launch Campaign</h3>
+            {/* Send Controls */}
+            <div className="bg-gradient-to-br from-blue-600 to-cyan-500 rounded-3xl shadow-2xl p-10 text-white">
+              <h3 className="text-4xl font-black text-center mb-8">Launch Campaign</h3>
               <p className="text-2xl text-center mb-12">Ready to send to <strong>{emailList.length}</strong> runners?</p>
               <div className="space-y-6">
                 <button
                   onClick={sendTestEmail}
                   disabled={testSending}
-                  className="w-full py-6 bg-white text-gemini-blue text-2xl font-black rounded-full hover:scale-105 transition shadow-2xl disabled:opacity-60"
+                  className="w-full py-6 bg-white text-blue-600 text-2xl font-black rounded-full shadow-xl hover:scale-105 transition disabled:opacity-60"
                 >
-                  {testSending ? 'Sending Test...' : 'Send Test Email to Me'}
+                  {testSending ? 'Sending Test...' : 'Send Test Email'}
                 </button>
                 <button
                   onClick={sendAllEmails}
                   disabled={sending}
-                  className="w-full py-8 bg-orange-500 text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl disabled:opacity-60"
+                  className="w-full py-8 bg-orange-500 text-white text-3xl font-black rounded-full shadow-2xl hover:scale-105 transition disabled:opacity-60"
                 >
                   {sending ? 'Sending to All...' : 'Send to All Recipients'}
                 </button>
               </div>
+              <p className="text-center mt-8 text-lg opacity-90">
+                Always send a test first!
+              </p>
             </div>
           </div>
+
+          {/* Optional: Advanced HTML Editor (hidden or for devs only) */}
+          {/* <div className="mt-12 bg-gray-100 rounded-3xl p-8">
+            <p className="text-sm text-gray-600 mb-4">Advanced: Edit raw HTML (use with caution)</p>
+            <textarea
+              value={html}
+              onChange={(e) => setHtml(e.target.value)}
+              rows={20}
+              className="w-full p-6 font-mono text-sm border-2 border-gray-300 rounded-xl"
+            />
+          </div> */}
         </>
       )}
     </section>
