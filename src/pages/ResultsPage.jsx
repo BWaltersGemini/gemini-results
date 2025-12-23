@@ -1,10 +1,10 @@
 // src/pages/ResultsPage.jsx
 // FULLY STABLE PRODUCTION VERSION — December 2025
-// • No crashes on direct URL access (even with empty results)
-// • Graceful handling when no results exist
-// • Safe guards for selectedEvent.races, results, etc.
-// • Clear, branded "no results yet" messaging
-// • All previous features preserved (search, live toast, DNFs, sponsors, etc.)
+// • No React hook order errors (#310)
+// • No crashes on direct URL access
+// • Graceful handling of empty/no results
+// • All hooks called unconditionally
+// • Early returns only at the very end
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -41,7 +41,9 @@ export default function ResultsPage() {
 
   const prevMasterKeyRef = useRef(masterKey);
 
-  // Live update toast
+  // ====================== EFFECTS ======================
+
+  // Live update toast listener
   useEffect(() => {
     const handler = (e) => {
       const count = e.detail?.count || 1;
@@ -60,7 +62,7 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // Reset search/highlight on master change
+  // Reset search/highlight when changing master series
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
@@ -70,7 +72,7 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
-  // Back-to-top visibility
+  // Back-to-top button visibility
   useEffect(() => {
     const handleScroll = () => {
       if (backToTopRef.current) {
@@ -85,23 +87,7 @@ export default function ResultsPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const slugify = (text) => {
-    if (!text || typeof text !== 'string') return 'overall';
-    return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  };
-
-  const formatDate = (epoch) => {
-    if (!epoch || isNaN(epoch)) return 'Date TBD';
-    const date = new Date(epoch * 1000);
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  };
-
-  const getYearFromEvent = (event) => {
-    if (!event?.start_time) return null;
-    return new Date(event.start_time * 1000).getFullYear().toString();
-  };
-
-  // Fetch upcoming events
+  // Fetch upcoming events from WordPress
   useEffect(() => {
     const fetchUpcoming = async () => {
       try {
@@ -123,7 +109,7 @@ export default function ResultsPage() {
     fetchUpcoming();
   }, []);
 
-  // Event selection from URL params
+  // Select event based on URL params (master + year)
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
 
@@ -141,9 +127,147 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups]);
 
-  // ==================== EARLY RETURN GUARDS ====================
+  // ====================== HELPERS ======================
 
-  // 1. Trying to load a specific event but it's not ready yet
+  const slugify = (text) => {
+    if (!text || typeof text !== 'string') return 'overall';
+    return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  };
+
+  const formatDate = (epoch) => {
+    if (!epoch || isNaN(epoch)) return 'Date TBD';
+    const date = new Date(epoch * 1000);
+    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
+  const getYearFromEvent = (event) => {
+    if (!event?.start_time) return null;
+    return new Date(event.start_time * 1000).getFullYear().toString();
+  };
+
+  // ====================== CALCULATIONS (run every render) ======================
+
+  // Safe races array
+  const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
+
+  // All participants for global search
+  const allParticipants = useMemo(() => [
+    ...results.finishers,
+    ...results.nonFinishers
+  ], [results.finishers, results.nonFinishers]);
+
+  const globalFilteredResults = useMemo(() => {
+    if (!searchQuery) return allParticipants;
+    const lowerQuery = searchQuery.toLowerCase();
+    return allParticipants.filter(r =>
+      r.bib?.toString().includes(searchQuery) ||
+      `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
+    );
+  }, [searchQuery, allParticipants]);
+
+  // Auto-expand DNF sections when search matches DNFs
+  useEffect(() => {
+    if (searchQuery && globalFilteredResults.length > 0) {
+      const newExpanded = {};
+      embeddedRaces.forEach((race) => {
+        const hasDnfMatch = globalFilteredResults.some(
+          r => r.race_id === race.race_id && results.nonFinishers.includes(r)
+        );
+        if (hasDnfMatch) newExpanded[race.race_id] = true;
+      });
+      setExpandedDnfSections(newExpanded);
+    } else if (searchQuery) {
+      setExpandedDnfSections({});
+    }
+  }, [searchQuery, globalFilteredResults, results.nonFinishers, embeddedRaces]);
+
+  // Races to display
+  const racesWithAnyResults = embeddedRaces.filter((race) =>
+    race?.race_id && (
+      results.finishers.some(r => r?.race_id === race.race_id) ||
+      results.nonFinishers.some(r => r?.race_id === race.race_id)
+    )
+  );
+
+  const racesWithFilteredResults = embeddedRaces.filter((race) =>
+    race?.race_id && globalFilteredResults.some(r => r?.race_id === race.race_id)
+  );
+
+  let displayedRaces = searchQuery ? racesWithFilteredResults : racesWithAnyResults;
+
+  if (raceSlug) {
+    displayedRaces = displayedRaces.filter((race) => slugify(race.race_name || '') === raceSlug);
+  }
+
+  // Logo logic
+  const currentMasterKey = Object.keys(masterGroups).find(key =>
+    masterGroups[key]?.includes(String(selectedEvent?.id))
+  );
+  const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
+  const fallbackLogo = eventLogos[selectedEvent?.id];
+  const displayLogo = masterLogo || fallbackLogo;
+
+  // Stats
+  const totalFinishers = results.finishers.length;
+  const maleFinishers = results.finishers.filter(r => r.gender === 'M').length;
+  const femaleFinishers = results.finishers.filter(r => r.gender === 'F').length;
+
+  // Available years for dropdown
+  let availableYears = [];
+  if (currentMasterKey) {
+    const linkedEventIds = (masterGroups[currentMasterKey] || []).map(String);
+    const linkedEvents = events.filter(e => e?.id && linkedEventIds.includes(String(e.id)));
+    availableYears = [...new Set(linkedEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
+  }
+
+  const handleYearChange = (newYear) => {
+    if (newYear === year) return;
+    navigate(`/results/${masterKey}/${newYear}${raceSlug ? '/' + raceSlug : ''}`);
+  };
+
+  const handleNameClick = (participant) => {
+    if (!participant || !selectedEvent) return;
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(String(selectedEvent.id)));
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
+    const eventYear = getYearFromEvent(selectedEvent);
+    const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
+    const raceName = participantRace?.race_name || participant.race_name || 'overall';
+    const raceSlugPart = slugify(raceName);
+    navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
+      state: { participant, selectedEvent, results: allParticipants },
+    });
+  };
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // ====================== MASTER LANDING PAGE CONTENT ======================
+
+  const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
+
+  const masterEventTiles = visibleMasters
+    .map((storedKey) => {
+      const displayName = editedEvents[storedKey]?.name || storedKey;
+      const eventIds = (masterGroups[storedKey] || []).map(String);
+      const masterEvents = events.filter(e => e?.id && eventIds.includes(String(e.id)));
+      if (masterEvents.length === 0) return null;
+
+      const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
+      if (!latestEvent) return null;
+
+      const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
+      const masterSlug = slugify(storedKey);
+      const latestYear = getYearFromEvent(latestEvent);
+
+      return { storedKey, displayName, logo, dateEpoch: latestEvent.start_time, masterSlug, latestYear };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
+    .slice(0, 3);
+
+  // ====================== FINAL RENDER (conditional at the end) ======================
+
+  // 1. Loading a specific event from URL but not ready yet
   if ((masterKey || year) && !selectedEvent) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-light to-white flex items-center justify-center">
@@ -155,30 +279,8 @@ export default function ResultsPage() {
     );
   }
 
-  // 2. Master landing page (no specific event requested or no match)
+  // 2. General results landing page (no specific master/year)
   if (!selectedEvent) {
-    const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
-
-    const masterEventTiles = visibleMasters
-      .map((storedKey) => {
-        const displayName = editedEvents[storedKey]?.name || storedKey;
-        const eventIds = (masterGroups[storedKey] || []).map(String);
-        const masterEvents = events.filter(e => e?.id && eventIds.includes(String(e.id)));
-        if (masterEvents.length === 0) return null;
-
-        const latestEvent = masterEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0))[0];
-        if (!latestEvent) return null;
-
-        const logo = eventLogos[latestEvent.id] || eventLogos[storedKey];
-        const masterSlug = slugify(storedKey);
-        const latestYear = getYearFromEvent(latestEvent);
-
-        return { storedKey, displayName, logo, dateEpoch: latestEvent.start_time, masterSlug, latestYear };
-      })
-      .filter(Boolean)
-      .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
-      .slice(0, 3);
-
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-light to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
@@ -258,7 +360,7 @@ export default function ResultsPage() {
     );
   }
 
-  // 3. Results still loading
+  // 3. Results are still loading for the selected event
   if (loadingResults) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-light to-white flex items-center justify-center">
@@ -270,102 +372,7 @@ export default function ResultsPage() {
     );
   }
 
-  // ==================== SAFE EVENT PAGE RENDER ====================
-
-  // Safe race extraction
-  const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
-
-  // All participants for global search
-  const allParticipants = useMemo(() => [
-    ...results.finishers,
-    ...results.nonFinishers
-  ], [results.finishers, results.nonFinishers]);
-
-  const globalFilteredResults = useMemo(() => {
-    if (!searchQuery) return allParticipants;
-    const lowerQuery = searchQuery.toLowerCase();
-    return allParticipants.filter(r =>
-      r.bib?.toString().includes(searchQuery) ||
-      `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
-    );
-  }, [searchQuery, allParticipants]);
-
-  // Auto-expand DNF sections on search matches
-  useEffect(() => {
-    if (searchQuery && globalFilteredResults.length > 0) {
-      const newExpanded = {};
-      embeddedRaces.forEach((race) => {
-        const hasDnfMatch = globalFilteredResults.some(
-          r => r.race_id === race.race_id && results.nonFinishers.includes(r)
-        );
-        if (hasDnfMatch) newExpanded[race.race_id] = true;
-      });
-      setExpandedDnfSections(newExpanded);
-    } else if (searchQuery) {
-      setExpandedDnfSections({});
-    }
-  }, [searchQuery, globalFilteredResults, results.nonFinishers, embeddedRaces]);
-
-  // Races to display
-  const racesWithAnyResults = embeddedRaces.filter((race) =>
-    race?.race_id && (
-      results.finishers.some(r => r?.race_id === race.race_id) ||
-      results.nonFinishers.some(r => r?.race_id === race.race_id)
-    )
-  );
-
-  const racesWithFilteredResults = embeddedRaces.filter((race) =>
-    race?.race_id && globalFilteredResults.some(r => r?.race_id === race.race_id)
-  );
-
-  let displayedRaces = searchQuery ? racesWithFilteredResults : racesWithAnyResults;
-
-  if (raceSlug) {
-    displayedRaces = displayedRaces.filter((race) => slugify(race.race_name || '') === raceSlug);
-  }
-
-  // Logo logic
-  const currentMasterKey = Object.keys(masterGroups).find(key =>
-    masterGroups[key]?.includes(String(selectedEvent?.id))
-  );
-  const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
-  const fallbackLogo = eventLogos[selectedEvent.id];
-  const displayLogo = masterLogo || fallbackLogo;
-
-  // Stats
-  const totalFinishers = results.finishers.length;
-  const maleFinishers = results.finishers.filter(r => r.gender === 'M').length;
-  const femaleFinishers = results.finishers.filter(r => r.gender === 'F').length;
-
-  // Year selector
-  let availableYears = [];
-  if (currentMasterKey) {
-    const linkedEventIds = (masterGroups[currentMasterKey] || []).map(String);
-    const linkedEvents = events.filter(e => e?.id && linkedEventIds.includes(String(e.id)));
-    availableYears = [...new Set(linkedEvents.map(getYearFromEvent))].filter(Boolean).sort((a, b) => b - a);
-  }
-
-  const handleYearChange = (newYear) => {
-    if (newYear === year) return;
-    navigate(`/results/${masterKey}/${newYear}${raceSlug ? '/' + raceSlug : ''}`);
-  };
-
-  const handleNameClick = (participant) => {
-    if (!participant || !selectedEvent) return;
-    let masterSlug = 'overall';
-    const foundMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(String(selectedEvent.id)));
-    if (foundMaster) masterSlug = slugify(foundMaster[0]);
-    const eventYear = getYearFromEvent(selectedEvent);
-    const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
-    const raceName = participantRace?.race_name || participant.race_name || 'overall';
-    const raceSlugPart = slugify(raceName);
-    navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
-      state: { participant, selectedEvent, results: allParticipants },
-    });
-  };
-
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-
+  // 4. Final event results page
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
       {/* Live Toast */}
