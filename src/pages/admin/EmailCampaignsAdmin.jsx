@@ -7,7 +7,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
 // Version banner
-console.log('%c🟢 EMAIL CAMPAIGNS v3.0 — FULL EDITOR + SEND LIVE', 'color: white; background: #7c3aed; font-size: 16px; padding: 8px; border-radius: 4px;');
+console.log('%c🟢 EMAIL CAMPAIGNS v3.0 — FULL EDITOR + SEND LIVE (SECURE)', 'color: white; background: #7c3aed; font-size: 16px; padding: 8px; border-radius: 4px;');
 
 const ordinal = (n) => {
   if (!n) return '';
@@ -104,9 +104,7 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
 
   const replacePlaceholders = (template, person, participant, event) => {
     if (!person || !participant || !event) return template;
-
-    const logo = eventLogos[event.id] || '/GRR.png'; // ← Backup logo from public folder
-
+    const logo = eventLogos[event.id] || '/GRR.png';
     return template
       .replace(/{{first_name}}/g, person.firstName || '')
       .replace(/{{full_name}}/g, person.fullName || '')
@@ -119,15 +117,24 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
       .replace(/{{event_logo}}/g, logo);
   };
 
+  // Secure send via serverless API route
+  const sendViaApi = async (to, subject, html) => {
+    const res = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject, html }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Send failed');
+    }
+    return res.json();
+  };
+
   const sendTestEmail = async () => {
     const testEmail = prompt('Enter your email for testing:');
     if (!testEmail) return;
-
-    const resendKey = import.meta.env.VITE_RESEND_API_KEY;
-    if (!resendKey) {
-      alert('Missing VITE_RESEND_API_KEY');
-      return;
-    }
 
     setTestSending(true);
     try {
@@ -135,29 +142,10 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
       const sampleParticipant = results[0] || {};
       const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent);
 
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: 'Gemini Timing <results@geminitiming.com>',
-          to: [testEmail],
-          subject: '[TEST] ' + subject,
-          html: renderedHtml,
-        }),
-      });
-
-      if (res.ok) {
-        alert('Test email sent! Check your inbox.');
-      } else {
-        const data = await res.json();
-        alert('Test failed: ' + (data.message || 'Unknown error'));
-      }
+      await sendViaApi([testEmail], '[TEST] ' + subject, renderedHtml);
+      alert('Test email sent! Check your inbox.');
     } catch (err) {
-      alert('Test send failed');
-      console.error(err);
+      alert('Test failed: ' + err.message);
     } finally {
       setTestSending(false);
     }
@@ -165,12 +153,6 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
 
   const sendAllEmails = async () => {
     if (!confirm(`Send to all ${emailList.length} recipients? This cannot be undone.`)) return;
-
-    const resendKey = import.meta.env.VITE_RESEND_API_KEY;
-    if (!resendKey) {
-      alert('Missing API key');
-      return;
-    }
 
     setSending(true);
     let sent = 0;
@@ -185,28 +167,17 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
 
         const renderedHtml = replacePlaceholders(html, person, participant, selectedEvent);
 
-        const res = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: 'Gemini Timing <results@geminitiming.com>',
-            to: [person.email],
-            subject,
-            html: renderedHtml,
-          }),
-        });
-
-        if (res.ok) sent++;
-        else failed++;
+        try {
+          await sendViaApi([person.email], subject, renderedHtml);
+          sent++;
+        } catch (err) {
+          console.error(`Failed for ${person.email}:`, err.message);
+          failed++;
+        }
       }
-
       alert(`Complete! Sent: ${sent}, Failed: ${failed}`);
     } catch (err) {
-      alert('Send failed');
-      console.error(err);
+      alert('Bulk send failed');
     } finally {
       setSending(false);
     }
@@ -217,7 +188,7 @@ export default function EmailCampaignsAdmin({ eventLogos = {} }) {
   return (
     <section className="space-y-12">
       <div className="bg-purple-100 border-2 border-purple-500 rounded-xl p-4 text-center">
-        <p className="text-purple-800 font-bold text-lg">🟣 Email Campaigns v3.0 — Full Editor + Send</p>
+        <p className="text-purple-800 font-bold text-lg">🟣 Email Campaigns v3.0 — Full Editor + Send (Secure)</p>
       </div>
 
       <h2 className="text-4xl font-bold text-gemini-dark-gray mb-8">Email Campaigns</h2>
