@@ -1,8 +1,5 @@
 // src/api/chronotrackapi.js
-// FINAL — Best of both worlds:
-//   • Reliable split capture (proven working logic with entry_id + fullCourse filter)
-//   • Safe bracket fetching (maxPages + deduplication to prevent infinite loops on bad brackets)
-
+// FINAL — Complete long-term fix: interval=ALL + timestamp sorting + full split capture (including ranks & paces)
 import axios from 'axios';
 
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
@@ -95,6 +92,7 @@ export const fetchRacesForEvent = async (eventId) => {
     headers: { Authorization: authHeader },
     params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
   });
+
   return (response.data.event_race || []).map(race => ({
     race_id: race.race_id,
     race_name: race.race_name,
@@ -103,16 +101,12 @@ export const fetchRacesForEvent = async (eventId) => {
   }));
 };
 
-// SAFE BRACKET FETCHER — prevents infinite loops while keeping performance high
 const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   let allResults = [];
   let page = 1;
   const pageSize = 1000;
-  const maxPages = 50; // Hard safety limit
 
-  const seenKeys = new Set(); // Light deduplication by entry_id or bib
-
-  while (page <= maxPages) {
+  while (true) {
     try {
       const res = await axios.get(`${PROXY_BASE}/api/bracket/${bracketId}/results`, {
         headers: { Authorization: await getAuthHeader() },
@@ -125,46 +119,19 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
       });
 
       const results = res.data.bracket_results || [];
+      if (results.length === 0) break;
 
-      if (results.length === 0) {
-        console.log(`[ChronoTrack] ${bracketName} — empty page ${page}, stopping`);
-        break;
-      }
+      allResults = [...allResults, ...results];
+      console.log(`[ChronoTrack] ${bracketName} (page ${page}) → +${results.length} (total: ${allResults.length}) from ${raceName}`);
 
-      // Deduplicate within this page
-      const newResults = [];
-      for (const r of results) {
-        const key = r.results_entry_id || r.results_bib;
-        if (key && !seenKeys.has(key)) {
-          seenKeys.add(key);
-          newResults.push(r);
-        }
-      }
-
-      allResults.push(...newResults);
-
-      console.log(`[ChronoTrack] ${bracketName} (page ${page}) → +${newResults.length} new unique (total: ${allResults.length}) from ${raceName}`);
-
-      // Normal exit: partial page
-      if (results.length < pageSize) {
-        console.log(`[ChronoTrack] ${bracketName} — final partial page, complete`);
-        break;
-      }
-
-      // Safety exit
-      if (page >= maxPages) {
-        console.warn(`[ChronoTrack] Hit maxPages (${maxPages}) for ${bracketName} — stopping to prevent infinite loop`);
-        break;
-      }
-
+      if (results.length < pageSize) break;
       page++;
     } catch (err) {
-      console.warn(`[ChronoTrack] Failed page ${page} for ${bracketName} in ${raceName}`, err.message || err);
+      console.warn(`[ChronoTrack] Failed page ${page} for bracket "${bracketName}" in ${raceName}`, err.message || err);
       break;
     }
   }
 
-  console.log(`[ChronoTrack] ${bracketName} FINAL: ${allResults.length} unique results`);
   return allResults;
 };
 
@@ -177,13 +144,18 @@ export const fetchResultsForEvent = async (eventId) => {
       headers: { Authorization: authHeader },
       params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
     });
+
     races = (racesResponse.data.event_race || []).map(race => ({
       race_id: race.race_id,
       race_name: race.race_name,
       distance: race.race_distance,
       distance_unit: race.race_distance_unit,
     }));
-    console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races`);
+
+    console.log(`[ChronoTrack] Event ${eventId} has ${races.length} races:`);
+    races.forEach(race => {
+      console.log(` - Race ID: ${race.race_id} | Name: ${race.race_name} | Distance: ${race.distance}${race.distance_unit || ''}`);
+    });
   } catch (err) {
     console.warn('[ChronoTrack] Failed to fetch races for event', eventId, err);
   }
@@ -197,6 +169,7 @@ export const fetchResultsForEvent = async (eventId) => {
         size: 500,
       },
     });
+
     allBrackets = bracketsResponse.data.event_bracket || [];
     console.log(`[ChronoTrack] Found ${allBrackets.length} total brackets`);
   } catch (err) {
@@ -207,11 +180,13 @@ export const fetchResultsForEvent = async (eventId) => {
   const divisionBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' && ['AGE', 'OTHER'].includes(b.bracket_type)
   );
+
   const genderBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' &&
     b.bracket_type === 'SEX' &&
     /^(Male|Female)$/i.test(b.bracket_name?.trim() || '')
   );
+
   const overallBrackets = allBrackets.filter(b => {
     const name = (b.bracket_name || '').toLowerCase();
     return b.bracket_wants_leaderboard === '1' && (name.includes('overall') || name.includes('all participants'));
@@ -225,6 +200,7 @@ export const fetchResultsForEvent = async (eventId) => {
   let rawIntervalResults = [];
   let page = 1;
   const maxPages = 40;
+
   try {
     while (page <= maxPages) {
       const res = await axios.get(`${PROXY_BASE}/api/event/${eventId}/results`, {
@@ -233,15 +209,18 @@ export const fetchResultsForEvent = async (eventId) => {
           client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
           page,
           size: 500,
-          interval: 'ALL',
+          interval: 'ALL', // Critical: gets every split including T2, Start to..., etc.
         },
       });
+
       const results = res.data.event_results || [];
       if (results.length === 0) break;
+
       rawIntervalResults = [...rawIntervalResults, ...results];
       if (results.length < 500) break;
       page++;
     }
+
     console.log(`[ChronoTrack] Fetched ${rawIntervalResults.length} raw interval rows (interval=ALL) for event ${eventId}`);
   } catch (err) {
     console.error('[ChronoTrack] Failed to fetch raw interval results', err);
@@ -264,8 +243,8 @@ export const fetchResultsForEvent = async (eventId) => {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
-    console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName})`);
 
+    console.log(`[ChronoTrack] Processing GENDER bracket: "${name}" (Race: ${raceName})`);
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `GENDER "${name}"`, raceName);
 
     bracketResults.forEach(r => {
@@ -280,13 +259,14 @@ export const fetchResultsForEvent = async (eventId) => {
   for (const bracket of divisionBrackets) {
     const name = (bracket.bracket_name || '').trim();
     if (!name) continue;
+
     const lowerName = name.toLowerCase();
     if (lowerName.includes('overall') || lowerName.includes('all participants')) continue;
 
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
-    console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName})`);
 
+    console.log(`[ChronoTrack] Processing DIVISION bracket: "${name}" (Race: ${raceName})`);
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `DIVISION "${name}"`, raceName);
 
     bracketResults.forEach(r => {
@@ -317,8 +297,9 @@ export const fetchResultsForEvent = async (eventId) => {
     });
   }
 
-  // === GROUP INTERVALS AND BUILD CLEAN PARTICIPANT RESULTS (PROVEN WORKING LOGIC) ===
+  // === GROUP INTERVALS AND BUILD CLEAN PARTICIPANT RESULTS ===
   const participantsByEntry = {};
+
   rawIntervalResults.forEach(row => {
     const entryId = row.results_entry_id;
     if (!entryId) return;
@@ -343,9 +324,9 @@ export const fetchResultsForEvent = async (eventId) => {
     }
   });
 
-  // Build final results — only include athletes with a full course result
+  // Build final results
   const mappedResults = Object.values(participantsByEntry)
-    .filter(p => p.fullCourse)
+    .filter(p => p.fullCourse) // Only participants with a full course result
     .map(p => {
       const r = p.fullCourse;
       const lookupKey = getLookupKey(r);
@@ -367,6 +348,7 @@ export const fetchResultsForEvent = async (eventId) => {
         .sort((a, b) => a.endTime - b.endTime)
         .map(item => item.row);
 
+      // Build splits array with rank, pace, time
       const splits = orderedIntervals.map(row => ({
         name: row.results_interval_name || 'Split',
         time: row.results_time || null,
@@ -392,7 +374,7 @@ export const fetchResultsForEvent = async (eventId) => {
         city,
         state,
         country,
-        splits, // Fully populated and correctly ordered
+        splits, // Fully populated, ordered, with rank & pace
         entry_id: r.results_entry_id || null,
       };
     });
