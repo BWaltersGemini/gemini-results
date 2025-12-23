@@ -1,6 +1,5 @@
 // src/pages/admin/AdminDashboard.jsx
 // Main Admin Dashboard - Login, Tab Navigation, Shared State & Save Controls
-
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { loadAppConfig } from '../../utils/appConfig';
 import { createAdminSupabaseClient } from '../../supabaseClient';
@@ -9,6 +8,7 @@ import { createAdminSupabaseClient } from '../../supabaseClient';
 const EventsAdmin = lazy(() => import('./EventsAdmin'));
 const MastersAdmin = lazy(() => import('./MastersAdmin'));
 const PerformanceAdmin = lazy(() => import('./PerformanceAdmin'));
+const EmailCampaignsAdmin = lazy(() => import('./EmailCampaignsAdmin')); // ← NEW
 
 export default function AdminDashboard() {
   // Login state
@@ -27,7 +27,7 @@ export default function AdminDashboard() {
   const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
 
   // UI state
-  const [activeTab, setActiveTab] = useState('events'); // events | masters | performance | website
+  const [activeTab, setActiveTab] = useState('events'); // events | masters | performance | website | email ← NEW
   const [saveStatus, setSaveStatus] = useState('');
 
   const adminSupabase = createAdminSupabaseClient();
@@ -184,6 +184,14 @@ export default function AdminDashboard() {
           >
             Website
           </button>
+          <button
+            onClick={() => setActiveTab('email')}
+            className={`px-8 py-3 rounded-lg font-semibold transition ${
+              activeTab === 'email' ? 'bg-gemini-blue text-white' : 'text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Email Campaigns
+          </button>
         </div>
 
         {/* Lazy-loaded Tab Content */}
@@ -201,7 +209,6 @@ export default function AdminDashboard() {
               autoSaveConfig={autoSaveConfig}
             />
           )}
-
           {activeTab === 'masters' && (
             <MastersAdmin
               masterGroups={masterGroups}
@@ -213,9 +220,7 @@ export default function AdminDashboard() {
               autoSaveConfig={autoSaveConfig}
             />
           )}
-
           {activeTab === 'performance' && <PerformanceAdmin />}
-
           {activeTab === 'website' && (
             <section className="space-y-12">
               <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Website Management</h2>
@@ -241,6 +246,7 @@ export default function AdminDashboard() {
               </div>
             </section>
           )}
+          {activeTab === 'email' && <EmailCampaignsAdmin />}
         </Suspense>
 
         {/* Global Save Button */}
