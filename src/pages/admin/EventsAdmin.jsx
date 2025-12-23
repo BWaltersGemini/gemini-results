@@ -161,7 +161,7 @@ export default function EventsAdmin({
 
       // Upsert all (finishers + DNFs)
       const toUpsert = deduped.map(r => ({
-        event_id: eventId,
+        event_id: String(eventId),  // ← Convert to string
         race_id: r.race_id || null,
         bib: r.bib || null,
         first_name: r.first_name || null,
