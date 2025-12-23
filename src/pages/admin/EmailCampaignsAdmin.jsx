@@ -7,7 +7,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
 // Version banner
-console.log('%c🟢 EMAIL CAMPAIGNS v4.1 — FINAL BOLD & CLEAN', 'color: white; background: #dc2626; font-size: 16px; padding: 8px; border-radius: 4px;');
+console.log('%c🟢 EMAIL CAMPAIGNS v4.2 — FINAL POLISHED & PERFECT', 'color: white; background: #dc2626; font-size: 16px; padding: 8px; border-radius: 4px;');
 
 const ordinal = (n) => {
   if (!n) return '';
@@ -46,13 +46,13 @@ export default function EmailCampaignsAdmin() {
 
   const [subject, setSubject] = useState('{{first_name}}, You Absolutely Crushed {{event_name}}! 🎉');
   const [html, setHtml] = useState(`
-<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 20px auto; background: #f8fafc; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
-  <!-- Hero -->
+<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
+  <!-- Hero Section - Now visible on light background -->
   <div style="background: linear-gradient(135deg, #001f3f, #2563eb); color: white; padding: 80px 20px; text-align: center;">
     <h1 style="font-size: 64px; font-weight: 900; margin: 0; text-shadow: 0 6px 12px rgba(0,0,0,0.4);">CONGRATULATIONS!</h1>
-    <h2 style="font-size: 48px; margin: 30px 0 20px; font-weight: 700;">{{first_name}}</h2>
+    <h2 style="font-size: 56px; margin: 30px 0 20px; font-weight: 700;">{{first_name}}</h2>
     <p style="font-size: 32px; margin: 10px 0; opacity: 0.9;">You conquered the {{race_name}}!</p>
-    <div style="margin: 50px 0;">
+    <div style="margin: 60px 0;">
       <p style="font-size: 28px; margin: 0; opacity: 0.9;">Official Chip Time</p>
       <p style="font-size: 96px; font-weight: 900; margin: 20px 0; line-height: 1; text-shadow: 0 8px 16px rgba(0,0,0,0.5);">{{chip_time}}</p>
       <p style="font-size: 28px; margin: 0; opacity: 0.9;">Pace: {{pace}}</p>
@@ -60,35 +60,35 @@ export default function EmailCampaignsAdmin() {
   </div>
 
   <!-- Logo -->
-  <div style="text-align: center; padding: 40px 20px; background: white;">
-    <img src="{{event_logo}}" alt="Gemini Timing" style="max-width: 350px; height: auto; border-radius: 16px; box-shadow: 0 15px 35px rgba(0,0,0,0.1);" />
+  <div style="text-align: center; padding: 50px 20px; background: white;">
+    <img src="{{event_logo}}" alt="Gemini Timing" style="max-width: 350px; height: auto; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1);" />
   </div>
 
-  <!-- Stats Card -->
-  <div style="padding: 40px 20px; background: white;">
-    <div style="background: white; border: 6px solid #2563eb; border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(37,99,235,0.15);">
-      <h3 style="text-align: center; font-size: 36px; font-weight: 800; color: #001f3f; margin-bottom: 40px;">Your Race Highlights</h3>
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px;">
-        <div style="text-align: center;">
-          <p style="font-size: 24px; color: #1e40af; margin: 0 0 15px; font-weight: 600;">Overall</p>
+  <!-- Stats Card - Framed and Centered -->
+  <div style="padding: 50px 20px; background: #f8fafc;">
+    <div style="background: white; border: 8px solid #2563eb; border-radius: 28px; padding: 50px; max-width: 560px; margin: 0 auto; box-shadow: 0 20px 40px rgba(37,99,235,0.2); text-align: center;">
+      <h3 style="font-size: 36px; font-weight: 800; color: #001f3f; margin-bottom: 50px;">Your Race Highlights</h3>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px;">
+        <div>
+          <p style="font-size: 26px; color: #1e40af; margin: 0 0 20px; font-weight: 600;">Overall</p>
           <p style="font-size: 80px; font-weight: 900; color: #1e3a8a; margin: 0; line-height: 1;">{{place_ordinal}}</p>
         </div>
-        <div style="text-align: center;">
-          <p style="font-size: 24px; color: #92400e; margin: 0 0 15px; font-weight: 600;">Gender</p>
+        <div>
+          <p style="font-size: 26px; color: #92400e; margin: 0 0 20px; font-weight: 600;">Gender</p>
           <p style="font-size: 80px; font-weight: 900; color: #78350f; margin: 0; line-height: 1;">{{gender_place_ordinal}}</p>
         </div>
-        <div style="text-align: center;">
-          <p style="font-size: 24px; color: #4d7c0f; margin: 0 0 15px; font-weight: 600;">Division</p>
+        <div>
+          <p style="font-size: 26px; color: #4d7c0f; margin: 0 0 20px; font-weight: 600;">Division</p>
           <p style="font-size: 80px; font-weight: 900; color: #365314; margin: 0; line-height: 1;">{{age_group_place_ordinal}}</p>
-          <p style="font-size: 22px; color: #4d7c0f; margin: 15px 0 0;">{{age_group_name}}</p>
+          <p style="font-size: 24px; color: #4d7c0f; margin: 20px 0 0;">{{age_group_name}}</p>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Race Story -->
-  <div style="padding: 40px 20px; text-align: center;">
-    <div style="background: linear-gradient(to right, #dbeafe, #fef3c7, #d9f99d); padding: 50px; border-radius: 24px; max-width: 500px; margin: 0 auto; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
+  <div style="padding: 50px 20px; text-align: center; background: white;">
+    <div style="background: linear-gradient(to right, #dbeafe, #fef3c7, #d9f99d); padding: 50px; border-radius: 28px; max-width: 520px; margin: 0 auto; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
       <p style="font-size: 36px; font-weight: 900; color: #1e3a8a; margin: 0; line-height: 1.5;">
         {{race_story}}
       </p>
@@ -98,10 +98,10 @@ export default function EmailCampaignsAdmin() {
   <!-- Splits Table -->
   {{splits_table}}
 
-  <!-- Upcoming Events -->
+  <!-- Upcoming Events - Smaller and Lower Priority -->
   <div style="padding: 50px 20px; background: #f8fafc;">
-    <h3 style="text-align: center; font-size: 36px; font-weight: 800; color: #001f3f; margin-bottom: 40px;">Ready for Your Next Challenge?</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px;">
+    <h3 style="text-align: center; font-size: 28px; font-weight: 700; color: #001f3f; margin-bottom: 30px;">Your Next Challenge Awaits</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
       {{upcoming_events}}
     </div>
   </div>
@@ -200,26 +200,26 @@ export default function EmailCampaignsAdmin() {
       .replace(/{{race_name}}/g, participant.race_name || event.name || '')
       .replace(/{{event_name}}/g, event.name || '')
       .replace(/{{event_date}}/g, new Date(event.start_time * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
-      .replace(/{{event_logo}}/g, '/GRR.png') // ← Always use GRR.png from public
+      .replace(/{{event_logo}}/g, '/GRR.png')
       .replace(/{{race_story}}/g, raceStory)
       .replace(/{{splits_table}}/g, splitsTable)
       .replace(/{{upcoming_events}}/g, upcomingCards);
   };
 
   const generateSplitsTable = (splits) => {
-    if (!splits || splits.length === 0) return ''; // ← No filler — just blank
+    if (!splits || splits.length === 0) return ''; // ← Completely hidden if no splits
 
     let table = `
-    <div style="padding: 40px 20px;">
-      <h3 style="text-align: center; font-size: 32px; font-weight: 800; color: #001f3f; margin-bottom: 30px;">Your Race Splits</h3>
-      <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+    <div style="padding: 50px 20px; background: white;">
+      <h3 style="text-align: center; font-size: 32px; font-weight: 800; color: #001f3f; margin-bottom: 40px;">Your Race Splits</h3>
+      <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
         <thead style="background: #001f3f; color: white;">
           <tr>
-            <th style="padding: 20px; text-align: left;">Split</th>
-            <th style="padding: 20px; text-align: center;">Time</th>
-            <th style="padding: 20px; text-align: center;">Rank</th>
-            <th style="padding: 20px; text-align: center;">Change</th>
-            <th style="padding: 20px; text-align: center;">Pace</th>
+            <th style="padding: 25px; text-align: left; font-size: 20px;">Split</th>
+            <th style="padding: 25px; text-align: center; font-size: 20px;">Time</th>
+            <th style="padding: 25px; text-align: center; font-size: 20px;">Rank</th>
+            <th style="padding: 25px; text-align: center; font-size: 20px;">Change</th>
+            <th style="padding: 25px; text-align: center; font-size: 20px;">Pace</th>
           </tr>
         </thead>
         <tbody>`;
@@ -229,25 +229,25 @@ export default function EmailCampaignsAdmin() {
       let change = '';
       if (prevPlace && split.place) {
         const diff = prevPlace - split.place;
-        if (diff > 0) change = `<span style="color: #16a34a; font-weight: bold;">↑${diff}</span>`;
-        else if (diff < 0) change = `<span style="color: #dc2626; font-weight: bold;">↓${Math.abs(diff)}</span>`;
-        else change = '<span style="color: #6b7280;">–</span>';
+        if (diff > 0) change = `<span style="color: #16a34a; font-weight: bold; font-size: 28px;">↑${diff}</span>`;
+        else if (diff < 0) change = `<span style="color: #dc2626; font-weight: bold; font-size: 28px;">↓${Math.abs(diff)}</span>`;
+        else change = '<span style="color: #6b7280; font-size: 28px;">–</span>';
       }
 
       table += `
       <tr>
-        <td style="padding: 20px; border-bottom: 1px solid #eee;">${split.name}</td>
-        <td style="padding: 20px; border-bottom: 1px solid #eee; text-align: center;">${split.time || '—'}</td>
-        <td style="padding: 20px; border-bottom: 1px solid #eee; text-align: center; font-weight: bold;">${split.place ? `#${split.place}` : '—'}</td>
-        <td style="padding: 20px; border-bottom: 1px solid #eee; text-align: center; font-size: 24px;">${change}</td>
-        <td style="padding: 20px; border-bottom: 1px solid #eee; text-align: center;">${split.pace || '—'}</td>
+        <td style="padding: 25px; border-bottom: 1px solid #eee; font-size: 18px;">${split.name}</td>
+        <td style="padding: 25px; border-bottom: 1px solid #eee; text-align: center; font-size: 18px;">${split.time || '—'}</td>
+        <td style="padding: 25px; border-bottom: 1px solid #eee; text-align: center; font-weight: bold; font-size: 18px;">${split.place ? `#${split.place}` : '—'}</td>
+        <td style="padding: 25px; border-bottom: 1px solid #eee; text-align: center;">${change}</td>
+        <td style="padding: 25px; border-bottom: 1px solid #eee; text-align: center; font-size: 18px;">${split.pace || '—'}</td>
       </tr>`;
     });
 
     table += `
       </tbody>
     </table>
-    <p style="text-align: center; color: #666; margin-top: 20px;">
+    <p style="text-align: center; color: #666; margin-top: 30px; font-size: 16px;">
       ↑ Gained positions • ↓ Lost positions • – Held steady
     </p>
     </div>`;
@@ -257,16 +257,16 @@ export default function EmailCampaignsAdmin() {
 
   const generateUpcomingCards = () => {
     if (upcomingEvents.length === 0) {
-      return '<p style="text-align: center; color: #666; font-size: 18px;">Check back soon for upcoming races!</p>';
+      return '<p style="text-align: center; color: #666; font-size: 16px;">Check back soon for upcoming races!</p>';
     }
 
     return upcomingEvents.map(event => `
-      <div style="background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
-        ${event.image?.url ? `<img src="${event.image.url}" alt="${event.title.rendered}" style="width: 100%; height: 200px; object-cover;" />` : '<div style="height: 200px; background: #e5e7eb; display: flex; align-items: center; justify-content: center;"><p style="color: #9ca3af; font-size: 20px;">No Image</p></div>'}
-        <div style="padding: 25px;">
-          <h4 style="font-size: 24px; font-weight: bold; color: #001f3f; margin: 0 0 15px;">${event.title.rendered || event.title}</h4>
-          <p style="color: #6b7280; font-size: 18px; margin: 0 0 25px;">${new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-          <a href="${event.url}" target="_blank" style="display: inline-block; background: #2563eb; color: white; padding: 16px 32px; border-radius: 50px; text-decoration: none; font-weight: bold; font-size: 18px;">Register Now →</a>
+      <div style="background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.08);">
+        ${event.image?.url ? `<img src="${event.image.url}" alt="${event.title.rendered}" style="width: 100%; height: 160px; object-cover;" />` : '<div style="height: 160px; background: #e5e7eb; display: flex; align-items: center; justify-content: center;"><p style="color: #9ca3af;">No Image</p></div>'}
+        <div style="padding: 20px;">
+          <h4 style="font-size: 18px; font-weight: bold; color: #001f3f; margin: 0 0 10px; line-clamp: 2;">${event.title.rendered || event.title}</h4>
+          <p style="color: #6b7280; font-size: 16px; margin: 0 0 15px;">${new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          <a href="${event.url}" target="_blank" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; border-radius: 50px; text-decoration: none; font-weight: bold; font-size: 16px;">Register →</a>
         </div>
       </div>
     `).join('');
@@ -306,8 +306,7 @@ export default function EmailCampaignsAdmin() {
     try {
       for (const person of emailList) {
         const participant = results.find(r =>
-          r.first_name?.toLowerCase() === person.firstName?.toLowerCase() &&
-          r.last_name?.toLowerCase() === person.lastName?.toLowerCase()
+          r.first_name?.toLowerCase() === person.firstName?.toLowerCase()
         ) || results[0];
 
         const splitsTable = generateSplitsTable(participant.splits || []);
@@ -347,9 +346,9 @@ export default function EmailCampaignsAdmin() {
 
   return (
     <section className="space-y-12">
-      <div className="bg-red-100 border-2 border-red-500 rounded-xl p-6 text-center">
-        <p className="text-red-800 font-black text-2xl">🟥 FINAL v4.1 — BOLD, CLEAN, AND READY</p>
-        <p className="text-red-700 text-lg mt-2">Visible hero • First name only • GRR.png default • No split filler • Framed stats</p>
+      <div className="bg-green-100 border-2 border-green-500 rounded-xl p-6 text-center">
+        <p className="text-green-800 font-black text-2xl">🟢 FINAL v4.2 — BOLD, CLEAN, PERFECT</p>
+        <p className="text-green-700 text-lg mt-2">Visible hero • First name only • GRR.png logo • Framed stats • No split filler • Subtle upcoming events</p>
       </div>
 
       <h2 className="text-5xl font-black text-gemini-dark-gray text-center mb-12">Post-Race Email Campaigns</h2>
