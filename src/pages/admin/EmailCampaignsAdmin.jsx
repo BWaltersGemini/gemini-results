@@ -4,6 +4,9 @@ import { fetchEvents } from '../../api/chronotrackapi';
 import { fetchResultsForEvent } from '../../api/chronotrackapi';
 import { fetchEmailsForEntries } from '../../api/chronotrackAdminApi';
 
+// === VERSION MARKER - FOR DEBUGGING DEPLOYMENT ===
+console.log('%c🟢 EMAIL CAMPAIGNS ADMIN v2.1 — FIXED VERSION LOADED (Dec 22, 2025)', 'color: white; background: green; font-size: 16px; padding: 8px; border-radius: 4px;');
+
 export default function EmailCampaignsAdmin() {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -14,12 +17,11 @@ export default function EmailCampaignsAdmin() {
   const [buildingList, setBuildingList] = useState(false);
   const [progress, setProgress] = useState({ processed: 0, total: 0, found: 0 });
 
-  // Load all events on mount
   useEffect(() => {
+    console.log('EmailCampaignsAdmin component mounted — new version confirmed');
     const loadEvents = async () => {
       try {
         const allEvents = await fetchEvents();
-        // Sort by most recent first
         allEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
         setEvents(allEvents);
       } catch (err) {
@@ -35,17 +37,15 @@ export default function EmailCampaignsAdmin() {
   const handleSelectEvent = async (eventId) => {
     const event = events.find(e => e.id === eventId);
     if (!event) return;
-
     setSelectedEvent(event);
     setResults([]);
     setEmailList([]);
     setLoadingResults(true);
-
     try {
       const eventResults = await fetchResultsForEvent(eventId);
-      // Keep only participants with an entry_id (required for email lookup)
       const withEntry = eventResults.filter(r => r.entry_id);
       setResults(withEntry);
+      console.log(`Loaded ${withEntry.length} participants with entry_id`);
     } catch (err) {
       alert('Failed to load results for this event');
       console.error(err);
@@ -59,21 +59,21 @@ export default function EmailCampaignsAdmin() {
       alert('No participants with registration data found');
       return;
     }
-
     const entryIds = results.map(r => r.entry_id);
     setBuildingList(true);
     setProgress({ processed: 0, total: entryIds.length, found: 0 });
+    console.log(`Starting email fetch for ${entryIds.length} entry IDs`);
 
     try {
       const emails = await fetchEmailsForEntries(entryIds, (processed, total, found) => {
         setProgress({ processed, total, found });
       });
-
       setEmailList(emails);
+      console.log(`✅ Email fetch complete: ${emails.length} valid emails found`);
       alert(`✅ Success! Found ${emails.length} valid emails out of ${results.length} finishers`);
     } catch (err) {
       alert('Error while building email list');
-      console.error(err);
+      console.error('Email fetch error:', err);
     } finally {
       setBuildingList(false);
     }
@@ -90,6 +90,16 @@ export default function EmailCampaignsAdmin() {
 
   return (
     <section className="space-y-12">
+      {/* VERSION BANNER — VISIBLE PROOF */}
+      <div className="bg-green-100 border-2 border-green-500 rounded-xl p-4 text-center">
+        <p className="text-green-800 font-bold text-lg">
+          🟢 Email Campaigns Admin v2.1 — Fixed & Deployed (Dec 22, 2025)
+        </p>
+        <p className="text-green-700 text-sm mt-1">
+          If you see this banner, the correct version is running!
+        </p>
+      </div>
+
       <h2 className="text-3xl font-bold text-gemini-dark-gray mb-8">Email Campaigns</h2>
 
       {/* Step 1: Select Event */}
@@ -147,14 +157,14 @@ export default function EmailCampaignsAdmin() {
         </div>
       )}
 
-      {/* Step 3: Email List Preview — BULLETPROOF SAFE RENDERING */}
+      {/* Step 3: Email List Preview */}
       {emailList.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h3 className="text-2xl font-bold mb-6">
             3. Email List Ready — {emailList.length} recipients
           </h3>
           <p className="text-lg text-gray-600 mb-6">
-            Next: Template editor with placeholders ({{first_name}}, {{place}}, {{chip_time}}, etc.) and send via Resend or SendGrid coming soon!
+            Next: Template editor with placeholders and send via Resend/SendGrid
           </p>
           <div className="max-h-96 overflow-y-auto border border-gray-300 rounded-xl">
             <table className="w-full text-left">
@@ -166,12 +176,10 @@ export default function EmailCampaignsAdmin() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {emailList.slice(0, 100).map((person, i) => {
-                  // Safely construct name using only fields returned by fetchEntryDetails
                   const name = person.fullName ||
                                (person.firstName && person.lastName
                                  ? `${person.firstName.trim()} ${person.lastName.trim()}`
                                  : person.firstName?.trim() || person.lastName?.trim() || 'Name not available');
-
                   return (
                     <tr key={i} className="hover:bg-gray-50">
                       <td className="px-6 py-4">{name}</td>
@@ -189,11 +197,6 @@ export default function EmailCampaignsAdmin() {
               </tbody>
             </table>
           </div>
-          {emailList.length > 100 && (
-            <p className="mt-4 text-center text-gray-600">
-              Showing first 100 of {emailList.length} total recipients
-            </p>
-          )}
         </div>
       )}
     </section>
