@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – Branded Email Template (Matches EmailCampaignsAdmin) + All iPad Fixes
+// FINAL – All Features: Correct Ordinals, Event Search, Email Opt-In, iPad Safe
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +35,9 @@ export default function ResultsKiosk() {
   const [optIn, setOptIn] = useState(false);
   const [emailStatus, setEmailStatus] = useState('');
 
+  // Event select search
+  const [eventSearchTerm, setEventSearchTerm] = useState('');
+
   const AUTO_RESET_SECONDS = 12;
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
@@ -60,6 +63,7 @@ export default function ResultsKiosk() {
     return `https://gemini-results.vercel.app/results/${slug}/${year}`;
   };
 
+  // Robust ordinal function – used everywhere
   const ordinal = (n) => {
     if (!n) return '—';
     const s = ['th', 'st', 'nd', 'rd'];
@@ -82,9 +86,6 @@ export default function ResultsKiosk() {
     if (Math.abs(firstPlace - finalPlace) <= 3) return "Rock-solid consistency — you owned your pace all day!";
     return "Gritty, determined performance — you gave it everything! ❤️";
   };
-
-  const formatPlace = (place) =>
-    !place ? '—' : place === 1 ? '1st' : place === 2 ? '2nd' : place === 3 ? '3rd' : `${place}th`;
 
   const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
 
@@ -126,7 +127,7 @@ export default function ResultsKiosk() {
     startCountdown();
   };
 
-  // Countdown pause during email
+  // Countdown – paused when email form open
   useEffect(() => {
     if (countdown === null || showEmailForm) return;
 
@@ -312,7 +313,7 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // Exit protection (unchanged)
+  // Exit protection
   useEffect(() => {
     if (stage !== 'kiosk') return;
 
@@ -342,7 +343,7 @@ export default function ResultsKiosk() {
     };
   }, [stage]);
 
-  // ====================== ACCESS PIN & EVENT SELECT (unchanged – kept full for completeness) ======================
+  // ====================== ACCESS PIN STAGE ======================
   if (stage === 'access-pin') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/80 flex items-center justify-center p-8">
@@ -382,16 +383,39 @@ export default function ResultsKiosk() {
     );
   }
 
+  // ====================== EVENT SELECT STAGE WITH SEARCH ======================
   if (stage === 'event-select') {
-    const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+    const sortedEvents = [...events]
+      .sort((a, b) => (b.start_time || 0) - (a.start_time || 0))
+      .filter((event) =>
+        event.name?.toLowerCase().includes(eventSearchTerm.toLowerCase())
+      );
+
     return (
       <div className="fixed inset-0 bg-bg-light flex flex-col">
         <div className="bg-brand-turquoise text-white p-6 text-center shadow-2xl">
           <h1 className="text-4xl font-black">Select Event</h1>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">
+
+        {/* Search Bar */}
+        <div className="px-6 pt-6 pb-4">
+          <input
+            type="text"
+            value={eventSearchTerm}
+            onChange={(e) => setEventSearchTerm(e.target.value)}
+            placeholder="Search events..."
+            className="w-full text-2xl text-center bg-white text-brand-dark placeholder-text-muted border-6 border-brand-turquoise rounded-3xl py-6 px-8 focus:outline-none focus:ring-8 focus:ring-brand-turquoise/50 shadow-xl"
+            autoFocus
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
           {sortedEvents.length === 0 ? (
-            <p className="text-3xl text-center text-brand-dark py-20">No events loaded</p>
+            <div className="text-center py-20">
+              <p className="text-3xl text-brand-dark">
+                {eventSearchTerm ? 'No events match your search' : 'No events loaded'}
+              </p>
+            </div>
           ) : (
             <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 max-w-5xl mx-auto">
               {sortedEvents.map((event) => {
@@ -504,7 +528,7 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Multiple Matches */}
+        {/* Multiple Matches – Shows Race Name */}
         {matches.length > 0 && (
           <div className="w-full max-w-4xl z-10 mt-6">
             <p className="text-4xl text-center mb-8 font-black drop-shadow-2xl">Tap Your Name</p>
@@ -515,12 +539,17 @@ export default function ResultsKiosk() {
                   onClick={() => selectParticipant(p)}
                   className="bg-white/95 text-brand-dark rounded-3xl shadow-2xl p-10 hover:scale-105 transition border-6 border-brand-turquoise"
                 >
-                  <div className="text-5xl font-black mb-4">
+                  <div className="text-5xl font-black mb-2">
                     {p.first_name} {p.last_name}
                   </div>
-                  <div className="text-4xl text-brand-red font-bold">
+                  <div className="text-3xl text-brand-red font-bold mb-2">
                     Bib #{p.bib}
                   </div>
+                  {p.race_name && (
+                    <div className="text-2xl text-brand-turquoise font-medium">
+                      {p.race_name}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -535,16 +564,23 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Athlete Result Card */}
+        {/* Athlete Result Card – Shows Race Name + Correct Ordinals */}
         {participant && typeof participant === 'object' && (
           <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-8 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-4">
             <div className="text-7xl font-black text-brand-red mb-4 drop-shadow-lg">
-              #{formatPlace(participant.place || '—')}
+              #{ordinal(participant.place || '—')}
             </div>
 
-            <h2 className="text-4xl font-black mb-4">
+            <h2 className="text-4xl font-black mb-2">
               {participant.first_name} {participant.last_name}
             </h2>
+
+            {participant.race_name && (
+              <p className="text-2xl font-medium text-brand-turquoise mb-4">
+                {participant.race_name}
+              </p>
+            )}
+
             <p className="text-2xl text-text-muted mb-6">Bib #{participant.bib}</p>
 
             <div className="grid grid-cols-2 gap-6 text-2xl mb-8">
@@ -563,9 +599,9 @@ export default function ResultsKiosk() {
             </div>
 
             <div className="text-xl space-y-3 mb-8">
-              <p><strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
+              <p><strong>Gender Place:</strong> {ordinal(participant.gender_place)} {participant.gender}</p>
               {participant.age_group_place && (
-                <p><strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}</p>
+                <p><strong>Division:</strong> {ordinal(participant.age_group_place)} in {participant.age_group_name}</p>
               )}
               {participant._status === 'DNF' && (
                 <p className="text-brand-red font-bold text-3xl">Did Not Finish</p>
@@ -611,18 +647,12 @@ export default function ResultsKiosk() {
                       onChange={(e) => setOptIn(e.target.checked)}
                       className="w-6 h-6 text-brand-turquoise rounded focus:ring-brand-turquoise"
                     />
-                    <span>Yes, I accept emails from Gemini Timing</span>
+                    <span>Yes, send me future race updates from Gemini Timing</span>
                   </label>
 
                   <div className="text-center">
                     <button
-                      onClick={() => {
-                        setShowEmailForm(false);
-                        setEmail('');
-                        setOptIn(false);
-                        setEmailStatus('');
-                        startCountdown();
-                      }}
+                      onClick={resetToSearch}
                       className="px-12 py-4 bg-brand-dark text-white text-xl font-black rounded-full shadow-xl"
                     >
                       Cancel
