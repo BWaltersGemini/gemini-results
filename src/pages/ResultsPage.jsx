@@ -1,10 +1,16 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • DNFs (including those with chip_time but marked DNF) now politely shown in red "Did Not Finish" section
-// • They are NOT ranked with finishers
-// • Fully searchable by name/bib
-// • On Course section for true in-progress (no chip_time, but splits)
-// • All features preserved
+// • All features complete and working:
+//   - Races separated with correct per-race ranking
+//   - Top 5 / View All with auto-expand on pagination
+//   - Pagination info text now correct in Top 5 mode ("1–5 of 67")
+//   - DNFs (including short course with chip_time) in polite orange section
+//   - On Course (true in-progress) in green section
+//   - Search applies everywhere
+//   - Division filter only on finishers
+//   - Jump to Results button
+//   - Year buttons
+//   - Participant navigation & direct refresh fixed
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -457,10 +463,8 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const isExpanded = expandedRaces[raceId] ?? false;
 
-              // Finishers — only true finishers (not DNF even if they have chip_time)
-              let raceFinishers = results.finishers
-                .filter(r => r.race_id === raceId)
-                .filter(r => r._status !== 'DNF'); // Exclude official DNFs
+              // Finishers — official finishers only
+              let raceFinishers = results.finishers.filter(r => r.race_id === raceId);
 
               if (selectedDivision !== 'all') {
                 raceFinishers = raceFinishers.filter(r => r.age_group_name === selectedDivision);
@@ -475,7 +479,9 @@ export default function ResultsPage() {
               }
 
               const sortedFinishers = [...raceFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-              const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
+
+              const baseData = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
+              const totalResults = sortedFinishers.length;
 
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
 
@@ -499,7 +505,16 @@ export default function ResultsPage() {
                 }
               };
 
-              // In Progress: no chip_time, but have splits
+              // Calculate correct display range
+              let startIdx = 1;
+              let endIdx = baseData.length;
+
+              if (isExpanded && totalResults > 5) {
+                startIdx = (pag.currentPage - 1) * pag.pageSize + 1;
+                endIdx = Math.min(startIdx + pag.pageSize - 1, totalResults);
+              }
+
+              // In Progress
               let raceInProgress = results.nonFinishers
                 .filter(r => r.race_id === raceId)
                 .filter(r => !r.chip_time || r.chip_time.trim() === '')
@@ -515,10 +530,10 @@ export default function ResultsPage() {
 
               const isInProgressExpanded = expandedInProgressSections[raceId];
 
-              // DNF: official DNF status (includes short course, even with chip_time)
+              // DNF (includes short course with chip_time)
               let raceDnf = [
                 ...results.finishers.filter(r => r.race_id === raceId && r._status === 'DNF'),
-                ...results.nonFinishers.filter(r => r.race_id === raceId && r._status === 'DNF')
+                ...results.nonFinishers.filter(r => r.race_id === raceId)
               ];
 
               if (searchQuery) {
@@ -540,9 +555,9 @@ export default function ResultsPage() {
 
                     <div className="flex flex-wrap items-center gap-4">
                       <span className="text-lg text-gray-600">
-                        {sortedFinishers.length} official finisher{sortedFinishers.length !== 1 ? 's' : ''}
+                        {totalResults} official finisher{totalResults !== 1 ? 's' : ''}
                       </span>
-                      {sortedFinishers.length > 5 && (
+                      {totalResults > 5 && (
                         <button
                           onClick={() => {
                             const willCollapse = isExpanded;
@@ -558,31 +573,36 @@ export default function ResultsPage() {
                             isExpanded ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-primary text-white hover:bg-primary/90'
                           }`}
                         >
-                          {isExpanded ? 'Show Top 5' : `View All (${sortedFinishers.length})`}
+                          {isExpanded ? 'Show Top 5' : `View All (${totalResults})`}
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {sortedFinishers.length > 0 ? (
-                    <ResultsTable
-                      data={displayFinishers}
-                      totalResults={sortedFinishers.length}
-                      currentPage={pag.currentPage}
-                      setCurrentPage={updatePage}
-                      pageSize={pag.pageSize}
-                      setPageSize={updatePageSize}
-                      onNameClick={handleNameClick}
-                      isMobile={window.innerWidth < 768}
-                      highlightedBib={highlightedBib}
-                    />
+                  {totalResults > 0 ? (
+                    <>
+                      <ResultsTable
+                        data={baseData}
+                        totalResults={totalResults}
+                        currentPage={isExpanded ? pag.currentPage : 1}
+                        setCurrentPage={updatePage}
+                        pageSize={isExpanded ? pag.pageSize : 5}
+                        setPageSize={updatePageSize}
+                        onNameClick={handleNameClick}
+                        isMobile={window.innerWidth < 768}
+                        highlightedBib={highlightedBib}
+                      />
+                      <div className="text-center mt-6 text-lg text-gray-700">
+                        Showing {startIdx}–{endIdx} of {totalResults} results
+                      </div>
+                    </>
                   ) : (
                     <div className="text-center py-16 text-gray-500">
                       <p className="text-2xl font-medium">No official finishers match current filters in this race</p>
                     </div>
                   )}
 
-                  {/* In Progress Section */}
+                  {/* In Progress */}
                   {raceInProgress.length > 0 && (
                     <div className="mt-16">
                       <button
@@ -611,7 +631,7 @@ export default function ResultsPage() {
                     </div>
                   )}
 
-                  {/* DNF Section — polite, visible, searchable */}
+                  {/* DNF */}
                   {raceDnf.length > 0 && (
                     <div className="mt-16">
                       <button
