@@ -1,10 +1,9 @@
 // src/pages/Home.jsx
-// FULLY UPDATED — December 2025 Production Version
-// • Uses fresh global config from RaceContext (no localStorage)
-// • Correctly hides events belonging to hidden master series
-// • Shows standalone events even if not in a master group
-// • Fully compatible with latest RaceContext (live polling, DNF support, etc.)
-// • Clean, modern UI with proper loading states
+// UPDATED — December 2025
+// • Homepage now ONLY shows visible master series
+// • One tile per master, using the most recent linked event
+// • Sorted by latest event date
+// • Standalone events and hidden masters are excluded
 
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -25,14 +24,14 @@ export default function Home() {
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
 
-  // Base numbers + fetched athletes from Supabase
+  // Base numbers + fetched athletes
   const BASE_ATHLETES = 750000;
   const BASE_RACES = 700;
   const [fetchedAthletes, setFetchedAthletes] = useState(0);
   const [displayAthletes, setDisplayAthletes] = useState(0);
   const [displayRaces, setDisplayRaces] = useState(0);
 
-  // Fetch global published athletes count
+  // Fetch global athletes count
   useEffect(() => {
     const fetchGlobalAthletes = async () => {
       try {
@@ -52,7 +51,7 @@ export default function Home() {
   const totalRacesTimed = BASE_RACES + events.length;
   const finalAthletes = BASE_ATHLETES + fetchedAthletes;
 
-  // Animated count-up effect
+  // Animated counters
   useEffect(() => {
     if (loading) return;
     const duration = 3000;
@@ -80,7 +79,7 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [finalAthletes, totalRacesTimed, loading]);
 
-  // Fetch upcoming events from You Keep Moving
+  // Upcoming events from You Keep Moving
   useEffect(() => {
     const fetchUpcomingEvents = async () => {
       try {
@@ -123,29 +122,37 @@ export default function Home() {
     }
   };
 
-  // === FILTERED RECENT EVENTS (Hides events from hidden master series) ===
-  const recentEvents = events
-    .filter(event => {
-      // Find if this event belongs to any master group
-      const belongsToMaster = Object.entries(masterGroups).find(([masterKey, eventIds]) =>
-        eventIds.includes(String(event.id))
-      );
+  // === ONLY VISIBLE MASTER SERIES, SORTED BY MOST RECENT EVENT ===
+  const masterSeriesTiles = Object.keys(masterGroups)
+    .filter(masterKey => !hiddenMasters.includes(masterKey)) // Only visible masters
+    .map(masterKey => {
+      const eventIds = masterGroups[masterKey] || [];
+      const linkedEvents = events
+        .filter(e => eventIds.includes(String(e.id)))
+        .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
-      // Standalone events (not in any master group) → always show
-      if (!belongsToMaster) return true;
+      if (linkedEvents.length === 0) return null;
 
-      const [masterKey] = belongsToMaster;
+      const latestEvent = linkedEvents[0]; // Most recent
+      const displayName = editedEvents[masterKey]?.name || masterKey;
+      const logo = eventLogos[masterKey] || null;
 
-      // If the master series is hidden → hide this event
-      return !hiddenMasters.includes(masterKey);
+      return {
+        masterKey,
+        displayName,
+        latestEvent,
+        logo,
+        latestDate: latestEvent.start_time,
+      };
     })
-    .sort((a, b) => (b.start_time || 0) - (a.start_time || 0))
-    .slice(0, 3);
+    .filter(Boolean)
+    .sort((a, b) => (b.latestDate || 0) - (a.latestDate || 0))
+    .slice(0, 3); // Top 3 most recent masters
 
-  const handleEventClick = (event) => {
-    setSelectedEvent(event);
-    const year = getYearFromEvent(event);
-    navigate(`/results/overall/${year}`);
+  const handleMasterClick = (masterTile) => {
+    setSelectedEvent(masterTile.latestEvent);
+    const year = getYearFromEvent(masterTile.latestEvent);
+    navigate(`/results/${masterTile.masterKey.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${year}`);
     window.scrollTo(0, 0);
   };
 
@@ -207,11 +214,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Recent & Live Results */}
+      {/* Recent Master Series */}
       <section className="py-20 md:py-32 px-6 max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-brand-dark mb-4">
-            Recent & Live Results
+            Recent Series Results
           </h2>
           <div className="w-24 h-1 bg-primary mx-auto"></div>
         </div>
@@ -219,43 +226,38 @@ export default function Home() {
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-primary"></div>
-            <p className="mt-6 text-xl text-gray-600">Loading results...</p>
+            <p className="mt-6 text-xl text-gray-600">Loading series...</p>
           </div>
-        ) : recentEvents.length === 0 ? (
-          <p className="text-center text-gray-600 text-lg">No events available yet.</p>
+        ) : masterSeriesTiles.length === 0 ? (
+          <p className="text-center text-gray-600 text-lg">No active series available yet.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-5xl mx-auto">
-            {recentEvents.map(event => {
-              const logo = eventLogos[event.id] || null;
-              const displayName = editedEvents[event.id]?.name || event.name;
-
-              return (
-                <button
-                  key={event.id}
-                  onClick={() => handleEventClick(event)}
-                  className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30"
-                >
-                  <div className="h-72 bg-brand-light flex items-center justify-center p-8">
-                    {logo ? (
-                      <img src={logo} alt={displayName} className="max-h-56 max-w-full object-contain" />
-                    ) : (
-                      <span className="text-9xl text-gray-300 group-hover:text-primary transition">🏁</span>
-                    )}
-                  </div>
-                  <div className="p-10 text-center">
-                    <h3 className="text-2xl md:text-3xl font-bold text-brand-dark mb-4 group-hover:text-primary transition">
-                      {displayName}
-                    </h3>
-                    <p className="text-lg text-gray-600 mb-6">
-                      {formatChronoDate(event.start_time)}
-                    </p>
-                    <span className="text-primary font-bold group-hover:underline">
-                      View Results →
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+            {masterSeriesTiles.map(tile => (
+              <button
+                key={tile.masterKey}
+                onClick={() => handleMasterClick(tile)}
+                className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-primary/30"
+              >
+                <div className="h-72 bg-brand-light flex items-center justify-center p-8">
+                  {tile.logo ? (
+                    <img src={tile.logo} alt={tile.displayName} className="max-h-56 max-w-full object-contain" />
+                  ) : (
+                    <span className="text-9xl text-gray-300 group-hover:text-primary transition">🏁</span>
+                  )}
+                </div>
+                <div className="p-10 text-center">
+                  <h3 className="text-2xl md:text-3xl font-bold text-brand-dark mb-4 group-hover:text-primary transition">
+                    {tile.displayName}
+                  </h3>
+                  <p className="text-lg text-gray-600 mb-6">
+                    {formatChronoDate(tile.latestEvent.start_time)}
+                  </p>
+                  <span className="text-primary font-bold group-hover:underline">
+                    View Results →
+                  </span>
+                </div>
+              </button>
+            ))}
           </div>
         )}
 
