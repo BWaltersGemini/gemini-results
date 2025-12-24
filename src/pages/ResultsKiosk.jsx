@@ -1,4 +1,4 @@
-// src/pages/ResultsKiosk.jsx (FINAL — New Red/Turquoise Brand Palette)
+// src/pages/ResultsKiosk.jsx (FIXED — Compatible with new RaceContext results object)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Confetti from 'react-confetti';
@@ -10,7 +10,7 @@ export default function ResultsKiosk() {
   const navigate = useNavigate();
   const {
     events = [],
-    results = [],
+    results,                    // ← Now { finishers: [], nonFinishers: [] }
     selectedEvent,
     setSelectedEvent,
     masterGroups = {},
@@ -28,6 +28,12 @@ export default function ResultsKiosk() {
 
   const AUTO_RESET_SECONDS = 10;
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
+
+  // Combine finishers + non-finishers for search (both are valid participants)
+  const allParticipants = [
+    ...(results?.finishers || []),
+    ...(results?.nonFinishers || [])
+  ];
 
   // Master logo
   const getMasterKeyForEvent = () => {
@@ -54,7 +60,7 @@ export default function ResultsKiosk() {
 
   const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
 
-  // Search logic
+  // Search logic — now uses combined allParticipants
   const performSearch = (query) => {
     if (!query.trim()) {
       setMatches([]);
@@ -63,7 +69,8 @@ export default function ResultsKiosk() {
     }
     const term = query.trim();
     const lowerTerm = term.toLowerCase();
-    const found = results.filter((r) => {
+
+    const found = allParticipants.filter((r) => {
       if (r.bib && r.bib.toString() === term) return true;
       const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
       return fullName.includes(lowerTerm);
@@ -163,7 +170,6 @@ export default function ResultsKiosk() {
   // === EVENT SELECT STAGE ===
   if (stage === 'event-select') {
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
     return (
       <div className="fixed inset-0 bg-brand-light flex flex-col">
         <div className="bg-primary text-white p-10 text-center shadow-2xl">
@@ -177,8 +183,9 @@ export default function ResultsKiosk() {
           ) : (
             <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-3 max-w-7xl mx-auto">
               {sortedEvents.map((event) => {
-                const count = results.filter((r) => r.event_id === event.id).length;
-                const eventMasterKey = getMasterKeyForEvent() || Object.keys(masterGroups).find((k) => masterGroups[k]?.includes(String(event.id)));
+                const eventMasterKey = Object.keys(masterGroups).find((k) =>
+                  masterGroups[k]?.includes(String(event.id))
+                );
                 const eventLogo = eventMasterKey ? eventLogos[eventMasterKey] : null;
 
                 return (
@@ -190,7 +197,13 @@ export default function ResultsKiosk() {
                     }}
                     className="bg-white rounded-3xl shadow-2xl p-12 hover:shadow-3xl hover:scale-105 transition-all duration-300 border-4 border-primary/20"
                   >
-                    {eventLogo && <img src={eventLogo} alt="Logo" className="max-h-40 mx-auto mb-8 object-contain drop-shadow-xl" />}
+                    {eventLogo && (
+                      <img
+                        src={eventLogo}
+                        alt="Logo"
+                        className="max-h-40 mx-auto mb-8 object-contain drop-shadow-xl"
+                      />
+                    )}
                     <h3 className="text-3xl font-black text-brand-dark mb-6">{event.name}</h3>
                     <p className="text-2xl text-gray-600 mb-4">
                       {new Date(event.start_time * 1000).toLocaleDateString('en-US', {
@@ -200,7 +213,7 @@ export default function ResultsKiosk() {
                       })}
                     </p>
                     <p className="text-xl font-bold text-primary">
-                      {count > 0 ? `${count} ${count === 1 ? 'finisher' : 'finishers'}` : 'Results loading...'}
+                      Tap to Load Results
                     </p>
                   </button>
                 );
@@ -215,15 +228,27 @@ export default function ResultsKiosk() {
   // === FULL KIOSK MODE ===
   return (
     <>
-      {showConfetti && <Confetti recycle={false} numberOfPieces={500} gravity={0.15} colors={['#B22222', '#48D1CC', '#FFD700', '#FF6B6B']} />}
-
+      {showConfetti && (
+        <Confetti
+          recycle={false}
+          numberOfPieces={500}
+          gravity={0.15}
+          colors={['#B22222', '#48D1CC', '#FFD700', '#FF6B6B']}
+        />
+      )}
       <div className="fixed inset-0 bg-gradient-to-br from-primary to-primary/90 flex flex-col items-center justify-center text-white p-8 relative overflow-hidden">
         {/* Header */}
         <div className="text-center mb-12 z-10">
           {logoUrl && (
-            <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-48 mb-10 object-contain drop-shadow-2xl" />
+            <img
+              src={logoUrl}
+              alt="Event Logo"
+              className="mx-auto max-h-48 mb-10 object-contain drop-shadow-2xl"
+            />
           )}
-          <h1 className="text-6xl md:text-8xl font-black drop-shadow-2xl">{getEventDisplayName()}</h1>
+          <h1 className="text-6xl md:text-8xl font-black drop-shadow-2xl">
+            {getEventDisplayName()}
+          </h1>
           <p className="text-3xl md:text-4xl mt-4 opacity-90">Finish Line Kiosk</p>
         </div>
 
@@ -268,7 +293,9 @@ export default function ResultsKiosk() {
         {/* Multiple Matches */}
         {matches.length > 0 && (
           <div className="w-full max-w-5xl z-10">
-            <p className="text-5xl md:text-6xl text-center mb-16 font-black drop-shadow-2xl">Tap Your Name Below</p>
+            <p className="text-5xl md:text-6xl text-center mb-16 font-black drop-shadow-2xl">
+              Tap Your Name Below
+            </p>
             <div className="grid gap-12 md:grid-cols-2">
               {matches.map((p, i) => (
                 <button
@@ -303,35 +330,43 @@ export default function ResultsKiosk() {
         {participant && typeof participant === 'object' && (
           <div className="bg-white/95 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-12 max-w-4xl w-full text-center border-8 border-primary/30 z-10">
             <div className="text-7xl md:text-9xl font-black text-primary mb-8 drop-shadow-2xl">
-              #{formatPlace(participant.place)}
+              #{formatPlace(participant.place || '—')}
             </div>
             <h2 className="text-5xl md:text-7xl font-black mb-6">
               {participant.first_name} {participant.last_name}
             </h2>
             <p className="text-3xl md:text-4xl text-gray-600 mb-12">Bib #{participant.bib}</p>
-
             <div className="grid grid-cols-2 gap-12 text-3xl md:text-4xl mb-16">
               <div className="bg-primary/10 rounded-3xl py-10 shadow-xl">
-                <div className="font-black text-primary text-5xl md:text-6xl">{formatTime(participant.chip_time)}</div>
+                <div className="font-black text-primary text-5xl md:text-6xl">
+                  {formatTime(participant.chip_time)}
+                </div>
                 <div className="text-gray-700 mt-4 text-xl">Chip Time</div>
               </div>
               <div className="bg-brand-light rounded-3xl py-10 shadow-xl">
-                <div className="font-black text-brand-dark text-5xl md:text-6xl">{participant.pace || '—'}</div>
+                <div className="font-black text-brand-dark text-5xl md:text-6xl">
+                  {participant.pace || '—'}
+                </div>
                 <div className="text-gray-700 mt-4 text-xl">Pace</div>
               </div>
             </div>
-
             <div className="text-3xl md:text-4xl space-y-6 mb-16">
-              <p><strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
+              <p>
+                <strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}
+              </p>
               {participant.age_group_place && (
-                <p><strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}</p>
+                <p>
+                  <strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}
+                </p>
+              )}
+              {participant._status === 'DNF' && (
+                <p className="text-red-600 font-bold text-4xl">Did Not Finish</p>
               )}
             </div>
-
             <div className="mb-12">
               <p className="text-3xl font-black mb-8">Scan for Full Results</p>
               <div className="mx-auto w-64 h-64 bg-white p-8 rounded-3xl shadow-2xl border-8 border-primary/20">
-                <QRCode value={getResultsUrl()} size={224} level="H" fgColor="#B22222" bgColor="#FFFFFF" />
+                <QRCode value={getResultsUrl()} size={224} level="H" fgColor="#B22222" />
               </div>
               <p className="text-2xl mt-8 text-gray-600">Scan with your phone</p>
             </div>
@@ -342,7 +377,9 @@ export default function ResultsKiosk() {
         {participant === 'not-found' && (
           <div className="text-center max-w-4xl z-10">
             <div className="text-9xl mb-12">😅</div>
-            <h2 className="text-6xl md:text-8xl font-black mb-10 drop-shadow-2xl">No Results Found Yet</h2>
+            <h2 className="text-6xl md:text-8xl font-black mb-10 drop-shadow-2xl">
+              No Results Found Yet
+            </h2>
             <p className="text-4xl md:text-5xl leading-relaxed mb-16">
               Results may still be syncing!<br />
               Please check with timing staff nearby.
