@@ -1,10 +1,10 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Top 5 mode: clean view with "Top 5 Finishers" label + "View All" button only
-// • No pagination controls visible in Top 5 mode (prevents skipping results)
-// • When user clicks "View All": expands + shows full pagination starting at page 1
+// • Top 5 mode: clean view — table + "Top 5 Finishers" label + "Showing 1–5 of X" + "View All" button only
+// • No pagination controls visible in Top 5 mode
+// • When user clicks "View All": expands to full list starting at page 1 with full pagination
 // • DNF & On Course sections preserved
-// • All other features intact: search, filters, year buttons, participant navigation
+// • All other features intact
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -552,7 +552,7 @@ export default function ResultsPage() {
 
                   {totalResults > 0 ? (
                     <>
-                      {/* Top 5 Mode — clean, no pagination */}
+                      {/* Top 5 Mode — clean view */}
                       {!isExpanded ? (
                         <>
                           <ResultsTable
@@ -572,7 +572,7 @@ export default function ResultsPage() {
                           </div>
                         </>
                       ) : (
-                        /* Expanded Mode — full pagination */
+                        /* View All Mode — full pagination */
                         <ResultsTable
                           data={displayFinishers}
                           totalResults={totalResults}
