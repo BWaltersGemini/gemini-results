@@ -1,9 +1,9 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Top 5 mode: clean view with "Top 5 Finishers" text + "View All" button only
-// • No pagination controls at all in Top 5 mode
-// • When "View All" is clicked: expands and shows full pagination starting at page 1
-// • All other features preserved and working perfectly
+// • Top 5 mode: "View All" button above & below table (right-aligned)
+// • No pagination in Top 5 mode
+// • Full pagination returns in View All mode
+// • All features preserved
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -536,37 +536,52 @@ export default function ResultsPage() {
                       <span className="text-lg text-gray-600">
                         {totalResults} official finisher{totalResults !== 1 ? 's' : ''}
                       </span>
-                      {totalResults > 5 && (
-                        <button
-                          onClick={() => setExpandedRaces(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
-                          className={`px-8 py-4 rounded-full font-bold transition shadow-xl ${
-                            isExpanded ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-primary text-white hover:bg-primary/90'
-                          }`}
-                        >
-                          {isExpanded ? 'Show Top 5' : `View All (${totalResults})`}
-                        </button>
-                      )}
                     </div>
                   </div>
 
                   {totalResults > 0 ? (
                     <>
-                      {/* Top 5 Mode — clean view with no pagination */}
+                      {/* Top 5 Mode */}
                       {!isExpanded ? (
-                        <>
+                        <div>
+                          {/* View All button above table */}
+                          {totalResults > 5 && (
+                            <div className="text-right mb-6">
+                              <button
+                                onClick={() => setExpandedRaces(prev => ({ ...prev, [raceId]: true }))}
+                                className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl"
+                              >
+                                View All ({totalResults})
+                              </button>
+                            </div>
+                          )}
+
                           <ResultsTable
                             data={displayFinishers}
                             totalResults={totalResults}
-                            // No pagination props → ResultsTable hides all pagination UI
+                            // No pagination props → no pagination UI
                             onNameClick={handleNameClick}
                             isMobile={window.innerWidth < 768}
                             highlightedBib={highlightedBib}
                           />
-                          <div className="text-center mt-8">
-                            <p className="text-xl font-semibold text-brand-dark">Top 5 Finishers</p>
-                            <p className="text-lg text-gray-600 mt-2">Showing 1–5 of {totalResults} results</p>
+
+                          <div className="mt-8 space-y-4">
+                            <p className="text-center text-xl font-semibold text-brand-dark">Top 5 Finishers</p>
+                            <p className="text-center text-lg text-gray-600">Showing 1–5 of {totalResults} results</p>
+
+                            {/* View All button below table */}
+                            {totalResults > 5 && (
+                              <div className="text-right">
+                                <button
+                                  onClick={() => setExpandedRaces(prev => ({ ...prev, [raceId]: true }))}
+                                  className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl"
+                                >
+                                  View All ({totalResults})
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        </>
+                        </div>
                       ) : (
                         /* View All Mode — full pagination */
                         <ResultsTable
