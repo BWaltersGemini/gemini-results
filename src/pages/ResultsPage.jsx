@@ -1,12 +1,8 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • DNF sections now visible and working
-// • Search & division filters do NOT hide DNFs
-// • Pagination + Top 5/View All fully functional with auto-expand
-// • Races with 0 participants hidden
-// • Age Group dropdown dynamic
-// • Jump to Results button accurate
-// • Participant navigation fixed (direct refresh + click)
+// • DNF sections now correctly appear (not hidden by division filter)
+// • Search works on DNFs
+// • All other features intact: pagination, Top 5/View All, filters, etc.
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -456,6 +452,7 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const isExpanded = expandedRaces[raceId] ?? false;
 
+              // Finishers — apply division and search
               let raceFinishers = results.finishers.filter(r => r.race_id === raceId);
 
               if (selectedDivision !== 'all') {
@@ -495,8 +492,9 @@ export default function ResultsPage() {
                 }
               };
 
-              // DNF — only search filter applied
+              // DNF — only apply search, NOT division
               let raceDnf = results.nonFinishers.filter(r => r.race_id === raceId);
+
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
                 raceDnf = raceDnf.filter(r =>
@@ -504,6 +502,7 @@ export default function ResultsPage() {
                   `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
                 );
               }
+
               const isDnfExpanded = expandedDnfSections[raceId];
 
               return (
@@ -557,7 +556,7 @@ export default function ResultsPage() {
                     </div>
                   )}
 
-                  {/* DNF Section */}
+                  {/* DNF Section — now always visible if there are DNFs */}
                   {raceDnf.length > 0 && (
                     <div className="mt-16">
                       <button
