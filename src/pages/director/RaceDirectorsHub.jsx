@@ -107,13 +107,15 @@ export default function RaceDirectorsHub() {
     });
   };
 
+  // Loading state — now correctly wrapped
   if (loading) {
     return (
       <DirectorLayout>
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center justify-center min-h-[70vh]">
           <p className="text-2xl text-gray-600">Loading your dashboard...</p>
-        </DirectorLayout>
-      );
+        </div>
+      </DirectorLayout>
+    );
   }
 
   return (
