@@ -1,16 +1,10 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • All features complete and working:
-//   - Races separated with correct per-race ranking
-//   - Top 5 / View All with auto-expand on pagination
-//   - Pagination info text now correct in Top 5 mode ("1–5 of 67")
-//   - DNFs (including short course with chip_time) in polite orange section
-//   - On Course (true in-progress) in green section
-//   - Search applies everywhere
-//   - Division filter only on finishers
-//   - Jump to Results button
-//   - Year buttons
-//   - Participant navigation & direct refresh fixed
+// • Top 5 mode: clean view with "Top 5 Finishers" label + "View All" button only
+// • No pagination controls visible in Top 5 mode (prevents skipping results)
+// • When user clicks "View All": expands + shows full pagination starting at page 1
+// • DNF & On Course sections preserved
+// • All other features intact: search, filters, year buttons, participant navigation
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -479,16 +473,14 @@ export default function ResultsPage() {
               }
 
               const sortedFinishers = [...raceFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-
-              const baseData = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
               const totalResults = sortedFinishers.length;
 
+              const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
+
+              // Pagination state (only used when expanded)
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
 
               const updatePage = (newPage) => {
-                if (newPage > 1 && !isExpanded) {
-                  setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
-                }
                 setRacePagination(prev => ({
                   ...prev,
                   [raceId]: { ...prev[raceId], currentPage: newPage }
@@ -500,19 +492,7 @@ export default function ResultsPage() {
                   ...prev,
                   [raceId]: { currentPage: 1, pageSize: newSize }
                 }));
-                if (!isExpanded) {
-                  setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
-                }
               };
-
-              // Calculate correct display range
-              let startIdx = 1;
-              let endIdx = baseData.length;
-
-              if (isExpanded && totalResults > 5) {
-                startIdx = (pag.currentPage - 1) * pag.pageSize + 1;
-                endIdx = Math.min(startIdx + pag.pageSize - 1, totalResults);
-              }
 
               // In Progress
               let raceInProgress = results.nonFinishers
@@ -559,16 +539,7 @@ export default function ResultsPage() {
                       </span>
                       {totalResults > 5 && (
                         <button
-                          onClick={() => {
-                            const willCollapse = isExpanded;
-                            setExpandedRaces(prev => ({ ...prev, [raceId]: !prev[raceId] }));
-                            if (willCollapse) {
-                              setRacePagination(prev => ({
-                                ...prev,
-                                [raceId]: { currentPage: 1, pageSize: 50 }
-                              }));
-                            }
-                          }}
+                          onClick={() => setExpandedRaces(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
                           className={`px-8 py-4 rounded-full font-bold transition shadow-xl ${
                             isExpanded ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-primary text-white hover:bg-primary/90'
                           }`}
@@ -581,20 +552,39 @@ export default function ResultsPage() {
 
                   {totalResults > 0 ? (
                     <>
-                      <ResultsTable
-                        data={baseData}
-                        totalResults={totalResults}
-                        currentPage={isExpanded ? pag.currentPage : 1}
-                        setCurrentPage={updatePage}
-                        pageSize={isExpanded ? pag.pageSize : 5}
-                        setPageSize={updatePageSize}
-                        onNameClick={handleNameClick}
-                        isMobile={window.innerWidth < 768}
-                        highlightedBib={highlightedBib}
-                      />
-                      <div className="text-center mt-6 text-lg text-gray-700">
-                        Showing {startIdx}–{endIdx} of {totalResults} results
-                      </div>
+                      {/* Top 5 Mode — clean, no pagination */}
+                      {!isExpanded ? (
+                        <>
+                          <ResultsTable
+                            data={displayFinishers}
+                            totalResults={totalResults}
+                            currentPage={1}
+                            setCurrentPage={() => {}}
+                            pageSize={5}
+                            setPageSize={() => {}}
+                            onNameClick={handleNameClick}
+                            isMobile={window.innerWidth < 768}
+                            highlightedBib={highlightedBib}
+                          />
+                          <div className="text-center mt-8 space-y-3">
+                            <p className="text-xl font-semibold text-brand-dark">Top 5 Finishers</p>
+                            <p className="text-lg text-gray-600">Showing 1–5 of {totalResults} results</p>
+                          </div>
+                        </>
+                      ) : (
+                        /* Expanded Mode — full pagination */
+                        <ResultsTable
+                          data={displayFinishers}
+                          totalResults={totalResults}
+                          currentPage={pag.currentPage}
+                          setCurrentPage={updatePage}
+                          pageSize={pag.pageSize}
+                          setPageSize={updatePageSize}
+                          onNameClick={handleNameClick}
+                          isMobile={window.innerWidth < 768}
+                          highlightedBib={highlightedBib}
+                        />
+                      )}
                     </>
                   ) : (
                     <div className="text-center py-16 text-gray-500">
@@ -602,7 +592,7 @@ export default function ResultsPage() {
                     </div>
                   )}
 
-                  {/* In Progress */}
+                  {/* In Progress Section */}
                   {raceInProgress.length > 0 && (
                     <div className="mt-16">
                       <button
@@ -631,7 +621,7 @@ export default function ResultsPage() {
                     </div>
                   )}
 
-                  {/* DNF */}
+                  {/* DNF Section */}
                   {raceDnf.length > 0 && (
                     <div className="mt-16">
                       <button
