@@ -1,11 +1,12 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Races with 0 participants are now hidden from Race dropdown and results tables
-// • Age Group dropdown only shows divisions that actually exist in selected race(s)
-// • No crashes on participant click
-// • Jump to Results button accurate
-// • Top 5 / View All + pagination per race
-// • All other features preserved
+// • Pagination fully working + auto-expands from Top 5 when clicking Next
+// • Top 5 / View All button correctly resets pagination when collapsing
+// • Races with 0 participants hidden from dropdown and tables
+// • Age Group dropdown dynamic and accurate
+// • No crashes on participant click (navigation state fixed)
+// • Jump to Results button with accurate count
+// • All features preserved and polished
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -159,14 +160,13 @@ export default function ResultsPage() {
   // ====================== DATA & FILTERING ======================
   const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
 
-  // Races with at least one finisher
+  // Only races with at least one finisher
   const racesWithParticipants = useMemo(() => {
-    return embeddedRaces.filter(race => 
+    return embeddedRaces.filter(race =>
       results.finishers.some(r => r.race_id === race.race_id)
     );
   }, [embeddedRaces, results.finishers]);
 
-  // Displayed races: respect URL raceSlug, filter selectedRaceId, and only show races with participants
   let displayedRaces = racesWithParticipants;
 
   if (raceSlug) {
@@ -177,7 +177,6 @@ export default function ResultsPage() {
     displayedRaces = displayedRaces.filter((race) => race.race_id === selectedRaceId);
   }
 
-  // Available divisions for selected race(s)
   const availableDivisions = useMemo(() => {
     const relevantFinishers = selectedRaceId === 'all'
       ? results.finishers
@@ -238,6 +237,20 @@ export default function ResultsPage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
+  // Count for "Jump to Results" button
+  const totalMatching = useMemo(() => {
+    if (!searchQuery) return 0;
+    const lowerQuery = searchQuery.toLowerCase();
+    return displayedRaces.reduce((count, race) => {
+      const raceFinishers = results.finishers.filter(r => r.race_id === race.race_id);
+      const matches = raceFinishers.filter(r =>
+        r.bib?.toString().includes(searchQuery) ||
+        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
+      );
+      return count + matches.length;
+    }, 0);
+  }, [searchQuery, displayedRaces, results.finishers]);
+
   // Master landing tiles
   const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
   const masterEventTiles = visibleMasters
@@ -257,20 +270,6 @@ export default function ResultsPage() {
     .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
     .slice(0, 3);
 
-  // Count for "Jump to Results" button
-  const totalMatching = useMemo(() => {
-    if (!searchQuery) return 0;
-    const lowerQuery = searchQuery.toLowerCase();
-    return displayedRaces.reduce((count, race) => {
-      const raceFinishers = results.finishers.filter(r => r.race_id === race.race_id);
-      const matches = raceFinishers.filter(r =>
-        r.bib?.toString().includes(searchQuery) ||
-        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
-      );
-      return count + matches.length;
-    }, 0);
-  }, [searchQuery, displayedRaces, results.finishers]);
-
   // ====================== RENDER ======================
   if ((masterKey || year) && !selectedEvent) {
     return (
@@ -284,7 +283,6 @@ export default function ResultsPage() {
   }
 
   if (!selectedEvent) {
-    // Master landing page unchanged
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-light to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
@@ -475,10 +473,14 @@ export default function ResultsPage() {
               }
 
               const sortedFinishers = [...raceFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-              const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
+
+              // Base data for pagination (full list when expanded, top 5 when not)
+              const baseData = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
 
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
+
               const updatePage = (newPage) => {
+                // Auto-expand if trying to go beyond page 1 in Top 5 mode
                 if (newPage > 1 && !isExpanded) {
                   setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
                 }
@@ -487,12 +489,14 @@ export default function ResultsPage() {
                   [raceId]: { ...prev[raceId], currentPage: newPage }
                 }));
               };
+
               const updatePageSize = (newSize) => {
                 setRacePagination(prev => ({
                   ...prev,
                   [raceId]: { currentPage: 1, pageSize: newSize }
                 }));
-                if (!isExpanded) {
+                // Expand if new page size would show more than 5 results
+                if (newSize > 5 && !isExpanded) {
                   setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
                 }
               };
@@ -521,8 +525,9 @@ export default function ResultsPage() {
                       {sortedFinishers.length > 5 && (
                         <button
                           onClick={() => {
+                            const willCollapse = isExpanded;
                             setExpandedRaces(prev => ({ ...prev, [raceId]: !prev[raceId] }));
-                            if (isExpanded) {
+                            if (willCollapse) {
                               setRacePagination(prev => ({
                                 ...prev,
                                 [raceId]: { currentPage: 1, pageSize: 50 }
@@ -541,7 +546,7 @@ export default function ResultsPage() {
 
                   {sortedFinishers.length > 0 ? (
                     <ResultsTable
-                      data={displayFinishers}
+                      data={baseData}
                       totalResults={sortedFinishers.length}
                       currentPage={pag.currentPage}
                       setCurrentPage={updatePage}
