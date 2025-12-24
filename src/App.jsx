@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { RaceProvider } from './context/RaceContext';
+import { DirectorProvider } from './context/DirectorContext'; // ← New
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ScrollToTop from './components/ScrollToTop';
@@ -15,6 +16,12 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import ParticipantPage from './pages/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
 import ResultsKiosk from './pages/ResultsKiosk';
+
+// Director Pages
+import DirectorLogin from './pages/director/DirectorLogin';
+import RaceDirectorsHub from './pages/director/RaceDirectorsHub';
+import LiveTrackingPage from './pages/director/LiveTrackingPage';
+
 import ReactGA from 'react-ga4';
 
 const queryClient = new QueryClient({
@@ -45,14 +52,15 @@ function AnalyticsTracker() {
 function Layout({ children }) {
   const location = useLocation();
   const isKiosk = location.pathname.startsWith('/kiosk');
+  const isDirectorArea = location.pathname.startsWith('/director') || location.pathname.startsWith('/race-directors-hub');
 
   return (
     <>
-      {!isKiosk && <Navbar />}
+      {!isKiosk && !isDirectorArea && <Navbar />}
       <ScrollToTop />
       <AnalyticsTracker />
       <main className="flex-grow">{children}</main>
-      {!isKiosk && <Footer />}
+      {!isKiosk && !isDirectorArea && <Footer />}
     </>
   );
 }
@@ -65,6 +73,7 @@ export default function App() {
           <div className="min-h-screen flex flex-col">
             <Layout>
               <Routes>
+                {/* Public Pages */}
                 <Route path="/" element={<Home />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/products" element={<Products />} />
@@ -85,15 +94,25 @@ export default function App() {
                 {/* Kiosk Mode - full screen, no navbar/footer */}
                 <Route path="/kiosk" element={<ResultsKiosk />} />
 
+                {/* === RACE DIRECTORS HUB === */}
+                {/* Public login page */}
+                <Route path="/director-login" element={<DirectorLogin />} />
+
+                {/* Protected director area – wrapped in DirectorProvider */}
                 <Route
                   path="/race-directors-hub"
                   element={
-                    <div className="py-32 text-center">
-                      <h1 className="text-4xl font-bold text-gemini-dark-gray mb-4">
-                        Race Directors Hub
-                      </h1>
-                      <p className="text-xl text-gray-600">Coming Soon!</p>
-                    </div>
+                    <DirectorProvider>
+                      <RaceDirectorsHub />
+                    </DirectorProvider>
+                  }
+                />
+                <Route
+                  path="/director-live-tracking/:eventId"
+                  element={
+                    <DirectorProvider>
+                      <LiveTrackingPage />
+                    </DirectorProvider>
                   }
                 />
               </Routes>
