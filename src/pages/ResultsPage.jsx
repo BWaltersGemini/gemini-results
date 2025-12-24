@@ -1,8 +1,10 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • DNF sections now correctly appear (not hidden by division filter)
-// • Search works on DNFs
-// • All other features intact: pagination, Top 5/View All, filters, etc.
+// • DNFs (including those with chip_time but marked DNF) now politely shown in red "Did Not Finish" section
+// • They are NOT ranked with finishers
+// • Fully searchable by name/bib
+// • On Course section for true in-progress (no chip_time, but splits)
+// • All features preserved
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -40,6 +42,7 @@ export default function ResultsPage() {
 
   // Per-race state
   const [expandedRaces, setExpandedRaces] = useState({});
+  const [expandedInProgressSections, setExpandedInProgressSections] = useState({});
   const [expandedDnfSections, setExpandedDnfSections] = useState({});
   const [racePagination, setRacePagination] = useState({});
 
@@ -73,6 +76,7 @@ export default function ResultsPage() {
       setSelectedRaceId('all');
       setSelectedDivision('all');
       setExpandedRaces({});
+      setExpandedInProgressSections({});
       setExpandedDnfSections({});
       setRacePagination({});
       prevMasterKeyRef.current = masterKey;
@@ -158,9 +162,10 @@ export default function ResultsPage() {
 
   const racesWithParticipants = useMemo(() => {
     return embeddedRaces.filter(race =>
-      results.finishers.some(r => r.race_id === race.race_id)
+      results.finishers.some(r => r.race_id === race.race_id) ||
+      results.nonFinishers.some(r => r.race_id === race.race_id)
     );
-  }, [embeddedRaces, results.finishers]);
+  }, [embeddedRaces, results.finishers, results.nonFinishers]);
 
   let displayedRaces = racesWithParticipants;
 
@@ -452,8 +457,10 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const isExpanded = expandedRaces[raceId] ?? false;
 
-              // Finishers — apply division and search
-              let raceFinishers = results.finishers.filter(r => r.race_id === raceId);
+              // Finishers — only true finishers (not DNF even if they have chip_time)
+              let raceFinishers = results.finishers
+                .filter(r => r.race_id === raceId)
+                .filter(r => r._status !== 'DNF'); // Exclude official DNFs
 
               if (selectedDivision !== 'all') {
                 raceFinishers = raceFinishers.filter(r => r.age_group_name === selectedDivision);
@@ -492,8 +499,27 @@ export default function ResultsPage() {
                 }
               };
 
-              // DNF — only apply search, NOT division
-              let raceDnf = results.nonFinishers.filter(r => r.race_id === raceId);
+              // In Progress: no chip_time, but have splits
+              let raceInProgress = results.nonFinishers
+                .filter(r => r.race_id === raceId)
+                .filter(r => !r.chip_time || r.chip_time.trim() === '')
+                .filter(r => r.splits && r.splits.length > 0);
+
+              if (searchQuery) {
+                const lowerQuery = searchQuery.toLowerCase();
+                raceInProgress = raceInProgress.filter(r =>
+                  r.bib?.toString().includes(searchQuery) ||
+                  `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
+                );
+              }
+
+              const isInProgressExpanded = expandedInProgressSections[raceId];
+
+              // DNF: official DNF status (includes short course, even with chip_time)
+              let raceDnf = [
+                ...results.finishers.filter(r => r.race_id === raceId && r._status === 'DNF'),
+                ...results.nonFinishers.filter(r => r.race_id === raceId && r._status === 'DNF')
+              ];
 
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
@@ -514,7 +540,7 @@ export default function ResultsPage() {
 
                     <div className="flex flex-wrap items-center gap-4">
                       <span className="text-lg text-gray-600">
-                        {sortedFinishers.length} finisher{sortedFinishers.length !== 1 ? 's' : ''}
+                        {sortedFinishers.length} official finisher{sortedFinishers.length !== 1 ? 's' : ''}
                       </span>
                       {sortedFinishers.length > 5 && (
                         <button
@@ -552,18 +578,47 @@ export default function ResultsPage() {
                     />
                   ) : (
                     <div className="text-center py-16 text-gray-500">
-                      <p className="text-2xl font-medium">No finishers match current filters in this race</p>
+                      <p className="text-2xl font-medium">No official finishers match current filters in this race</p>
                     </div>
                   )}
 
-                  {/* DNF Section — now always visible if there are DNFs */}
+                  {/* In Progress Section */}
+                  {raceInProgress.length > 0 && (
+                    <div className="mt-16">
+                      <button
+                        onClick={() => setExpandedInProgressSections(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
+                        className="w-full bg-green-100 hover:bg-green-200 text-green-800 font-bold text-xl py-5 px-8 rounded-2xl transition flex items-center justify-between shadow-lg"
+                      >
+                        <span className="flex items-center gap-3">
+                          <div className="w-4 h-4 bg-green-600 rounded-full animate-ping"></div>
+                          On Course — Live Tracking ({raceInProgress.length})
+                        </span>
+                        <span className="text-3xl">{isInProgressExpanded ? '−' : '+'}</span>
+                      </button>
+                      {isInProgressExpanded && (
+                        <div className="mt-8">
+                          <ResultsTable
+                            data={raceInProgress}
+                            onNameClick={handleNameClick}
+                            isMobile={window.innerWidth < 768}
+                            highlightedBib={highlightedBib}
+                          />
+                          <p className="text-center text-green-700 mt-6 text-lg font-medium">
+                            These athletes are still racing — updates coming soon!
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* DNF Section — polite, visible, searchable */}
                   {raceDnf.length > 0 && (
                     <div className="mt-16">
                       <button
                         onClick={() => setExpandedDnfSections(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
-                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold text-xl py-5 px-8 rounded-2xl transition flex items-center justify-between shadow-lg"
+                        className="w-full bg-orange-100 hover:bg-orange-200 text-orange-800 font-bold text-xl py-5 px-8 rounded-2xl transition flex items-center justify-between shadow-lg"
                       >
-                        <span>Did Not Finish ({raceDnf.length})</span>
+                        <span>Did Not Finish ({raceDnf.length}) — Short Course or Withdrawn</span>
                         <span className="text-3xl">{isDnfExpanded ? '−' : '+'}</span>
                       </button>
                       {isDnfExpanded && (
@@ -575,8 +630,8 @@ export default function ResultsPage() {
                             highlightedBib={highlightedBib}
                             isDnfTable={true}
                           />
-                          <p className="text-center text-gray-600 mt-6 text-sm">
-                            These athletes started but did not officially finish the full course.
+                          <p className="text-center text-orange-700 mt-6 text-lg">
+                            These athletes started but did not complete the full course. Their effort is appreciated.
                           </p>
                         </div>
                       )}
