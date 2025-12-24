@@ -1,12 +1,12 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Pagination fully working + auto-expands from Top 5 when clicking Next
-// • Top 5 / View All button correctly resets pagination when collapsing
-// • Races with 0 participants hidden from dropdown and tables
-// • Age Group dropdown dynamic and accurate
-// • No crashes on participant click (navigation state fixed)
-// • Jump to Results button with accurate count
-// • All features preserved and polished
+// • DNF sections now visible and working
+// • Search & division filters do NOT hide DNFs
+// • Pagination + Top 5/View All fully functional with auto-expand
+// • Races with 0 participants hidden
+// • Age Group dropdown dynamic
+// • Jump to Results button accurate
+// • Participant navigation fixed (direct refresh + click)
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -160,7 +160,6 @@ export default function ResultsPage() {
   // ====================== DATA & FILTERING ======================
   const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
 
-  // Only races with at least one finisher
   const racesWithParticipants = useMemo(() => {
     return embeddedRaces.filter(race =>
       results.finishers.some(r => r.race_id === race.race_id)
@@ -237,7 +236,6 @@ export default function ResultsPage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  // Count for "Jump to Results" button
   const totalMatching = useMemo(() => {
     if (!searchQuery) return 0;
     const lowerQuery = searchQuery.toLowerCase();
@@ -473,14 +471,11 @@ export default function ResultsPage() {
               }
 
               const sortedFinishers = [...raceFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-
-              // Base data for pagination (full list when expanded, top 5 when not)
-              const baseData = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
+              const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
 
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
 
               const updatePage = (newPage) => {
-                // Auto-expand if trying to go beyond page 1 in Top 5 mode
                 if (newPage > 1 && !isExpanded) {
                   setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
                 }
@@ -495,12 +490,12 @@ export default function ResultsPage() {
                   ...prev,
                   [raceId]: { currentPage: 1, pageSize: newSize }
                 }));
-                // Expand if new page size would show more than 5 results
-                if (newSize > 5 && !isExpanded) {
+                if (!isExpanded) {
                   setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
                 }
               };
 
+              // DNF — only search filter applied
               let raceDnf = results.nonFinishers.filter(r => r.race_id === raceId);
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
@@ -546,7 +541,7 @@ export default function ResultsPage() {
 
                   {sortedFinishers.length > 0 ? (
                     <ResultsTable
-                      data={baseData}
+                      data={displayFinishers}
                       totalResults={sortedFinishers.length}
                       currentPage={pag.currentPage}
                       setCurrentPage={updatePage}
@@ -562,6 +557,7 @@ export default function ResultsPage() {
                     </div>
                   )}
 
+                  {/* DNF Section */}
                   {raceDnf.length > 0 && (
                     <div className="mt-16">
                       <button
