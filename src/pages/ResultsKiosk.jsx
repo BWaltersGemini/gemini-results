@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – iPad Optimized + White Search Field + Inline Placeholder + Formatted Times + Reliable Exit Protection
+// FINAL – QR in Top Left + Email My Stats Feature + All Previous Fixes (iPad Safe)
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +7,7 @@ import Confetti from 'react-confetti';
 import { useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import QRCode from 'react-qr-code';
-import { formatChronoTime } from '../utils/timeUtils'; // ← NEW IMPORT
+import { formatChronoTime } from '../utils/timeUtils';
 
 export default function ResultsKiosk() {
   const navigate = useNavigate();
@@ -28,6 +28,12 @@ export default function ResultsKiosk() {
   const [participant, setParticipant] = useState(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [countdown, setCountdown] = useState(null);
+
+  // Email feature state
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [email, setEmail] = useState('');
+  const [optIn, setOptIn] = useState(false);
+  const [emailStatus, setEmailStatus] = useState(''); // '', 'sending', 'success', 'error'
 
   const AUTO_RESET_SECONDS = 12;
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
@@ -117,7 +123,66 @@ export default function ResultsKiosk() {
     setSearchTerm('');
     setShowConfetti(false);
     setCountdown(null);
+    setShowEmailForm(false);
+    setEmail('');
+    setOptIn(false);
+    setEmailStatus('');
     document.getElementById('kiosk-search-input')?.focus();
+  };
+
+  // Email sending
+  const sendEmail = async () => {
+    if (!email || !optIn) return;
+
+    setEmailStatus('sending');
+
+    const fullName = `${participant.first_name} ${participant.last_name}`;
+    const eventName = getEventDisplayName();
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 12px;">
+        <h1 style="color: #B22222; text-align: center;">Your Race Results!</h1>
+        <p style="font-size: 18px;">Hi <strong>${fullName}</strong>,</p>
+        <p style="font-size: 16px;">Congratulations on your finish at <strong>${eventName}</strong>!</p>
+        <div style="background: #f8f8f8; padding: 20px; border-radius: 10px; margin: 20px 0;">
+          <p style="margin: 8px 0; font-size: 18px;"><strong>Bib:</strong> ${participant.bib}</p>
+          <p style="margin: 8px 0; font-size: 18px;"><strong>Overall Place:</strong> ${formatPlace(participant.place)}</p>
+          <p style="margin: 8px 0; font-size: 18px;"><strong>Chip Time:</strong> ${formatChronoTime(participant.chip_time)}</p>
+          ${participant.pace ? `<p style="margin: 8px 0; font-size: 18px;"><strong>Pace:</strong> ${formatChronoTime(participant.pace)}</p>` : ''}
+          ${participant.gender_place ? `<p style="margin: 8px 0;"><strong>Gender Place:</strong> ${formatPlace(participant.gender_place)} ${participant.gender}</p>` : ''}
+          ${participant.age_group_place ? `<p style="margin: 8px 0;"><strong>Division:</strong> ${formatPlace(participant.age_group_place)} in ${participant.age_group_name}</p>` : ''}
+        </div>
+        <p style="font-size: 16px;">View your full results online: <a href="${getResultsUrl()}" style="color: #48D1CC;">${getResultsUrl()}</a></p>
+        <p style="font-size: 14px; color: #666; margin-top: 40px;">Thank you for racing with Gemini Timing!</p>
+      </div>
+    `;
+
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: [email],
+          subject: `Your ${eventName} Results`,
+          html,
+        }),
+      });
+
+      if (res.ok) {
+        setEmailStatus('success');
+        setTimeout(() => {
+          setShowEmailForm(false);
+          setEmailStatus('');
+        }, 4000);
+      } else {
+        const data = await res.json();
+        console.error('Email error:', data);
+        setEmailStatus('error');
+      }
+    } catch (err) {
+      console.error('Send failed:', err);
+      setEmailStatus('error');
+    }
   };
 
   useEffect(() => {
@@ -125,7 +190,7 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // === Reliable Exit Protection ===
+  // Exit Protection
   useEffect(() => {
     if (stage !== 'kiosk') return;
 
@@ -146,7 +211,6 @@ export default function ResultsKiosk() {
     };
 
     window.history.pushState(null, '', window.location.href);
-
     window.addEventListener('popstate', preventBack);
     window.addEventListener('beforeunload', preventUnload);
 
@@ -156,8 +220,9 @@ export default function ResultsKiosk() {
     };
   }, [stage]);
 
-  // === ACCESS PIN STAGE ===
+  // === ACCESS PIN & EVENT SELECT (unchanged) ===
   if (stage === 'access-pin') {
+    // ... (same as before)
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/80 flex items-center justify-center p-8">
         <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-w-md w-full text-center border-8 border-brand-turquoise">
@@ -196,8 +261,8 @@ export default function ResultsKiosk() {
     );
   }
 
-  // === EVENT SELECT STAGE ===
   if (stage === 'event-select') {
+    // ... (same as previous version)
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
     return (
       <div className="fixed inset-0 bg-bg-light flex flex-col">
@@ -256,32 +321,48 @@ export default function ResultsKiosk() {
           colors={['#48D1CC', '#FFFFFF', '#B22222', '#FFD700']}
         />
       )}
-      <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/90 flex flex-col items-center justify-start text-text-light pt-8 px-6 pb-12 overflow-hidden">
+      <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/90 flex flex-col items-center justify-start text-text-light pt-4 px-4 pb-4 overflow-y-auto">
         {/* Header */}
-        <div className="text-center mb-6 z-10">
+        <div className="text-center mb-4 z-10">
           {logoUrl && (
-            <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-40 mb-4 object-contain drop-shadow-xl" />
+            <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-36 mb-4 object-contain drop-shadow-xl" />
           )}
-          <h1 className="text-5xl md:text-6xl font-black drop-shadow-2xl">
+          <h1 className="text-4xl md:text-5xl font-black drop-shadow-2xl">
             {getEventDisplayName()}
           </h1>
-          <p className="text-2xl mt-2 opacity-90">Finish Line Kiosk</p>
+          <p className="text-xl mt-1 opacity-90">Finish Line Kiosk</p>
         </div>
 
-        {/* Countdown */}
+        {/* QR Code - Top Left */}
+        {participant && typeof participant === 'object' && (
+          <div className="fixed top-4 left-4 z-30 bg-white p-4 rounded-2xl shadow-2xl border-6 border-brand-turquoise">
+            <div className="w-40 h-40">
+              <QRCode
+                value={getResultsUrl()}
+                size={144}
+                level="H"
+                fgColor="#B22222"
+                bgColor="#FFFFFF"
+              />
+            </div>
+            <p className="text-xs text-center mt-2 text-brand-dark font-medium">Scan Results</p>
+          </div>
+        )}
+
+        {/* Countdown - Top Right */}
         {countdown !== null && (
-          <div className="fixed top-6 right-6 text-4xl font-black bg-black/70 px-8 py-4 rounded-full shadow-2xl z-20">
+          <div className="fixed top-4 right-4 text-3xl font-black bg-black/70 px-6 py-3 rounded-full shadow-2xl z-30">
             {countdown}s
           </div>
         )}
 
         {loadingResults && (
-          <div className="text-5xl font-bold animate-pulse mt-20">Loading results...</div>
+          <div className="text-4xl font-bold animate-pulse mt-16">Loading results...</div>
         )}
 
-        {/* Search – White Background + Placeholder Only */}
+        {/* Search */}
         {!participant && matches.length === 0 && !loadingResults && (
-          <div className="w-full max-w-3xl z-10 mt-8">
+          <div className="w-full max-w-3xl z-10 mt-6">
             <input
               id="kiosk-search-input"
               type="text"
@@ -292,7 +373,7 @@ export default function ResultsKiosk() {
               className="w-full text-5xl text-center bg-white text-brand-dark placeholder-text-muted border-6 border-brand-turquoise rounded-3xl py-10 px-8 focus:outline-none focus:ring-8 focus:ring-brand-turquoise/50 shadow-2xl"
               autoFocus
             />
-            <div className="text-center mt-10">
+            <div className="text-center mt-8">
               <button
                 onClick={() => performSearch(searchTerm)}
                 className="px-20 py-10 bg-white text-brand-turquoise text-5xl font-black rounded-full hover:scale-110 transition shadow-2xl"
@@ -305,8 +386,8 @@ export default function ResultsKiosk() {
 
         {/* Multiple Matches */}
         {matches.length > 0 && (
-          <div className="w-full max-w-4xl z-10 mt-8">
-            <p className="text-4xl text-center mb-10 font-black drop-shadow-2xl">Tap Your Name</p>
+          <div className="w-full max-w-4xl z-10 mt-6">
+            <p className="text-4xl text-center mb-8 font-black drop-shadow-2xl">Tap Your Name</p>
             <div className="grid gap-8 grid-cols-1 md:grid-cols-2">
               {matches.map((p, i) => (
                 <button
@@ -323,7 +404,7 @@ export default function ResultsKiosk() {
                 </button>
               ))}
             </div>
-            <div className="text-center mt-12">
+            <div className="text-center mt-10">
               <button
                 onClick={resetToSearch}
                 className="px-16 py-6 bg-brand-dark text-white text-3xl font-black rounded-full hover:opacity-90 shadow-2xl"
@@ -336,36 +417,32 @@ export default function ResultsKiosk() {
 
         {/* Athlete Result Card */}
         {participant && typeof participant === 'object' && (
-          <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-10 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-4">
-            {/* Overall Place */}
-            <div className="text-8xl font-black text-brand-red mb-4 drop-shadow-lg">
+          <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-8 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-4">
+            <div className="text-7xl font-black text-brand-red mb-4 drop-shadow-lg">
               #{formatPlace(participant.place || '—')}
             </div>
 
-            {/* Name */}
-            <h2 className="text-4xl md:text-5xl font-black mb-4">
+            <h2 className="text-4xl font-black mb-4">
               {participant.first_name} {participant.last_name}
             </h2>
-            <p className="text-2xl text-text-muted mb-8">Bib #{participant.bib}</p>
+            <p className="text-2xl text-text-muted mb-6">Bib #{participant.bib}</p>
 
-            {/* Time Boxes – Chip Time in Red */}
-            <div className="grid grid-cols-2 gap-8 text-2xl mb-10">
-              <div className="bg-brand-red/15 rounded-3xl py-8 shadow-lg">
-                <div className="font-black text-brand-red text-5xl">
+            <div className="grid grid-cols-2 gap-6 text-2xl mb-8">
+              <div className="bg-brand-red/15 rounded-3xl py-6 shadow-lg">
+                <div className="font-black text-brand-red text-4xl">
                   {formatChronoTime(participant.chip_time)}
                 </div>
                 <div className="text-text-muted mt-2 text-lg">Chip Time</div>
               </div>
-              <div className="bg-brand-red/10 rounded-3xl py-8 shadow-lg">
-                <div className="font-black text-brand-dark text-5xl">
+              <div className="bg-brand-red/10 rounded-3xl py-6 shadow-lg">
+                <div className="font-black text-brand-dark text-4xl">
                   {participant.pace ? formatChronoTime(participant.pace) : '—'}
                 </div>
                 <div className="text-text-muted mt-2 text-lg">Pace</div>
               </div>
             </div>
 
-            {/* Division / Gender */}
-            <div className="text-2xl space-y-4 mb-10">
+            <div className="text-xl space-y-3 mb-8">
               <p><strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
               {participant.age_group_place && (
                 <p><strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}</p>
@@ -375,31 +452,74 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            {/* QR Code */}
-            <div className="mx-auto max-w-md mt-8">
-              <p className="text-2xl font-black mb-6">Scan for Full Results</p>
-              <div className="mx-auto w-80 h-80 bg-white p-10 rounded-3xl shadow-2xl border-8 border-brand-turquoise">
-                <QRCode
-                  value={getResultsUrl()}
-                  size={272}
-                  level="H"
-                  fgColor="#B22222"
-                  bgColor="#FFFFFF"
-                />
-              </div>
-              <p className="text-lg mt-6 text-text-light/90">Use your phone camera</p>
+            {/* Email My Stats Button */}
+            <div className="mt-8">
+              {!showEmailForm ? (
+                <button
+                  onClick={() => setShowEmailForm(true)}
+                  className="px-20 py-8 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
+                >
+                  Email Me My Stats
+                </button>
+              ) : (
+                <div className="space-y-6">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full text-2xl text-center px-6 py-5 rounded-3xl border-4 border-brand-turquoise focus:outline-none focus:ring-4 focus:ring-brand-turquoise/50"
+                    autoFocus
+                  />
+                  <label className="flex items-center justify-center gap-4 text-lg">
+                    <input
+                      type="checkbox"
+                      checked={optIn}
+                      onChange={(e) => setOptIn(e.target.checked)}
+                      className="w-6 h-6 text-brand-turquoise rounded focus:ring-brand-turquoise"
+                    />
+                    <span>Yes, send me future race updates from Gemini Timing</span>
+                  </label>
+                  <div className="flex gap-4 justify-center">
+                    <button
+                      onClick={sendEmail}
+                      disabled={!email || !optIn || emailStatus === 'sending'}
+                      className="px-12 py-5 bg-brand-turquoise text-white text-2xl font-black rounded-full disabled:opacity-70 shadow-xl"
+                    >
+                      {emailStatus === 'sending' ? 'Sending...' : 'Send Email'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowEmailForm(false);
+                        setEmail('');
+                        setOptIn(false);
+                        setEmailStatus('');
+                      }}
+                      className="px-12 py-5 bg-brand-dark text-white text-2xl font-black rounded-full shadow-xl"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {emailStatus === 'success' && (
+                    <p className="text-green-600 text-2xl font-bold">✓ Email sent!</p>
+                  )}
+                  {emailStatus === 'error' && (
+                    <p className="text-brand-red text-2xl font-bold">✗ Send failed – try again</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* Not Found */}
         {participant === 'not-found' && (
-          <div className="text-center max-w-3xl z-10 mt-20">
-            <div className="text-8xl mb-8">😅</div>
-            <h2 className="text-5xl font-black mb-6 drop-shadow-2xl">
+          <div className="text-center max-w-3xl z-10 mt-16">
+            <div className="text-8xl mb-6">😅</div>
+            <h2 className="text-5xl font-black mb-4 drop-shadow-2xl">
               No Results Found Yet
             </h2>
-            <p className="text-3xl leading-relaxed mb-12 opacity-90">
+            <p className="text-3xl leading-relaxed mb-10 opacity-90">
               Results may still be syncing.<br />Ask timing staff for help.
             </p>
             <button
