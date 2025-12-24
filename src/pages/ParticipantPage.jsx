@@ -1,6 +1,5 @@
 // src/pages/ParticipantPage.jsx
 // COMPLETE FINAL VERSION — All Features Restored + Fixed Direct URL Refresh + Fixed Shareable Card Alignment
-
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -42,7 +41,6 @@ export default function ParticipantPage() {
     finishers: initialResults.finishers || [],
     nonFinishers: initialResults.nonFinishers || []
   });
-
   const [showSplits, setShowSplits] = useState(false);
   const [loading, setLoading] = useState(!initialParticipant);
   const [fetchError, setFetchError] = useState(null);
@@ -140,10 +138,8 @@ export default function ParticipantPage() {
         }
         return;
       }
-
       setLoading(true);
       setFetchError(null);
-
       try {
         // Wait for context basics
         if (events.length === 0 || !contextSelectedEvent) {
@@ -157,9 +153,7 @@ export default function ParticipantPage() {
           setTimeout(() => clearInterval(interval), 10000);
           return;
         }
-
         let targetEvent = selectedEvent || contextSelectedEvent;
-
         if (!targetEvent) {
           const allResults = [...contextResults.finishers, ...contextResults.nonFinishers];
           const match = allResults.find(r => String(r.bib) === String(bib));
@@ -167,28 +161,19 @@ export default function ParticipantPage() {
             targetEvent = events.find(e => e.id === match.event_id);
           }
         }
-
         if (!targetEvent) throw new Error('Event not found for this participant');
-
         setSelectedEvent(targetEvent);
-
         const { data: fetchedResults, error } = await supabase
           .from('chronotrack_results')
           .select('*')
           .eq('event_id', targetEvent.id);
-
         if (error) throw error;
-
         const finishers = fetchedResults?.filter(r => r.chip_time && r.chip_time.trim() !== '') || [];
         const nonFinishers = fetchedResults?.filter(r => !r.chip_time || r.chip_time.trim() === '') || [];
-
         setResults({ finishers, nonFinishers });
-
         const found = fetchedResults?.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found');
-
         setParticipant(found);
-
         confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
       } catch (err) {
         console.error('[ParticipantPage] Load error:', err);
@@ -197,7 +182,6 @@ export default function ParticipantPage() {
         setLoading(false);
       }
     };
-
     loadParticipant();
   }, [bib, events, contextSelectedEvent, contextResults, loadingResults]);
 
@@ -490,7 +474,7 @@ export default function ParticipantPage() {
               className="w-full bg-gradient-to-r from-primary to-accent py-6 text-white font-black text-2xl md:text-3xl hover:opacity-90 transition flex items-center justify-center gap-4"
             >
               <span className="text-3xl">{showSplits ? '▼' : '▶'}</span>
-              {showSplits ? 'Hide' : 'Show'} Your Race Story ({participant.splits.length + 1} Points)
+              {showSplits ? 'Hide' : 'Show'} Your Splits ({participant.splits.length + 1} Points)
             </button>
             {showSplits && (
               <div className="p-8 md:p-12">
@@ -649,14 +633,34 @@ export default function ParticipantPage() {
           )}
         </section>
 
-        {/* Back Button */}
-        <div className="text-center mt-16">
+        {/* Action Buttons — Back + Question */}
+        <div className="text-center mt-16 space-y-8">
           <button
             onClick={goBackToResults}
             className="px-12 py-5 bg-brand-dark text-white font-bold text-xl rounded-full hover:bg-brand-dark/90 transition shadow-xl"
           >
             ← Back to Results
           </button>
+
+          {/* NEW: Question about my results? button */}
+          <div>
+            <button
+              onClick={() =>
+                navigate('/contact', {
+                  state: {
+                    inquiryType: 'results',
+                    eventName: selectedEvent.name,
+                    bib: participant.bib,
+                    participantName: `${participant.first_name} ${participant.last_name}`.trim(),
+                  },
+                })
+              }
+              className="inline-flex items-center gap-3 px-10 py-5 bg-orange-500 text-white text-xl font-bold rounded-full hover:bg-orange-600 shadow-2xl transition transform hover:scale-105"
+            >
+              <span>❓</span>
+              Question about my results?
+            </button>
+          </div>
         </div>
       </div>
 

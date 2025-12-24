@@ -4,7 +4,7 @@
 // • No pagination in Top 5 mode
 // • Full pagination returns in View All mode
 // • All features preserved
-
+// • Added: "Question about my results?" button with pre-fill
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -167,11 +167,9 @@ export default function ResultsPage() {
   }, [embeddedRaces, results.finishers, results.nonFinishers]);
 
   let displayedRaces = racesWithParticipants;
-
   if (raceSlug) {
     displayedRaces = displayedRaces.filter((race) => slugify(race.race_name || '') === raceSlug);
   }
-
   if (selectedRaceId !== 'all') {
     displayedRaces = displayedRaces.filter((race) => race.race_id === selectedRaceId);
   }
@@ -180,7 +178,6 @@ export default function ResultsPage() {
     const relevantFinishers = selectedRaceId === 'all'
       ? results.finishers
       : results.finishers.filter(r => displayedRaces.some(d => d.race_id === r.race_id));
-
     return [...new Set(relevantFinishers.map(r => r.age_group_name).filter(Boolean))].sort();
   }, [results.finishers, selectedRaceId, displayedRaces]);
 
@@ -193,7 +190,6 @@ export default function ResultsPage() {
   const currentMasterKey = Object.keys(masterGroups).find(key =>
     masterGroups[key]?.includes(String(selectedEvent?.id))
   );
-
   const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
   const fallbackLogo = eventLogos[selectedEvent?.id];
   const displayLogo = masterLogo || fallbackLogo;
@@ -286,7 +282,7 @@ export default function ResultsPage() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
             <h1 className="text-5xl md:text-6xl font-black text-brand-dark mb-4">Race Results</h1>
-            <p className="text-xl text-gray-600">Recent race series</p>
+            <p className="text-xl text-gray-600">Recent races</p>
           </div>
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
@@ -383,6 +379,25 @@ export default function ResultsPage() {
             {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
           </h1>
           <p className="text-2xl text-gray-600">{formatDate(selectedEvent.start_time)}</p>
+
+          {/* NEW: Question about my results? button */}
+          <div className="mt-10">
+            <button
+              onClick={() =>
+                navigate('/contact', {
+                  state: {
+                    inquiryType: 'results',
+                    eventName: editedEvents[selectedEvent.id]?.name || selectedEvent.name,
+                  },
+                })
+              }
+              className="inline-flex items-center gap-3 px-10 py-5 bg-orange-500 text-white text-xl font-bold rounded-full hover:bg-orange-600 shadow-2xl transition transform hover:scale-105"
+            >
+              <span>❓</span>
+              Question about my results?
+            </button>
+          </div>
+
           {isLiveRace && (
             <div className="flex items-center justify-center gap-3 mt-6 text-green-600 font-bold text-xl">
               <div className="w-4 h-4 bg-green-600 rounded-full animate-ping"></div>
@@ -458,11 +473,9 @@ export default function ResultsPage() {
 
               // Finishers — official finishers only
               let raceFinishers = results.finishers.filter(r => r.race_id === raceId);
-
               if (selectedDivision !== 'all') {
                 raceFinishers = raceFinishers.filter(r => r.age_group_name === selectedDivision);
               }
-
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
                 raceFinishers = raceFinishers.filter(r =>
@@ -470,22 +483,18 @@ export default function ResultsPage() {
                   `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
                 );
               }
-
               const sortedFinishers = [...raceFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
               const totalResults = sortedFinishers.length;
-
               const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
 
               // Pagination state (only used when expanded)
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
-
               const updatePage = (newPage) => {
                 setRacePagination(prev => ({
                   ...prev,
                   [raceId]: { ...prev[raceId], currentPage: newPage }
                 }));
               };
-
               const updatePageSize = (newSize) => {
                 setRacePagination(prev => ({
                   ...prev,
@@ -498,7 +507,6 @@ export default function ResultsPage() {
                 .filter(r => r.race_id === raceId)
                 .filter(r => !r.chip_time || r.chip_time.trim() === '')
                 .filter(r => r.splits && r.splits.length > 0);
-
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
                 raceInProgress = raceInProgress.filter(r =>
@@ -506,7 +514,6 @@ export default function ResultsPage() {
                   `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
                 );
               }
-
               const isInProgressExpanded = expandedInProgressSections[raceId];
 
               // DNF (includes short course with chip_time)
@@ -514,7 +521,6 @@ export default function ResultsPage() {
                 ...results.finishers.filter(r => r.race_id === raceId && r._status === 'DNF'),
                 ...results.nonFinishers.filter(r => r.race_id === raceId)
               ];
-
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
                 raceDnf = raceDnf.filter(r =>
@@ -522,7 +528,6 @@ export default function ResultsPage() {
                   `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
                 );
               }
-
               const isDnfExpanded = expandedDnfSections[raceId];
 
               return (
@@ -531,7 +536,6 @@ export default function ResultsPage() {
                     <h2 className="text-4xl font-bold text-brand-dark">
                       {editedEvents[selectedEvent.id]?.races?.[raceId] || race.race_name}
                     </h2>
-
                     <div className="flex flex-wrap items-center gap-4">
                       <span className="text-lg text-gray-600">
                         {totalResults} official finisher{totalResults !== 1 ? 's' : ''}
@@ -555,20 +559,16 @@ export default function ResultsPage() {
                               </button>
                             </div>
                           )}
-
                           <ResultsTable
                             data={displayFinishers}
                             totalResults={totalResults}
-                            // No pagination props → no pagination UI
                             onNameClick={handleNameClick}
                             isMobile={window.innerWidth < 768}
                             highlightedBib={highlightedBib}
                           />
-
                           <div className="mt-8 space-y-4">
                             <p className="text-center text-xl font-semibold text-brand-dark">Top 5 Finishers</p>
                             <p className="text-center text-lg text-gray-600">Showing 1–5 of {totalResults} results</p>
-
                             {/* View All button below table */}
                             {totalResults > 5 && (
                               <div className="text-right">
