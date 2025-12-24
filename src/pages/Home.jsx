@@ -1,31 +1,36 @@
-// src/pages/Home.jsx (FINAL — Fixed TDZ bug + Updated palette)
+// src/pages/Home.jsx
+// FULLY UPDATED — December 2025 Production Version
+// • Uses fresh global config from RaceContext (no localStorage)
+// • Correctly hides events belonging to hidden master series
+// • Shows standalone events even if not in a master group
+// • Fully compatible with latest RaceContext (live polling, DNF support, etc.)
+// • Clean, modern UI with proper loading states
+
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 export default function Home() {
-  // ← MOVE useContext TO THE TOP
   const {
     events = [],
     loading,
     setSelectedEvent,
+    masterGroups = {},
+    editedEvents = {},
+    eventLogos = {},
+    hiddenMasters = [],
   } = useContext(RaceContext);
 
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
 
-  // Base numbers
+  // Base numbers + fetched athletes from Supabase
   const BASE_ATHLETES = 750000;
   const BASE_RACES = 700;
-
-  // Fetched current totals
   const [fetchedAthletes, setFetchedAthletes] = useState(0);
   const [displayAthletes, setDisplayAthletes] = useState(0);
   const [displayRaces, setDisplayRaces] = useState(0);
-
-  // ← NOW SAFE TO USE events
-  const totalRacesTimed = BASE_RACES + events.length;
 
   // Fetch global published athletes count
   useEffect(() => {
@@ -44,6 +49,7 @@ export default function Home() {
     fetchGlobalAthletes();
   }, []);
 
+  const totalRacesTimed = BASE_RACES + events.length;
   const finalAthletes = BASE_ATHLETES + fetchedAthletes;
 
   // Animated count-up effect
@@ -56,9 +62,11 @@ export default function Home() {
     let currentRaces = 0;
     const athletesStep = finalAthletes / steps;
     const racesStep = totalRacesTimed / steps;
+
     const timer = setInterval(() => {
       currentAthletes += athletesStep;
       currentRaces += racesStep;
+
       if (currentAthletes >= finalAthletes && currentRaces >= totalRacesTimed) {
         setDisplayAthletes(finalAthletes);
         setDisplayRaces(totalRacesTimed);
@@ -68,18 +76,9 @@ export default function Home() {
         setDisplayRaces(Math.floor(currentRaces));
       }
     }, interval);
+
     return () => clearInterval(timer);
   }, [finalAthletes, totalRacesTimed, loading]);
-
-  // ← NOW SAFE TO USE localStorage (after context)
-  const masterGroups = JSON.parse(localStorage.getItem('masterGroups')) || {};
-  const editedEvents = JSON.parse(localStorage.getItem('editedEvents')) || {};
-  const eventLogos = JSON.parse(localStorage.getItem('eventLogos')) || {};
-
-  const slugify = (text) => {
-    if (!text) return 'overall';
-    return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  };
 
   // Fetch upcoming events from You Keep Moving
   useEffect(() => {
@@ -124,9 +123,22 @@ export default function Home() {
     }
   };
 
-  // === THREE MOST RECENT EVENTS ===
+  // === FILTERED RECENT EVENTS (Hides events from hidden master series) ===
   const recentEvents = events
-    .slice()
+    .filter(event => {
+      // Find if this event belongs to any master group
+      const belongsToMaster = Object.entries(masterGroups).find(([masterKey, eventIds]) =>
+        eventIds.includes(String(event.id))
+      );
+
+      // Standalone events (not in any master group) → always show
+      if (!belongsToMaster) return true;
+
+      const [masterKey] = belongsToMaster;
+
+      // If the master series is hidden → hide this event
+      return !hiddenMasters.includes(masterKey);
+    })
     .sort((a, b) => (b.start_time || 0) - (a.start_time || 0))
     .slice(0, 3);
 
@@ -203,6 +215,7 @@ export default function Home() {
           </h2>
           <div className="w-24 h-1 bg-primary mx-auto"></div>
         </div>
+
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-primary"></div>
@@ -215,6 +228,7 @@ export default function Home() {
             {recentEvents.map(event => {
               const logo = eventLogos[event.id] || null;
               const displayName = editedEvents[event.id]?.name || event.name;
+
               return (
                 <button
                   key={event.id}
@@ -244,6 +258,7 @@ export default function Home() {
             })}
           </div>
         )}
+
         <div className="text-center mt-16">
           <Link
             to="/results"
@@ -261,6 +276,7 @@ export default function Home() {
             Upcoming Events
           </h2>
           <div className="w-24 h-1 bg-primary mx-auto mb-12"></div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
             {upcomingEvents.length === 0 ? (
               <p className="col-span-3 text-gray-600">Loading upcoming events...</p>
@@ -297,6 +313,7 @@ export default function Home() {
               ))
             )}
           </div>
+
           <a
             href="https://youkeepmoving.com/events"
             target="_blank"
