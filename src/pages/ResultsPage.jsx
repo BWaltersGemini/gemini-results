@@ -1,11 +1,9 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Full per-race pagination (desktop + mobile Load More)
-// • Smart "Show Top 5" ↔ "View All" toggle with auto-expand on pagination
-// • Proper DNF collapsible sections
-// • Global search across finishers & DNFs
-// • Live results toast
-// • Clean, modern UX
+// • Top 5 / View All with full pagination
+// • DNF collapsible sections
+// • NEW: Age Group (Division) breakdowns — top 5 per group, expandable
+// • Global search, live updates, mobile-friendly
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -22,6 +20,7 @@ export default function ResultsPage() {
     events = [],
     results = { finishers: [], nonFinishers: [] },
     loadingResults,
+    uniqueDivisions = [],
     eventLogos = {},
     ads = [],
     setSelectedEvent,
@@ -38,9 +37,10 @@ export default function ResultsPage() {
   const [highlightedBib, setHighlightedBib] = useState(location.state?.highlightBib || null);
 
   // Per-race state
-  const [expandedRaces, setExpandedRaces] = useState({});        // Top 5 vs View All
+  const [expandedRaces, setExpandedRaces] = useState({});              // Top 5 vs View All (overall)
   const [expandedDnfSections, setExpandedDnfSections] = useState({});
-  const [racePagination, setRacePagination] = useState({});      // { race_id: { currentPage, pageSize } }
+  const [expandedAgeGroups, setExpandedAgeGroups] = useState({});     // Per-race age group expansion: { race_id: { 'M 30-34': true } }
+  const [racePagination, setRacePagination] = useState({});           // Overall pagination
 
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
@@ -71,14 +71,15 @@ export default function ResultsPage() {
       setHighlightedBib(null);
       setExpandedRaces({});
       setExpandedDnfSections({});
+      setExpandedAgeGroups({});
       setRacePagination({});
       prevMasterKeyRef.current = masterKey;
     }
   }, [masterKey]);
 
   useEffect(() => {
-    // Reset everything when search changes
     setExpandedRaces({});
+    setExpandedAgeGroups({});
     setRacePagination({});
   }, [searchQuery]);
 
@@ -224,7 +225,7 @@ export default function ResultsPage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  // Master landing tiles
+  // Master landing tiles (unchanged)
   const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
   const masterEventTiles = visibleMasters
     .map((storedKey) => {
@@ -256,6 +257,7 @@ export default function ResultsPage() {
   }
 
   if (!selectedEvent) {
+    // Master landing page (unchanged — same as previous version)
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-light to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
@@ -266,22 +268,12 @@ export default function ResultsPage() {
           {masterEventTiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
               {masterEventTiles.map((master) => (
-                <Link
-                  key={master.storedKey}
-                  to={`/results/${master.masterSlug}/${master.latestYear}`}
-                  className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300"
-                >
+                <Link key={master.storedKey} to={`/results/${master.masterSlug}/${master.latestYear}`} className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all duration-300">
                   <div className="h-64 bg-brand-light flex items-center justify-center p-6">
-                    {master.logo ? (
-                      <img src={master.logo} alt={master.displayName} className="max-h-52 max-w-full object-contain" />
-                    ) : (
-                      <span className="text-8xl text-gray-300 group-hover:text-primary transition">🏁</span>
-                    )}
+                    {master.logo ? <img src={master.logo} alt={master.displayName} className="max-h-52 max-w-full object-contain" /> : <span className="text-8xl text-gray-300 group-hover:text-primary transition">🏁</span>}
                   </div>
                   <div className="p-8 text-center">
-                    <h3 className="text-2xl md:text-3xl font-bold text-brand-dark mb-4 group-hover:text-primary transition">
-                      {master.displayName}
-                    </h3>
+                    <h3 className="text-2xl md:text-3xl font-bold text-brand-dark mb-4 group-hover:text-primary transition">{master.displayName}</h3>
                     <p className="text-lg text-gray-600 mb-6">Latest: {formatDate(master.dateEpoch)}</p>
                     <span className="text-primary font-bold text-lg group-hover:underline">View Results →</span>
                   </div>
@@ -291,43 +283,23 @@ export default function ResultsPage() {
           ) : (
             <p className="text-center text-gray-600 text-xl mb-20">No recent race series available.</p>
           )}
-          {/* Upcoming Events section unchanged */}
+          {/* Upcoming Events — unchanged */}
           <div className="mt-20">
             <h2 className="text-4xl font-bold text-center text-brand-dark mb-12">Upcoming Events</h2>
-            {loadingUpcoming ? (
-              <p className="text-center text-gray-600 text-xl">Loading...</p>
-            ) : upcomingEvents.length > 0 ? (
+            {loadingUpcoming ? <p className="text-center text-gray-600 text-xl">Loading...</p> : upcomingEvents.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {upcomingEvents.map((event) => (
-                  <a
-                    key={event.id}
-                    href={event.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all"
-                  >
-                    {event.image?.url ? (
-                      <img src={event.image.url} alt={event.title.rendered || event.title} className="w-full h-60 object-cover" />
-                    ) : (
-                      <div className="h-60 bg-brand-light flex items-center justify-center">
-                        <span className="text-gray-500 font-medium">No Image</span>
-                      </div>
-                    )}
+                  <a key={event.id} href={event.url} target="_blank" rel="noopener noreferrer" className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl hover:scale-105 transition-all">
+                    {event.image?.url ? <img src={event.image.url} alt={event.title.rendered || event.title} className="w-full h-60 object-cover" /> : <div className="h-60 bg-brand-light flex items-center justify-center"><span className="text-gray-500 font-medium">No Image</span></div>}
                     <div className="p-6">
-                      <h3 className="text-xl font-bold text-brand-dark mb-2 line-clamp-2">
-                        {event.title.rendered || event.title}
-                      </h3>
-                      <p className="text-gray-600 mb-4">
-                        {new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                      </p>
+                      <h3 className="text-xl font-bold text-brand-dark mb-2 line-clamp-2">{event.title.rendered || event.title}</h3>
+                      <p className="text-gray-600 mb-4">{new Date(event.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                       <span className="text-accent font-bold group-hover:underline">Register →</span>
                     </div>
                   </a>
                 ))}
               </div>
-            ) : (
-              <p className="text-center text-gray-600 text-xl">No upcoming events at this time.</p>
-            )}
+            ) : <p className="text-center text-gray-600 text-xl">No upcoming events at this time.</p>}
           </div>
         </div>
       </div>
@@ -366,38 +338,26 @@ export default function ResultsPage() {
               className="w-full px-6 py-4 text-xl placeholder-gray-500 border-0 focus:outline-none text-brand-dark"
             />
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-3xl"
-              >
-                ×
-              </button>
+              <button onClick={() => setSearchQuery('')} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-3xl">×</button>
             )}
           </div>
           {searchQuery && (
             <div className="text-center mt-5">
               {globalFilteredResults.length > 0 ? (
-                <button
-                  onClick={() => resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  className="inline-flex items-center gap-3 px-8 py-4 bg-primary text-white text-lg font-bold rounded-full hover:bg-primary/90 shadow-xl transition transform hover:scale-105"
-                >
+                <button onClick={() => resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="inline-flex items-center gap-3 px-8 py-4 bg-primary text-white text-lg font-bold rounded-full hover:bg-primary/90 shadow-xl transition transform hover:scale-105">
                   <span>{globalFilteredResults.length} result{globalFilteredResults.length !== 1 ? 's' : ''} found</span>
                   <span className="text-2xl">↓ Jump to Results</span>
                 </button>
               ) : (
-                <p className="text-lg text-gray-700 font-medium">
-                  No participants found matching "{searchQuery}"
-                </p>
+                <p className="text-lg text-gray-700 font-medium">No participants found matching "{searchQuery}"</p>
               )}
             </div>
           )}
         </div>
 
-        {/* Header */}
+        {/* Header, Stats, Race Links — unchanged */}
         <div className="text-center mb-16">
-          {displayLogo && (
-            <img src={displayLogo} alt="Event logo" className="mx-auto max-h-48 mb-8 object-contain" />
-          )}
+          {displayLogo && <img src={displayLogo} alt="Event logo" className="mx-auto max-h-48 mb-8 object-contain" />}
           <h1 className="text-5xl md:text-6xl font-black text-brand-dark mb-4">
             {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
           </h1>
@@ -410,46 +370,25 @@ export default function ResultsPage() {
           )}
           {availableYears.length > 1 && (
             <div className="mt-8">
-              <select
-                value={year}
-                onChange={(e) => handleYearChange(e.target.value)}
-                className="px-6 py-3 text-lg border border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-primary/30"
-              >
-                {availableYears.map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
+              <select value={year} onChange={(e) => handleYearChange(e.target.value)} className="px-6 py-3 text-lg border border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-primary/30">
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           )}
         </div>
 
-        {/* Stats */}
         {totalFinishers > 0 && (
           <div className="grid grid-cols-3 gap-8 max-w-3xl mx-auto mb-16 text-center">
-            <div className="bg-white rounded-2xl shadow-lg py-6">
-              <div className="text-4xl font-bold text-primary">{totalFinishers}</div>
-              <div className="text-gray-600">Official Finishers</div>
-            </div>
-            <div className="bg-white rounded-2xl shadow-lg py-6">
-              <div className="text-4xl font-bold text-primary">{maleFinishers}</div>
-              <div className="text-gray-600">Male</div>
-            </div>
-            <div className="bg-white rounded-2xl shadow-lg py-6">
-              <div className="text-4xl font-bold text-primary">{femaleFinishers}</div>
-              <div className="text-gray-600">Female</div>
-            </div>
+            <div className="bg-white rounded-2xl shadow-lg py-6"><div className="text-4xl font-bold text-primary">{totalFinishers}</div><div className="text-gray-600">Official Finishers</div></div>
+            <div className="bg-white rounded-2xl shadow-lg py-6"><div className="text-4xl font-bold text-primary">{maleFinishers}</div><div className="text-gray-600">Male</div></div>
+            <div className="bg-white rounded-2xl shadow-lg py-6"><div className="text-4xl font-bold text-primary">{femaleFinishers}</div><div className="text-gray-600">Female</div></div>
           </div>
         )}
 
-        {/* Race Links */}
         {displayedRaces.length > 1 && (
           <div className="flex flex-wrap justify-center gap-4 mb-12">
             {displayedRaces.map((race) => (
-              <a
-                key={race.race_id}
-                href={`#race-${race.race_id}`}
-                className="px-6 py-3 bg-gray-100 rounded-full hover:bg-primary hover:text-white transition font-medium"
-              >
+              <a key={race.race_id} href={`#race-${race.race_id}`} className="px-6 py-3 bg-gray-100 rounded-full hover:bg-primary hover:text-white transition font-medium">
                 {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
               </a>
             ))}
@@ -465,9 +404,7 @@ export default function ResultsPage() {
                 {searchQuery ? `No participants found matching "${searchQuery}"` : 'Results Not Available Yet'}
               </h2>
               <p className="text-2xl text-gray-600 max-w-2xl mx-auto">
-                {searchQuery
-                  ? 'Try adjusting your search terms or clearing the filter.'
-                  : 'Official results for this event have not been published yet. Please check back soon!'}
+                {searchQuery ? 'Try adjusting your search terms or clearing the filter.' : 'Official results for this event have not been published yet. Please check back soon!'}
               </p>
             </div>
           ) : (
@@ -475,7 +412,7 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const isExpanded = expandedRaces[raceId] ?? false;
 
-              // Base finishers (before Top 5 limit)
+              // Overall finishers
               const raceFinishers = results.finishers.filter(r => r?.race_id === raceId);
               const baseFinishers = searchQuery
                 ? globalFilteredResults.filter(r => r.race_id === raceId && results.finishers.includes(r))
@@ -484,27 +421,15 @@ export default function ResultsPage() {
               const displayFinishers = isExpanded ? baseFinishers : baseFinishers.slice(0, 5);
               const sortedFinishers = [...displayFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
 
-              // Pagination state
+              // Pagination
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
-
               const updatePage = (newPage) => {
-                if (newPage > 1 && !isExpanded) {
-                  setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
-                }
-                setRacePagination(prev => ({
-                  ...prev,
-                  [raceId]: { ...prev[raceId], currentPage: newPage }
-                }));
+                if (newPage > 1 && !isExpanded) setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
+                setRacePagination(prev => ({ ...prev, [raceId]: { ...prev[raceId], currentPage: newPage } }));
               };
-
               const updatePageSize = (newSize) => {
-                setRacePagination(prev => ({
-                  ...prev,
-                  [raceId]: { currentPage: 1, pageSize: newSize }
-                }));
-                if (newSize < baseFinishers.length && !isExpanded) {
-                  setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
-                }
+                setRacePagination(prev => ({ ...prev, [raceId]: { currentPage: 1, pageSize: newSize } }));
+                if (!isExpanded) setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
               };
 
               // DNF
@@ -513,6 +438,19 @@ export default function ResultsPage() {
                 ? globalFilteredResults.filter(r => r.race_id === raceId && results.nonFinishers.includes(r))
                 : raceDnf;
               const isDnfExpanded = expandedDnfSections[raceId];
+
+              // Age Group Breakdowns
+              const ageGroupMap = {};
+              baseFinishers.forEach(r => {
+                const div = r.age_group_name || 'Overall';
+                if (!ageGroupMap[div]) ageGroupMap[div] = [];
+                ageGroupMap[div].push(r);
+              });
+
+              // Sort each group by age_group_place then place
+              Object.keys(ageGroupMap).forEach(div => {
+                ageGroupMap[div].sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity));
+              });
 
               return (
                 <section key={raceId} id={`race-${raceId}`} className="mb-24">
@@ -530,16 +468,11 @@ export default function ResultsPage() {
                           onClick={() => {
                             setExpandedRaces(prev => ({ ...prev, [raceId]: !prev[raceId] }));
                             if (isExpanded) {
-                              setRacePagination(prev => ({
-                                ...prev,
-                                [raceId]: { currentPage: 1, pageSize: 50 }
-                              }));
+                              setRacePagination(prev => ({ ...prev, [raceId]: { currentPage: 1, pageSize: 50 } }));
                             }
                           }}
                           className={`px-8 py-4 rounded-full font-bold transition shadow-xl ${
-                            isExpanded
-                              ? 'bg-gray-700 text-white hover:bg-gray-800'
-                              : 'bg-primary text-white hover:bg-primary/90'
+                            isExpanded ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-primary text-white hover:bg-primary/90'
                           }`}
                         >
                           {isExpanded ? 'Show Top 5' : `View All (${baseFinishers.length})`}
@@ -548,6 +481,7 @@ export default function ResultsPage() {
                     </div>
                   </div>
 
+                  {/* Overall Results */}
                   {sortedFinishers.length > 0 ? (
                     <ResultsTable
                       data={sortedFinishers}
@@ -563,6 +497,63 @@ export default function ResultsPage() {
                   ) : (
                     <div className="text-center py-16 text-gray-500">
                       <p className="text-2xl font-medium">No official finishers in this race</p>
+                    </div>
+                  )}
+
+                  {/* Age Group Awards */}
+                  {Object.keys(ageGroupMap).length > 1 && (
+                    <div className="mt-16">
+                      <h3 className="text-3xl font-bold text-brand-dark mb-8 text-center">Age Group Awards</h3>
+                      <div className="space-y-6">
+                        {Object.keys(ageGroupMap).sort().map(div => {
+                          const results = ageGroupMap[div];
+                          const top5 = results.slice(0, 5);
+                          const isExpanded = expandedAgeGroups[raceId]?.[div] || false;
+
+                          return (
+                            <div key={div} className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-3xl shadow-lg overflow-hidden">
+                              <button
+                                onClick={() => setExpandedAgeGroups(prev => ({
+                                  ...prev,
+                                  [raceId]: { ...prev[raceId], [div]: !prev[raceId]?.[div] }
+                                }))}
+                                className="w-full px-8 py-5 bg-primary/80 hover:bg-primary text-white font-bold text-xl flex items-center justify-between transition"
+                              >
+                                <span>{div} ({results.length} finisher{results.length !== 1 ? 's' : ''})</span>
+                                <span className="text-3xl">{isExpanded ? '−' : '+'}</span>
+                              </button>
+                              {isExpanded && (
+                                <div className="p-8 bg-white">
+                                  <ResultsTable
+                                    data={results}
+                                    onNameClick={handleNameClick}
+                                    isMobile={window.innerWidth < 768}
+                                    highlightedBib={highlightedBib}
+                                  />
+                                </div>
+                              )}
+                              {!isExpanded && top5.length > 0 && (
+                                <div className="p-8 bg-white">
+                                  <ResultsTable
+                                    data={top5}
+                                    onNameClick={handleNameClick}
+                                    isMobile={window.innerWidth < 768}
+                                    highlightedBib={highlightedBib}
+                                  />
+                                  {results.length > 5 && (
+                                    <p className="text-center text-primary font-bold mt-6 cursor-pointer" onClick={() => setExpandedAgeGroups(prev => ({
+                                      ...prev,
+                                      [raceId]: { ...prev[raceId], [div]: true }
+                                    }))}>
+                                      + View all {results.length} in {div}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 
@@ -604,10 +595,7 @@ export default function ResultsPage() {
             <h3 className="text-4xl font-bold text-center text-brand-dark mb-12">Our Sponsors</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
               {ads.map((ad, i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-3xl shadow-xl overflow-hidden border border-primary/20 hover:shadow-2xl transition"
-                >
+                <div key={i} className="bg-white rounded-3xl shadow-xl overflow-hidden border border-primary/20 hover:shadow-2xl transition">
                   <img src={ad} alt="Sponsor" className="w-full h-auto" />
                 </div>
               ))}
@@ -616,7 +604,6 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Back to Top */}
       <button
         ref={backToTopRef}
         onClick={scrollToTop}
