@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – All Fixes: QR Small & High, Countdown Paused for Email, iPad Optimized
+// FINAL – Inline Email Field + Send Button + Auto Reset After Success
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -103,7 +103,7 @@ export default function ResultsKiosk() {
     startCountdown();
   };
 
-  // Countdown – paused when email form is open
+  // Countdown – paused when email form open
   useEffect(() => {
     if (countdown === null || showEmailForm) return;
 
@@ -122,7 +122,7 @@ export default function ResultsKiosk() {
   }, [countdown, showEmailForm]);
 
   const startCountdown = () => {
-    if (showEmailForm) return; // never start/restart while emailing
+    if (showEmailForm) return;
     setCountdown(AUTO_RESET_SECONDS);
   };
 
@@ -180,12 +180,9 @@ export default function ResultsKiosk() {
       if (res.ok) {
         setEmailStatus('success');
         setTimeout(() => {
-          setShowEmailForm(false);
-          setEmail('');
-          setOptIn(false);
-          setEmailStatus('');
-          startCountdown(); // resume countdown after success
-        }, 4000);
+          // Auto reset to search after success (like countdown expiry)
+          resetToSearch();
+        }, 3000);
       } else {
         setEmailStatus('error');
       }
@@ -331,7 +328,7 @@ export default function ResultsKiosk() {
         />
       )}
       <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/90 flex flex-col items-center justify-start text-text-light pt-2 px-4 pb-4 overflow-y-auto">
-        {/* Header – pushed down to avoid QR overlap */}
+        {/* Header */}
         <div className="text-center mb-2 z-10 mt-12">
           {logoUrl && (
             <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-32 mb-3 object-contain drop-shadow-xl" />
@@ -342,7 +339,7 @@ export default function ResultsKiosk() {
           <p className="text-xl mt-1 opacity-90">Finish Line Kiosk</p>
         </div>
 
-        {/* QR Code – Small & Very Top-Left */}
+        {/* QR Code – Small & Top-Left */}
         {participant && typeof participant === 'object' && (
           <div className="fixed top-2 left-2 z-40 bg-white p-3 rounded-2xl shadow-2xl border-4 border-brand-turquoise">
             <div className="w-28 h-28">
@@ -358,7 +355,7 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Countdown – only shown when not emailing */}
+        {/* Countdown */}
         {countdown !== null && !showEmailForm && (
           <div className="fixed top-4 right-4 text-3xl font-black bg-black/70 px-6 py-3 rounded-full shadow-2xl z-40">
             {countdown}s
@@ -461,13 +458,13 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            {/* Email My Stats */}
+            {/* Email My Stats – Inline Layout */}
             <div className="mt-6">
               {!showEmailForm ? (
                 <button
                   onClick={() => {
                     setShowEmailForm(true);
-                    setCountdown(null); // immediately pause countdown
+                    setCountdown(null);
                   }}
                   className="px-20 py-8 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
                 >
@@ -475,14 +472,26 @@ export default function ResultsKiosk() {
                 </button>
               ) : (
                 <div className="space-y-6">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    className="w-full text-2xl text-center px-6 py-5 rounded-3xl border-4 border-brand-turquoise focus:outline-none focus:ring-4 focus:ring-brand-turquoise/50 bg-white"
-                    autoFocus
-                  />
+                  {/* Inline Email + Send */}
+                  <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="flex-1 w-full sm:max-w-md text-2xl text-center px-6 py-5 rounded-3xl border-4 border-brand-turquoise focus:outline-none focus:ring-4 focus:ring-brand-turquoise/50 bg-white"
+                      autoFocus
+                    />
+                    <button
+                      onClick={sendEmail}
+                      disabled={!email || !optIn || emailStatus === 'sending'}
+                      className="px-12 py-5 bg-brand-turquoise text-white text-2xl font-black rounded-full disabled:opacity-70 shadow-xl whitespace-nowrap"
+                    >
+                      {emailStatus === 'sending' ? 'Sending...' : 'Send Email'}
+                    </button>
+                  </div>
+
+                  {/* Opt-in */}
                   <label className="flex items-center justify-center gap-4 text-lg">
                     <input
                       type="checkbox"
@@ -492,14 +501,9 @@ export default function ResultsKiosk() {
                     />
                     <span>Yes, send me future race updates from Gemini Timing</span>
                   </label>
-                  <div className="flex gap-4 justify-center">
-                    <button
-                      onClick={sendEmail}
-                      disabled={!email || !optIn || emailStatus === 'sending'}
-                      className="px-12 py-5 bg-brand-turquoise text-white text-2xl font-black rounded-full disabled:opacity-70 shadow-xl"
-                    >
-                      {emailStatus === 'sending' ? 'Sending...' : 'Send Email'}
-                    </button>
+
+                  {/* Cancel Button */}
+                  <div className="text-center">
                     <button
                       onClick={() => {
                         setShowEmailForm(false);
@@ -508,13 +512,15 @@ export default function ResultsKiosk() {
                         setEmailStatus('');
                         startCountdown();
                       }}
-                      className="px-12 py-5 bg-brand-dark text-white text-2xl font-black rounded-full shadow-xl"
+                      className="px-12 py-4 bg-brand-dark text-white text-xl font-black rounded-full shadow-xl"
                     >
                       Cancel
                     </button>
                   </div>
+
+                  {/* Status Messages */}
                   {emailStatus === 'success' && (
-                    <p className="text-green-600 text-2xl font-bold">✓ Email sent!</p>
+                    <p className="text-green-600 text-2xl font-bold animate-pulse">✓ Email sent! Returning to search...</p>
                   )}
                   {emailStatus === 'error' && (
                     <p className="text-brand-red text-2xl font-bold">✗ Send failed – try again</p>
