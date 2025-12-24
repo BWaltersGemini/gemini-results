@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – iPad-Optimized (No Scroll, Fits Portrait), Softer Palette (Turquoise-Focused), Smaller Fonts
+// FINAL – iPad Optimized + High Contrast Athlete Card + QR Fix + Exit Warning
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -28,8 +28,7 @@ export default function ResultsKiosk() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [countdown, setCountdown] = useState(null);
 
-  const AUTO_RESET_SECONDS = 12; // Slightly longer for touch
-
+  const AUTO_RESET_SECONDS = 12;
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
   const allParticipants = [
@@ -126,6 +125,35 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
+  // === Prevent Accidental Exit from Kiosk Mode ===
+  useEffect(() => {
+    if (stage !== 'kiosk') return;
+
+    const handleBackButton = (e) => {
+      e.preventDefault();
+      if (window.confirm('Are you sure you want to leave kiosk mode?')) {
+        setStage('event-select');
+      } else {
+        // Stay in kiosk
+        navigate('/kiosk', { replace: true });
+      }
+    };
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = 'Are you sure you want to leave kiosk mode?';
+      return 'Are you sure you want to leave kiosk mode?';
+    };
+
+    window.addEventListener('popstate', handleBackButton);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('popstate', handleBackButton);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [stage, navigate]);
+
   // === ACCESS PIN STAGE ===
   if (stage === 'access-pin') {
     return (
@@ -166,7 +194,7 @@ export default function ResultsKiosk() {
     );
   }
 
-  // === EVENT SELECT STAGE (Compact for iPad) ===
+  // === EVENT SELECT STAGE ===
   if (stage === 'event-select') {
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
     return (
@@ -215,7 +243,7 @@ export default function ResultsKiosk() {
     );
   }
 
-  // === FULL KIOSK MODE – iPad Optimized (No Vertical Scroll) ===
+  // === FULL KIOSK MODE ===
   return (
     <>
       {showConfetti && (
@@ -249,7 +277,7 @@ export default function ResultsKiosk() {
           <div className="text-5xl font-bold animate-pulse mt-20">Loading results...</div>
         )}
 
-        {/* Search Section – Smaller Font, Full Text Visible */}
+        {/* Search */}
         {!participant && matches.length === 0 && !loadingResults && (
           <div className="w-full max-w-3xl z-10 mt-8">
             <p className="text-3xl text-center mb-8 font-medium drop-shadow-md">
@@ -307,34 +335,39 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Participant Result – Compact Layout */}
+        {/* Athlete Result Card – High Contrast + Full QR */}
         {participant && typeof participant === 'object' && (
           <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-10 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-8">
-            <div className="text-7xl font-black text-brand-turquoise mb-4 drop-shadow-lg">
+            {/* Place – Bold Red */}
+            <div className="text-8xl font-black text-brand-red mb-4 drop-shadow-lg">
               #{formatPlace(participant.place || '—')}
             </div>
+
+            {/* Name */}
             <h2 className="text-4xl md:text-5xl font-black mb-4">
               {participant.first_name} {participant.last_name}
             </h2>
             <p className="text-2xl text-text-muted mb-8">Bib #{participant.bib}</p>
 
+            {/* Time Boxes – Strong Contrast */}
             <div className="grid grid-cols-2 gap-8 text-2xl mb-10">
-              <div className="bg-brand-turquoise/10 rounded-3xl py-8 shadow-lg">
-                <div className="font-black text-brand-turquoise text-4xl">
+              <div className="bg-brand-turquoise/15 rounded-3xl py-8 shadow-lg">
+                <div className="font-black text-brand-turquoise text-5xl">
                   {formatTime(participant.chip_time)}
                 </div>
-                <div className="text-text-muted mt-2">Chip Time</div>
+                <div className="text-text-muted mt-2 text-lg">Chip Time</div>
               </div>
               <div className="bg-brand-red/10 rounded-3xl py-8 shadow-lg">
-                <div className="font-black text-brand-dark text-4xl">
+                <div className="font-black text-brand-dark text-5xl">
                   {participant.pace || '—'}
                 </div>
-                <div className="text-text-muted mt-2">Pace</div>
+                <div className="text-text-muted mt-2 text-lg">Pace</div>
               </div>
             </div>
 
-            <div className="text-2xl space-y-4 mb-10">
-              <p><strong>Gender:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
+            {/* Division / Gender */}
+            <div className="text-2xl space-y-4 mb-12">
+              <p><strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
               {participant.age_group_place && (
                 <p><strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}</p>
               )}
@@ -343,11 +376,19 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            <div>
+            {/* QR Code – Larger & Centered */}
+            <div className="mx-auto max-w-xs">
               <p className="text-2xl font-black mb-6">Scan for Full Results</p>
-              <div className="mx-auto w-60 h-60 bg-white p-6 rounded-3xl shadow-2xl border-6 border-brand-turquoise/50">
-                <QRCode value={getResultsUrl()} size={216} level="H" fgColor="#48D1CC" />
+              <div className="mx-auto w-72 h-72 bg-white p-8 rounded-3xl shadow-2xl border-8 border-brand-turquoise">
+                <QRCode
+                  value={getResultsUrl()}
+                  size={240}
+                  level="H"
+                  fgColor="#48D1CC"
+                  bgColor="#FFFFFF"
+                />
               </div>
+              <p className="text-lg mt-6 text-text-light/90">Use your phone camera</p>
             </div>
           </div>
         )}
