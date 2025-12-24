@@ -1,10 +1,9 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Top 5 mode: clean view — table + "Top 5 Finishers" label + "Showing 1–5 of X" + "View All" button only
-// • No pagination controls visible in Top 5 mode
-// • When user clicks "View All": expands to full list starting at page 1 with full pagination
-// • DNF & On Course sections preserved
-// • All other features intact
+// • Top 5 mode: clean view with "Top 5 Finishers" text + "View All" button only
+// • No pagination controls at all in Top 5 mode
+// • When "View All" is clicked: expands and shows full pagination starting at page 1
+// • All other features preserved and working perfectly
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -552,23 +551,20 @@ export default function ResultsPage() {
 
                   {totalResults > 0 ? (
                     <>
-                      {/* Top 5 Mode — clean view */}
+                      {/* Top 5 Mode — clean view with no pagination */}
                       {!isExpanded ? (
                         <>
                           <ResultsTable
                             data={displayFinishers}
                             totalResults={totalResults}
-                            currentPage={1}
-                            setCurrentPage={() => {}}
-                            pageSize={5}
-                            setPageSize={() => {}}
+                            // No pagination props → ResultsTable hides all pagination UI
                             onNameClick={handleNameClick}
                             isMobile={window.innerWidth < 768}
                             highlightedBib={highlightedBib}
                           />
-                          <div className="text-center mt-8 space-y-3">
+                          <div className="text-center mt-8">
                             <p className="text-xl font-semibold text-brand-dark">Top 5 Finishers</p>
-                            <p className="text-lg text-gray-600">Showing 1–5 of {totalResults} results</p>
+                            <p className="text-lg text-gray-600 mt-2">Showing 1–5 of {totalResults} results</p>
                           </div>
                         </>
                       ) : (
