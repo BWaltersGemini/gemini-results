@@ -1,13 +1,12 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Races are now properly separated into individual tables (e.g., Sprint Triathlon, 5K, 10K)
-// • Each race has its own "Overall Results" with correct race-specific place ranking
-// • Top 5 / View All + full pagination per race
-// • Filters: Race dropdown + Age Group dropdown (dynamic per selected race)
-// • Year buttons instead of dropdown
-// • Fixed sorting — top 5 always shows true race leaders
+// • Fixed crash on athlete click (state now correctly passes arrays)
+// • Restored "Jump to Results" button after search
+// • Races separated with correct per-race ranking
+// • Top 5 / View All + pagination per race
+// • Filters: Race + dynamic Age Group
+// • Year buttons
 // • DNF per race
-// • Clean, professional UX
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -44,9 +43,9 @@ export default function ResultsPage() {
   const [selectedDivision, setSelectedDivision] = useState('all');
 
   // Per-race state
-  const [expandedRaces, setExpandedRaces] = useState({});        // { race_id: true/false } for Top 5 vs View All
+  const [expandedRaces, setExpandedRaces] = useState({});
   const [expandedDnfSections, setExpandedDnfSections] = useState({});
-  const [racePagination, setRacePagination] = useState({});      // { race_id: { currentPage, pageSize } }
+  const [racePagination, setRacePagination] = useState({});
 
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
@@ -161,7 +160,6 @@ export default function ResultsPage() {
   // ====================== DATA & FILTERING ======================
   const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
 
-  // Races to display based on raceSlug or filters
   let displayedRaces = embeddedRaces;
 
   if (raceSlug) {
@@ -172,7 +170,6 @@ export default function ResultsPage() {
     displayedRaces = displayedRaces.filter((race) => race.race_id === selectedRaceId);
   }
 
-  // Available divisions for the selected race (or all if 'all')
   const availableDivisions = useMemo(() => {
     const relevantFinishers = selectedRaceId === 'all'
       ? results.finishers
@@ -181,7 +178,6 @@ export default function ResultsPage() {
     return [...new Set(relevantFinishers.map(r => r.age_group_name).filter(Boolean))].sort();
   }, [results.finishers, selectedRaceId]);
 
-  // Reset division if invalid after race change
   useEffect(() => {
     if (selectedDivision !== 'all' && !availableDivisions.includes(selectedDivision)) {
       setSelectedDivision('all');
@@ -210,21 +206,32 @@ export default function ResultsPage() {
 
   const handleNameClick = (participant) => {
     if (!participant || !selectedEvent) return;
+
     let masterSlug = 'overall';
     const foundMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(String(selectedEvent.id)));
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
+
     const eventYear = getYearFromEvent(selectedEvent);
     const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const raceSlugPart = slugify(raceName);
+
+    // CRITICAL FIX: Pass arrays, not the object wrapper
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
-      state: { participant, selectedEvent, results: { finishers: results.finishers, nonFinishers: results.nonFinishers } },
+      state: {
+        participant,
+        selectedEvent,
+        results: {
+          finishers: results.finishers,
+          nonFinishers: results.nonFinishers
+        }
+      },
     });
   };
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  // Master landing tiles (unchanged)
+  // Master landing tiles
   const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
   const masterEventTiles = visibleMasters
     .map((storedKey) => {
@@ -256,7 +263,6 @@ export default function ResultsPage() {
   }
 
   if (!selectedEvent) {
-    // Master landing page unchanged
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-light to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
@@ -315,6 +321,18 @@ export default function ResultsPage() {
     );
   }
 
+  // Total matching participants across all displayed races (for jump button)
+  const totalMatching = displayedRaces.reduce((sum, race) => {
+    const finishers = results.finishers.filter(r => r.race_id === race.race_id);
+    const searched = searchQuery
+      ? finishers.filter(r => 
+          r.bib?.toString().includes(searchQuery) ||
+          `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : finishers;
+    return sum + searched.length;
+  }, 0);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
       {liveToast && (
@@ -325,7 +343,7 @@ export default function ResultsPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-12 pt-32">
-        {/* Search */}
+        {/* Search with Jump Button */}
         <div className={`sticky top-32 z-40 bg-white shadow-lg rounded-full px-6 py-4 mb-12 transition-all ${searchQuery ? 'ring-4 ring-primary/30' : ''}`}>
           <div className="relative max-w-3xl mx-auto">
             <input
@@ -339,6 +357,17 @@ export default function ResultsPage() {
               <button onClick={() => setSearchQuery('')} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-3xl">×</button>
             )}
           </div>
+          {searchQuery && totalMatching > 0 && (
+            <div className="text-center mt-5">
+              <button
+                onClick={() => resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="inline-flex items-center gap-3 px-8 py-4 bg-primary text-white text-lg font-bold rounded-full hover:bg-primary/90 shadow-xl transition transform hover:scale-105"
+              >
+                <span>{totalMatching} result{totalMatching !== 1 ? 's' : ''} found</span>
+                <span className="text-2xl">↓ Jump to Results</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Header */}
@@ -408,7 +437,7 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        {/* Race Results — Separated Tables */}
+        {/* Race Results */}
         <div ref={resultsSectionRef}>
           {displayedRaces.length === 0 ? (
             <div className="text-center py-32">
@@ -421,15 +450,12 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const isExpanded = expandedRaces[raceId] ?? false;
 
-              // Finishers for this race
               let raceFinishers = results.finishers.filter(r => r.race_id === raceId);
 
-              // Apply division filter
               if (selectedDivision !== 'all') {
                 raceFinishers = raceFinishers.filter(r => r.age_group_name === selectedDivision);
               }
 
-              // Apply search
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
                 raceFinishers = raceFinishers.filter(r =>
@@ -438,12 +464,9 @@ export default function ResultsPage() {
                 );
               }
 
-              // Sort by place within this race
               const sortedFinishers = [...raceFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-
               const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
 
-              // Pagination
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
               const updatePage = (newPage) => {
                 if (newPage > 1 && !isExpanded) {
@@ -464,7 +487,6 @@ export default function ResultsPage() {
                 }
               };
 
-              // DNF for this race
               let raceDnf = results.nonFinishers.filter(r => r.race_id === raceId);
               if (searchQuery) {
                 const lowerQuery = searchQuery.toLowerCase();
@@ -525,7 +547,6 @@ export default function ResultsPage() {
                     </div>
                   )}
 
-                  {/* DNF for this race */}
                   {raceDnf.length > 0 && (
                     <div className="mt-16">
                       <button
