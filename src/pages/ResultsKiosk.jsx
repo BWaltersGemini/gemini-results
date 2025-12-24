@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – QR Smaller & Higher (No Overlap) + Countdown Paused During Email Entry
+// FINAL – All Fixes: QR Small & High, Countdown Paused for Email, iPad Optimized
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -29,11 +29,11 @@ export default function ResultsKiosk() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [countdown, setCountdown] = useState(null);
 
-  // Email feature state
+  // Email feature
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState('');
   const [optIn, setOptIn] = useState(false);
-  const [emailStatus, setEmailStatus] = useState(''); // '', 'sending', 'success', 'error'
+  const [emailStatus, setEmailStatus] = useState('');
 
   const AUTO_RESET_SECONDS = 12;
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
@@ -103,9 +103,9 @@ export default function ResultsKiosk() {
     startCountdown();
   };
 
-  // Countdown timer with pause when email form is open
+  // Countdown – paused when email form is open
   useEffect(() => {
-    if (countdown === null || showEmailForm) return; // Paused if email form open
+    if (countdown === null || showEmailForm) return;
 
     const interval = setInterval(() => {
       setCountdown((prev) => {
@@ -122,7 +122,7 @@ export default function ResultsKiosk() {
   }, [countdown, showEmailForm]);
 
   const startCountdown = () => {
-    if (showEmailForm) return; // Do not start/restart if email form is open
+    if (showEmailForm) return; // never start/restart while emailing
     setCountdown(AUTO_RESET_SECONDS);
   };
 
@@ -181,11 +181,10 @@ export default function ResultsKiosk() {
         setEmailStatus('success');
         setTimeout(() => {
           setShowEmailForm(false);
-          setEmailStatus('');
           setEmail('');
           setOptIn(false);
-          // Resume countdown after success
-          startCountdown();
+          setEmailStatus('');
+          startCountdown(); // resume countdown after success
         }, 4000);
       } else {
         setEmailStatus('error');
@@ -201,7 +200,7 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // Exit Protection (unchanged)
+  // Exit protection
   useEffect(() => {
     if (stage !== 'kiosk') return;
 
@@ -231,13 +230,96 @@ export default function ResultsKiosk() {
     };
   }, [stage]);
 
-  // === ACCESS PIN & EVENT SELECT (unchanged) ===
-  if (stage === 'access-pin' || stage === 'event-select') {
-    // ... (same as previous version – omitted for brevity, but unchanged)
-    // Keep your existing access-pin and event-select code here
+  // ====================== ACCESS PIN STAGE ======================
+  if (stage === 'access-pin') {
+    return (
+      <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/80 flex items-center justify-center p-8">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-w-md w-full text-center border-8 border-brand-turquoise">
+          <h1 className="text-4xl font-black text-brand-dark mb-8">Timing Team Access</h1>
+          <p className="text-xl text-text-muted mb-8">Enter Pin to Configure</p>
+          <input
+            id="access-pin-input"
+            type="password"
+            value={accessPinInput}
+            onChange={(e) => setAccessPinInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && accessPinInput === ACCESS_PIN) {
+                setAccessPinInput('');
+                setStage('event-select');
+              }
+            }}
+            className="w-full text-5xl text-center tracking-widest px-8 py-6 border-8 border-brand-turquoise rounded-3xl mb-8 focus:outline-none focus:ring-8 focus:ring-brand-turquoise/30"
+            autoFocus
+          />
+          <button
+            onClick={() => {
+              if (accessPinInput === ACCESS_PIN) {
+                setAccessPinInput('');
+                setStage('event-select');
+              } else {
+                alert('Incorrect Pin');
+                setAccessPinInput('');
+              }
+            }}
+            className="px-16 py-6 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
+          >
+            Enter
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  // === FULL KIOSK MODE ===
+  // ====================== EVENT SELECT STAGE ======================
+  if (stage === 'event-select') {
+    const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+    return (
+      <div className="fixed inset-0 bg-bg-light flex flex-col">
+        <div className="bg-brand-turquoise text-white p-6 text-center shadow-2xl">
+          <h1 className="text-4xl font-black">Select Event</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          {sortedEvents.length === 0 ? (
+            <p className="text-3xl text-center text-brand-dark py-20">No events loaded</p>
+          ) : (
+            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 max-w-5xl mx-auto">
+              {sortedEvents.map((event) => {
+                const eventMasterKey = Object.keys(masterGroups).find((k) =>
+                  masterGroups[k]?.includes(String(event.id))
+                );
+                const eventLogo = eventMasterKey ? eventLogos[eventMasterKey] : null;
+
+                return (
+                  <button
+                    key={event.id}
+                    onClick={() => {
+                      setSelectedEvent(event);
+                      setStage('kiosk');
+                    }}
+                    className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl hover:scale-105 transition-all border-4 border-brand-turquoise/30"
+                  >
+                    {eventLogo && (
+                      <img src={eventLogo} alt="Logo" className="max-h-32 mx-auto mb-6 object-contain drop-shadow-md" />
+                    )}
+                    <h3 className="text-2xl font-black text-brand-dark mb-3">{event.name}</h3>
+                    <p className="text-lg text-text-muted">
+                      {new Date(event.start_time * 1000).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ====================== FULL KIOSK MODE ======================
   return (
     <>
       {showConfetti && (
@@ -249,8 +331,8 @@ export default function ResultsKiosk() {
         />
       )}
       <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/90 flex flex-col items-center justify-start text-text-light pt-2 px-4 pb-4 overflow-y-auto">
-        {/* Header – Reduced top padding */}
-        <div className="text-center mb-2 z-10 mt-12"> {/* Added mt-12 to push down below QR */}
+        {/* Header – pushed down to avoid QR overlap */}
+        <div className="text-center mb-2 z-10 mt-12">
           {logoUrl && (
             <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-32 mb-3 object-contain drop-shadow-xl" />
           )}
@@ -260,7 +342,7 @@ export default function ResultsKiosk() {
           <p className="text-xl mt-1 opacity-90">Finish Line Kiosk</p>
         </div>
 
-        {/* QR Code – Smaller, Higher, Top-Left */}
+        {/* QR Code – Small & Very Top-Left */}
         {participant && typeof participant === 'object' && (
           <div className="fixed top-2 left-2 z-40 bg-white p-3 rounded-2xl shadow-2xl border-4 border-brand-turquoise">
             <div className="w-28 h-28">
@@ -276,7 +358,7 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Countdown – Top Right */}
+        {/* Countdown – only shown when not emailing */}
         {countdown !== null && !showEmailForm && (
           <div className="fixed top-4 right-4 text-3xl font-black bg-black/70 px-6 py-3 rounded-full shadow-2xl z-40">
             {countdown}s
@@ -379,13 +461,13 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            {/* Email My Stats Button */}
+            {/* Email My Stats */}
             <div className="mt-6">
               {!showEmailForm ? (
                 <button
                   onClick={() => {
                     setShowEmailForm(true);
-                    setCountdown(null); // Pause countdown immediately
+                    setCountdown(null); // immediately pause countdown
                   }}
                   className="px-20 py-8 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
                 >
@@ -424,7 +506,7 @@ export default function ResultsKiosk() {
                         setEmail('');
                         setOptIn(false);
                         setEmailStatus('');
-                        startCountdown(); // Resume countdown
+                        startCountdown();
                       }}
                       className="px-12 py-5 bg-brand-dark text-white text-2xl font-black rounded-full shadow-xl"
                     >
