@@ -1,460 +1,665 @@
-// src/pages/admin/EmailCampaignsAdmin.jsx
+// src/pages/ResultsKiosk.jsx
+// FINAL – Branded Email Template (Matches EmailCampaignsAdmin) + All iPad Fixes
+
 import { useState, useEffect } from 'react';
-import { fetchEvents, fetchResultsForEvent } from '../../api/chronotrackapi';
-import { fetchEmailsForEntries } from '../../api/chronotrackAdminApi';
-import { formatChronoTime } from '../../utils/timeUtils';
+import { useNavigate } from 'react-router-dom';
+import Confetti from 'react-confetti';
+import { useContext } from 'react';
+import { RaceContext } from '../context/RaceContext';
+import QRCode from 'react-qr-code';
+import { formatChronoTime } from '../utils/timeUtils';
 
-console.log('%c🟥 EMAIL CAMPAIGNS — FINAL: NEW RED/TURQUOISE PALETTE + ALL FEATURES', 'color: white; background: #B22222; font-size: 16px; padding: 8px; border-radius: 4px;');
+export default function ResultsKiosk() {
+  const navigate = useNavigate();
+  const {
+    events = [],
+    results,
+    selectedEvent,
+    setSelectedEvent,
+    masterGroups = {},
+    eventLogos = {},
+    loadingResults,
+  } = useContext(RaceContext);
 
-const ordinal = (n) => {
-  if (!n) return '';
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-};
+  const [stage, setStage] = useState('access-pin');
+  const [accessPinInput, setAccessPinInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [matches, setMatches] = useState([]);
+  const [participant, setParticipant] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [countdown, setCountdown] = useState(null);
 
-const getRaceStory = (splits, finalPlace) => {
-  if (!splits || splits.length === 0) return "Strong, steady performance throughout! 💪";
-  const places = splits.map(s => s.place).filter(Boolean);
-  if (places.length < 2) return "Strong, steady performance throughout! 💪";
-  const firstPlace = places[0];
-  const bestPlace = Math.min(...places);
-  const worstPlace = Math.max(...places);
-  if (finalPlace === 1 && firstPlace === 1) return "Wire-to-wire dominance — you led from start to finish! 🏆";
-  if (finalPlace === 1 && firstPlace > 5) return "EPIC COMEBACK! You surged from mid-pack to take the win! 🔥";
-  if (bestPlace === 1 && finalPlace > 3) return "You had the lead early but fought hard to the line — incredible effort!";
-  if (worstPlace - bestPlace >= 20) return "A true rollercoaster — big moves throughout, but you never gave up!";
-  if (finalPlace <= 3 && firstPlace > 10) return "Patient and powerful — you saved your best for the finish! 🚀";
-  if (Math.abs(firstPlace - finalPlace) <= 3) return "Rock-solid consistency — you owned your pace all day!";
-  return "Gritty, determined performance — you gave it everything! ❤️";
-};
+  // Email feature
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [email, setEmail] = useState('');
+  const [optIn, setOptIn] = useState(false);
+  const [emailStatus, setEmailStatus] = useState('');
 
-export default function EmailCampaignsAdmin() {
-  const [events, setEvents] = useState([]);
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [results, setResults] = useState([]);
-  const [emailList, setEmailList] = useState([]);
-  const [loadingEvents, setLoadingEvents] = useState(true);
-  const [loadingResults, setLoadingResults] = useState(false);
-  const [buildingList, setBuildingList] = useState(false);
-  const [progress, setProgress] = useState({ processed: 0, total: 0, found: 0 });
-  const [subject, setSubject] = useState('{{first_name}}, You Absolutely Crushed {{event_name}}!');
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
-  const [sending, setSending] = useState(false);
-  const [testSending, setTestSending] = useState(false);
+  const AUTO_RESET_SECONDS = 12;
+  const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
-  // Fetch ChronoTrack events
-  useEffect(() => {
-    const loadEvents = async () => {
-      try {
-        const allEvents = await fetchEvents();
-        allEvents.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-        setEvents(allEvents);
-      } catch (err) {
-        alert('Failed to load events');
-      } finally {
-        setLoadingEvents(false);
-      }
-    };
-    loadEvents();
-  }, []);
+  const allParticipants = [
+    ...(results?.finishers || []),
+    ...(results?.nonFinishers || [])
+  ];
 
-  // Fetch upcoming events from You Keep Moving (The Events Calendar)
-  useEffect(() => {
-    const fetchUpcoming = async () => {
-      try {
-        const res = await fetch('https://youkeepmoving.com/wp-json/tribe/events/v1/events?per_page=10&status=publish');
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        const future = (data.events || [])
-          .filter(ev => new Date(ev.start_date) > new Date())
-          .slice(0, 4);
-        setUpcomingEvents(future);
-      } catch (err) {
-        console.warn('Could not load upcoming events');
-        setUpcomingEvents([]);
-      }
-    };
-    fetchUpcoming();
-  }, []);
+  const getMasterKeyForEvent = () => {
+    if (!selectedEvent || Object.keys(masterGroups).length === 0) return null;
+    return Object.keys(masterGroups).find((key) =>
+      masterGroups[key]?.includes(String(selectedEvent.id))
+    );
+  };
 
-  const handleSelectEvent = async (eventId) => {
-    const event = events.find(e => e.id === eventId);
-    if (!event) return;
-    setSelectedEvent(event);
-    setResults([]);
-    setEmailList([]);
-    setLoadingResults(true);
-    try {
-      const eventResults = await fetchResultsForEvent(eventId);
-      const withEntry = eventResults.filter(r => r.entry_id);
-      setResults(withEntry);
-    } catch (err) {
-      alert('Failed to load results');
-    } finally {
-      setLoadingResults(false);
+  const masterKey = getMasterKeyForEvent();
+  const logoUrl = masterKey ? eventLogos[masterKey] || null : null;
+
+  const getResultsUrl = () => {
+    if (!masterKey || !selectedEvent?.start_time) return 'https://gemini-results.vercel.app/results';
+    const year = new Date(selectedEvent.start_time * 1000).getFullYear();
+    const slug = masterKey.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    return `https://gemini-results.vercel.app/results/${slug}/${year}`;
+  };
+
+  const ordinal = (n) => {
+    if (!n) return '—';
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
+  const getRaceStory = (splits = [], finalPlace) => {
+    if (!splits || splits.length === 0) return "Strong, steady performance throughout! 💪";
+    const places = splits.map(s => s.place).filter(Boolean);
+    if (places.length < 2) return "Strong, steady performance throughout! 💪";
+    const firstPlace = places[0];
+    const bestPlace = Math.min(...places);
+    const worstPlace = Math.max(...places);
+    if (finalPlace === 1 && firstPlace === 1) return "Wire-to-wire dominance — you led from start to finish! 🏆";
+    if (finalPlace === 1 && firstPlace > 5) return "EPIC COMEBACK! You surged from mid-pack to take the win! 🔥";
+    if (bestPlace === 1 && finalPlace > 3) return "You had the lead early but fought hard to the line — incredible effort!";
+    if (worstPlace - bestPlace >= 20) return "A true rollercoaster — big moves throughout, but you never gave up!";
+    if (finalPlace <= 3 && firstPlace > 10) return "Patient and powerful — you saved your best for the finish! 🚀";
+    if (Math.abs(firstPlace - finalPlace) <= 3) return "Rock-solid consistency — you owned your pace all day!";
+    return "Gritty, determined performance — you gave it everything! ❤️";
+  };
+
+  const formatPlace = (place) =>
+    !place ? '—' : place === 1 ? '1st' : place === 2 ? '2nd' : place === 3 ? '3rd' : `${place}th`;
+
+  const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
+
+  const performSearch = (query) => {
+    if (!query.trim()) {
+      setMatches([]);
+      setParticipant(null);
+      return;
+    }
+    const term = query.trim();
+    const lowerTerm = term.toLowerCase();
+
+    const found = allParticipants.filter((r) => {
+      if (r.bib && r.bib.toString() === term) return true;
+      const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
+      return fullName.includes(lowerTerm);
+    });
+
+    if (found.length === 1) {
+      setParticipant(found[0]);
+      setMatches([]);
+      setShowConfetti(true);
+      startCountdown();
+    } else if (found.length > 1) {
+      setMatches(found);
+      setParticipant(null);
+      setCountdown(null);
+    } else {
+      setMatches([]);
+      setParticipant('not-found');
+      setCountdown(null);
     }
   };
 
-  const handleBuildEmailList = async () => {
-    if (results.length === 0) return;
-    const entryIds = results.map(r => r.entry_id);
-    setBuildingList(true);
-    setProgress({ processed: 0, total: entryIds.length, found: 0 });
-    try {
-      const emails = await fetchEmailsForEntries(entryIds, (p, t, f) => setProgress({ processed: p, total: t, found: f }));
-      setEmailList(emails);
-      alert(`Found ${emails.length} valid emails!`);
-    } catch (err) {
-      alert('Error building list');
-    } finally {
-      setBuildingList(false);
-    }
+  const selectParticipant = (p) => {
+    setParticipant(p);
+    setMatches([]);
+    setShowConfetti(true);
+    startCountdown();
   };
 
-  // Main email template with new palette
-  const [html, setHtml] = useState(`<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;">
-  <tr>
-    <td align="center" style="padding:20px 0;">
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-collapse:collapse;">
-        
-        <!-- Logo Header -->
-        <tr>
-          <td align="center" style="padding:40px 20px 20px;">
-            <img src="{{base_url}}/GRR.png" alt="Gemini Race Results" width="220" style="display:block; max-width:100%; height:auto;" />
-          </td>
-        </tr>
+  // Countdown pause during email
+  useEffect(() => {
+    if (countdown === null || showEmailForm) return;
 
-        <!-- Hero Section -->
-        <tr>
-          <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
-            <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
-            <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">{{first_name}}</h2>
-            <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the {{race_name}}!</p>
-            <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
-            <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">{{chip_time}}</p>
-            <p style="font-size:20px; margin:0; color:#ffffff;">Pace: {{pace}}</p>
-          </td>
-        </tr>
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          resetToSearch();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-        <!-- Stats Section with X/X -->
+    return () => clearInterval(interval);
+  }, [countdown, showEmailForm]);
+
+  const startCountdown = () => {
+    if (showEmailForm) return;
+    setCountdown(AUTO_RESET_SECONDS);
+  };
+
+  const resetToSearch = () => {
+    setParticipant(null);
+    setMatches([]);
+    setSearchTerm('');
+    setShowConfetti(false);
+    setCountdown(null);
+    setShowEmailForm(false);
+    setEmail('');
+    setOptIn(false);
+    setEmailStatus('');
+    document.getElementById('kiosk-search-input')?.focus();
+  };
+
+  // Email sending with full branded template
+  const sendEmail = async () => {
+    if (!email || !optIn) return;
+
+    setEmailStatus('sending');
+
+    const fullName = `${participant.first_name} ${participant.last_name}`.trim() || 'Champion';
+    const eventName = getEventDisplayName();
+    const raceName = participant.race_name || eventName;
+    const raceStory = getRaceStory(participant.splits || [], participant.place);
+
+    const totalFinishers = allParticipants.length;
+    const genderCount = allParticipants.filter(r => r.gender === participant.gender).length;
+    const divisionCount = allParticipants.filter(r => r.age_group_name === participant.age_group_name).length;
+
+    const baseUrl = window.location.origin;
+
+    const brandedHtml = `
+      <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;">
         <tr>
-          <td style="padding:50px 30px; background:#F0F8FF;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <td align="center" style="padding:20px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-collapse:collapse;">
+              <!-- Logo Header -->
               <tr>
-                <td align="center">
-                  <h3 style="font-size:28px; font-weight:800; color:#263238; margin:0 0 40px;">Your Race Highlights</h3>
+                <td align="center" style="padding:40px 20px 20px;">
+                  <img src="${baseUrl}/GRR.png" alt="Gemini Race Results" width="220" style="display:block; max-width:100%; height:auto;" />
                 </td>
               </tr>
+              <!-- Hero Section -->
               <tr>
-                <td align="center" style="padding:20px;">
+                <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
+                  <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
+                  <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">${fullName}</h2>
+                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
+                  <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
+                  <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
+                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
+                </td>
+              </tr>
+              <!-- Stats Section -->
+              <tr>
+                <td style="padding:50px 30px; background:#F0F8FF;">
                   <table width="100%" cellpadding="0" cellspacing="0" border="0">
                     <tr>
-                      <td align="center" width="33%" style="padding:15px;">
-                        <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Overall</p>
-                        <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">{{place_ordinal}}</p>
-                        <p style="font-size:16px; color:#666; margin:5px 0 0;">of {{total_finishers}}</p>
+                      <td align="center">
+                        <h3 style="font-size:28px; font-weight:800; color:#263238; margin:0 0 40px;">Your Race Highlights</h3>
                       </td>
-                      <td align="center" width="33%" style="padding:15px;">
-                        <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Gender</p>
-                        <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">{{gender_place_ordinal}}</p>
-                        <p style="font-size:16px; color:#666; margin:5px 0 0;">of {{gender_count}}</p>
-                      </td>
-                      <td align="center" width="33%" style="padding:15px;">
-                        <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Division</p>
-                        <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">{{age_group_place_ordinal}}</p>
-                        <p style="font-size:16px; color:#666; margin:5px 0 0;">of {{division_count}} ({{age_group_name}})</p>
+                    </tr>
+                    <tr>
+                      <td align="center" style="padding:20px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Overall</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${totalFinishers}</p>
+                            </td>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Gender</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.gender_place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${genderCount}</p>
+                            </td>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Division</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.age_group_place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${divisionCount} (${participant.age_group_name || ''})</p>
+                            </td>
+                          </tr>
+                        </table>
                       </td>
                     </tr>
                   </table>
                 </td>
               </tr>
-            </table>
-          </td>
-        </tr>
-
-        <!-- Race Story -->
-        <tr>
-          <td align="center" style="padding:40px 30px;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
+              <!-- Race Story -->
               <tr>
-                <td style="background:#ffffff; padding:40px; border-left:8px solid #B22222; box-shadow:0 4px 20px rgba(178,34,34,0.15);">
-                  <p style="font-size:24px; font-weight:700; color:#263238; margin:0; line-height:1.5;">
-                    {{race_story}}
+                <td align="center" style="padding:40px 30px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
+                    <tr>
+                      <td style="background:#ffffff; padding:40px; border-left:8px solid #B22222; box-shadow:0 4px 20px rgba(178,34,34,0.15);">
+                        <p style="font-size:24px; font-weight:700; color:#263238; margin:0; line-height:1.5;">
+                          ${raceStory}
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <!-- CTAs -->
+              <tr>
+                <td align="center" style="padding:40px 30px; background:#F0F8FF;">
+                  <p style="margin:0 0 20px;">
+                    <a href="${getResultsUrl()}" target="_blank" style="display:inline-block; background:#B22222; color:#ffffff; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
+                      View Full Results →
+                    </a>
                   </p>
+                  <p style="margin:0;">
+                    <a href="https://youkeepmoving.com/events" target="_blank" style="display:inline-block; background:#48D1CC; color:#263238; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
+                      Find Your Next Race →
+                    </a>
+                  </p>
+                </td>
+              </tr>
+              <!-- Footer -->
+              <tr>
+                <td align="center" style="background:#263238; color:#aaaaaa; padding:40px 20px;">
+                  <p style="font-size:18px; margin:0 0 12px; color:#ffffff;">— The Gemini Timing Team</p>
+                  <p style="margin:0;">
+                    <a href="https://geminitiming.com" target="_blank" style="color:#48D1CC; font-size:16px; text-decoration:underline;">geminitiming.com</a>
+                  </p>
+                  <p style="font-size:12px; margin-top:20px; color:#94a3b8;">You received this because you participated in ${eventName}.</p>
                 </td>
               </tr>
             </table>
           </td>
         </tr>
-
-        <!-- CTAs -->
-        <tr>
-          <td align="center" style="padding:40px 30px; background:#F0F8FF;">
-            <p style="margin:0 0 20px;">
-              <a href="https://geminitiming.com/results" target="_blank" style="display:inline-block; background:#B22222; color:#ffffff; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
-                View Full Results →
-              </a>
-            </p>
-            <p style="margin:0;">
-              <a href="https://youkeepmoving.com/events" target="_blank" style="display:inline-block; background:#48D1CC; color:#263238; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
-                Find Your Next Race →
-              </a>
-            </p>
-          </td>
-        </tr>
-
-        <!-- Upcoming Events -->
-        <tr>
-          <td style="padding:40px 30px; background:#ffffff;">
-            <h3 style="font-size:20px; font-weight:700; color:#263238; text-align:center; margin:0 0 30px;">Upcoming Events from You Keep Moving</h3>
-            <table width="100%" cellpadding="0" cellspacing="0" border="0">
-              {{upcoming_events}}
-            </table>
-            <p style="text-align:center; margin-top:30px;">
-              <a href="https://youkeepmoving.com/events" target="_blank" style="color:#48D1CC; font-size:16px; text-decoration:underline; font-weight:bold;">View Full Calendar →</a>
-            </p>
-          </td>
-        </tr>
-
-        <!-- Footer -->
-        <tr>
-          <td align="center" style="background:#263238; color:#aaaaaa; padding:40px 20px;">
-            <p style="font-size:18px; margin:0 0 12px; color:#ffffff;">— The Gemini Timing Team</p>
-            <p style="margin:0;">
-              <a href="https://geminitiming.com" target="_blank" style="color:#48D1CC; font-size:16px; text-decoration:underline;">geminitiming.com</a>
-            </p>
-            <p style="font-size:12px; margin-top:20px; color:#94a3b8;">You received this because you participated in {{event_name}}.</p>
-          </td>
-        </tr>
-
       </table>
-    </td>
-  </tr>
-</table>`);
+    `;
 
-  const replacePlaceholders = (template, person, participant, event) => {
-    if (!person || !participant || !event) return template;
-
-    const raceStory = getRaceStory(participant.splits || [], participant.place);
-
-    const cleanChipTime = formatChronoTime(participant.chip_time);
-    const cleanPace = participant.pace ? formatChronoTime(participant.pace) : '—';
-
-    const totalFinishers = results.length;
-    const genderCount = results.filter(r => r.gender === participant.gender).length;
-    const divisionCount = results.filter(r => r.age_group_name === participant.age_group_name).length;
-
-    const upcomingHtml = upcomingEvents.length > 0
-      ? upcomingEvents.map(ev => `
-          <tr>
-            <td style="padding:12px;">
-              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F0F8FF; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.08);">
-                <tr>
-                  ${ev.image?.url ? `<td width="100" style="padding:0;"><img src="${ev.image.url}" alt="${ev.title.rendered || ev.title}" width="100" style="display:block; height:auto;" /></td>` : ''}
-                  <td style="padding:18px;">
-                    <p style="font-size:16px; font-weight:700; color:#263238; margin:0 0 8px;">${ev.title.rendered || ev.title}</p>
-                    <p style="font-size:14px; color:#666; margin:0;">${new Date(ev.start_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        `).join('')
-      : '<tr><td style="text-align:center; color:#999; padding:20px; font-style:italic;">No upcoming events at this time.</td></tr>';
-
-    const baseUrl = window.location.origin;
-
-    return template
-      .replace(/{{base_url}}/g, baseUrl)
-      .replace(/{{first_name}}/g, person.firstName || 'Champion')
-      .replace(/{{place_ordinal}}/g, participant.place ? ordinal(participant.place) : '—')
-      .replace(/{{gender_place_ordinal}}/g, participant.gender_place ? ordinal(participant.gender_place) : '—')
-      .replace(/{{age_group_place_ordinal}}/g, participant.age_group_place ? ordinal(participant.age_group_place) : '—')
-      .replace(/{{age_group_name}}/g, participant.age_group_name || '')
-      .replace(/{{chip_time}}/g, cleanChipTime)
-      .replace(/{{pace}}/g, cleanPace)
-      .replace(/{{race_name}}/g, participant.race_name || event.name || 'the race')
-      .replace(/{{event_name}}/g, event.name || 'this event')
-      .replace(/{{race_story}}/g, raceStory)
-      .replace(/{{total_finishers}}/g, totalFinishers || '—')
-      .replace(/{{gender_count}}/g, genderCount || '—')
-      .replace(/{{division_count}}/g, divisionCount || '—')
-      .replace(/{{upcoming_events}}/g, upcomingHtml);
-  };
-
-  const sendTestEmail = async () => {
-    const testEmail = prompt('Enter your email for testing:');
-    if (!testEmail) return;
-    setTestSending(true);
     try {
-      const samplePerson = emailList[0] || { firstName: 'Test' };
-      const sampleParticipant = results.find(r =>
-        r.first_name?.toLowerCase().includes(samplePerson.firstName?.toLowerCase())
-      ) || results[0] || {};
-      const renderedHtml = replacePlaceholders(html, samplePerson, sampleParticipant, selectedEvent);
-      await sendViaApi([testEmail], '[TEST] ' + subject, renderedHtml);
-      alert('Test email sent! Check your inbox and spam folder.');
-    } catch (err) {
-      alert('Test failed: ' + err.message);
-    } finally {
-      setTestSending(false);
-    }
-  };
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: [email],
+          subject: `${fullName.split(' ')[0]}, You Absolutely Crushed ${eventName}!`,
+          html: brandedHtml,
+        }),
+      });
 
-  const sendAllEmails = async () => {
-    if (!confirm(`Send to all ${emailList.length} recipients? This cannot be undone.`)) return;
-    setSending(true);
-    let sent = 0;
-    let failed = 0;
-    try {
-      for (const person of emailList) {
-        const participant = results.find(r =>
-          r.first_name?.toLowerCase() === person.firstName?.toLowerCase()
-        ) || results[0] || {};
-        const renderedHtml = replacePlaceholders(html, person, participant, selectedEvent);
-        try {
-          await sendViaApi([person.email], subject, renderedHtml);
-          sent++;
-        } catch (err) {
-          console.error(`Failed for ${person.email}:`, err.message);
-          failed++;
-        }
+      if (res.ok) {
+        setEmailStatus('success');
+        setTimeout(() => {
+          resetToSearch();
+        }, 3000);
+      } else {
+        setEmailStatus('error');
       }
-      alert(`Complete! Sent: ${sent}, Failed: ${failed}`);
     } catch (err) {
-      alert('Bulk send failed');
-    } finally {
-      setSending(false);
+      console.error('Send failed:', err);
+      setEmailStatus('error');
     }
   };
 
-  const sendViaApi = async (to, subject, html) => {
-    const res = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, subject, html }),
-    });
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Send failed');
-    }
-    return res.json();
-  };
+  useEffect(() => {
+    if (stage === 'access-pin') document.getElementById('access-pin-input')?.focus();
+    if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
+  }, [stage]);
 
-  const formatDate = (epoch) => !epoch ? 'Date TBD' : new Date(epoch * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  // Exit protection (unchanged)
+  useEffect(() => {
+    if (stage !== 'kiosk') return;
 
-  return (
-    <section className="max-w-7xl mx-auto px-6 py-12 space-y-12">
-      <div className="bg-red-100 border-2 border-red-600 rounded-xl p-8 text-center">
-        <p className="text-red-800 font-black text-3xl">🟥 NEW BRAND COLORS LIVE</p>
-        <p className="text-red-700 text-xl mt-3">Red #B22222 • Turquoise #48D1CC • Light #F0F8FF • Dark #263238</p>
-      </div>
+    const preventBack = (e) => {
+      e.preventDefault();
+      const confirmed = window.confirm('Are you sure you want to leave kiosk mode?');
+      if (confirmed) {
+        setStage('event-select');
+      } else {
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
 
-      <h2 className="text-5xl font-black text-center text-gray-800">Post-Race Email Campaigns</h2>
+    const preventUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = 'Are you sure you want to leave kiosk mode?';
+      return 'Are you sure you want to leave kiosk mode?';
+    };
 
-      {/* 1. Select Event */}
-      <div className="bg-white rounded-3xl shadow-xl p-10">
-        <h3 className="text-3xl font-bold mb-8">1. Select Event</h3>
-        {loadingEvents ? (
-          <p className="text-xl text-gray-600">Loading events...</p>
-        ) : (
-          <select
-            value={selectedEvent?.id || ''}
-            onChange={(e) => handleSelectEvent(e.target.value)}
-            className="w-full max-w-2xl p-5 text-xl border-2 border-red-500 rounded-2xl focus:outline-none focus:border-red-600"
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', preventBack);
+    window.addEventListener('beforeunload', preventUnload);
+
+    return () => {
+      window.removeEventListener('popstate', preventBack);
+      window.removeEventListener('beforeunload', preventUnload);
+    };
+  }, [stage]);
+
+  // ====================== ACCESS PIN & EVENT SELECT (unchanged – kept full for completeness) ======================
+  if (stage === 'access-pin') {
+    return (
+      <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/80 flex items-center justify-center p-8">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-10 max-w-md w-full text-center border-8 border-brand-turquoise">
+          <h1 className="text-4xl font-black text-brand-dark mb-8">Timing Team Access</h1>
+          <p className="text-xl text-text-muted mb-8">Enter Pin to Configure</p>
+          <input
+            id="access-pin-input"
+            type="password"
+            value={accessPinInput}
+            onChange={(e) => setAccessPinInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && accessPinInput === ACCESS_PIN) {
+                setAccessPinInput('');
+                setStage('event-select');
+              }
+            }}
+            className="w-full text-5xl text-center tracking-widest px-8 py-6 border-8 border-brand-turquoise rounded-3xl mb-8 focus:outline-none focus:ring-8 focus:ring-brand-turquoise/30"
+            autoFocus
+          />
+          <button
+            onClick={() => {
+              if (accessPinInput === ACCESS_PIN) {
+                setAccessPinInput('');
+                setStage('event-select');
+              } else {
+                alert('Incorrect Pin');
+                setAccessPinInput('');
+              }
+            }}
+            className="px-16 py-6 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
           >
-            <option value="">— Choose an event —</option>
-            {events.map(event => (
-              <option key={event.id} value={event.id}>
-                {event.name} — {formatDate(event.start_time)}
-              </option>
-            ))}
-          </select>
-        )}
+            Enter
+          </button>
+        </div>
       </div>
+    );
+  }
 
-      {/* 2. Build Email List */}
-      {selectedEvent && (
-        <div className="bg-white rounded-3xl shadow-xl p-10">
-          <h3 className="text-3xl font-bold mb-8">2. Build Email List</h3>
-          {loadingResults ? (
-            <p className="text-xl text-gray-600">Loading results...</p>
+  if (stage === 'event-select') {
+    const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
+    return (
+      <div className="fixed inset-0 bg-bg-light flex flex-col">
+        <div className="bg-brand-turquoise text-white p-6 text-center shadow-2xl">
+          <h1 className="text-4xl font-black">Select Event</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          {sortedEvents.length === 0 ? (
+            <p className="text-3xl text-center text-brand-dark py-20">No events loaded</p>
           ) : (
-            <>
-              <p className="text-2xl mb-8">Found <strong>{results.length}</strong> finishers with registration data</p>
-              <button
-                onClick={handleBuildEmailList}
-                disabled={buildingList}
-                className="px-16 py-6 bg-red-600 text-white text-2xl font-bold rounded-full shadow-xl hover:bg-red-700 disabled:opacity-60 transition"
-              >
-                {buildingList ? 'Fetching Emails...' : 'Build Email List'}
-              </button>
-              {buildingList && (
-                <div className="mt-8 p-8 bg-red-50 rounded-2xl border-2 border-red-300">
-                  <p className="text-xl">Processed {progress.processed} of {progress.total}</p>
-                  <p className="text-4xl font-black text-red-600 mt-4">Found {progress.found} emails</p>
-                </div>
-              )}
-            </>
+            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 max-w-5xl mx-auto">
+              {sortedEvents.map((event) => {
+                const eventMasterKey = Object.keys(masterGroups).find((k) =>
+                  masterGroups[k]?.includes(String(event.id))
+                );
+                const eventLogo = eventMasterKey ? eventLogos[eventMasterKey] : null;
+
+                return (
+                  <button
+                    key={event.id}
+                    onClick={() => {
+                      setSelectedEvent(event);
+                      setStage('kiosk');
+                    }}
+                    className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl hover:scale-105 transition-all border-4 border-brand-turquoise/30"
+                  >
+                    {eventLogo && (
+                      <img src={eventLogo} alt="Logo" className="max-h-32 mx-auto mb-6 object-contain drop-shadow-md" />
+                    )}
+                    <h3 className="text-2xl font-black text-brand-dark mb-3">{event.name}</h3>
+                    <p className="text-lg text-text-muted">
+                      {new Date(event.start_time * 1000).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ====================== FULL KIOSK MODE ======================
+  return (
+    <>
+      {showConfetti && (
+        <Confetti
+          recycle={false}
+          numberOfPieces={400}
+          gravity={0.12}
+          colors={['#48D1CC', '#FFFFFF', '#B22222', '#FFD700']}
+        />
       )}
+      <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/90 flex flex-col items-center justify-start text-text-light pt-2 px-4 pb-4 overflow-y-auto">
+        {/* Header */}
+        <div className="text-center mb-2 z-10 mt-12">
+          {logoUrl && (
+            <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-32 mb-3 object-contain drop-shadow-xl" />
+          )}
+          <h1 className="text-4xl md:text-5xl font-black drop-shadow-2xl">
+            {getEventDisplayName()}
+          </h1>
+          <p className="text-xl mt-1 opacity-90">Finish Line Kiosk</p>
+        </div>
 
-      {/* 3. Template & Send */}
-      {emailList.length > 0 && (
-        <>
-          <div className="bg-white rounded-3xl shadow-xl p-10">
-            <h3 className="text-3xl font-bold mb-6">Email Subject</h3>
-            <input
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full p-6 text-2xl font-bold border-2 border-red-500 rounded-2xl focus:outline-none focus:border-red-600"
-              placeholder="Enter email subject..."
-            />
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-12">
-            {/* Live Preview */}
-            <div className="bg-white rounded-3xl shadow-xl p-10">
-              <h3 className="text-3xl font-bold text-center mb-8">Live Preview</h3>
-              <div
-                className="border-4 border-red-200 rounded-2xl overflow-hidden"
-                dangerouslySetInnerHTML={{
-                  __html: replacePlaceholders(html, emailList[0] || {}, results[0] || {}, selectedEvent)
-                }}
+        {/* QR Code – Small & Top-Left */}
+        {participant && typeof participant === 'object' && (
+          <div className="fixed top-2 left-2 z-40 bg-white p-3 rounded-2xl shadow-2xl border-4 border-brand-turquoise">
+            <div className="w-28 h-28">
+              <QRCode
+                value={getResultsUrl()}
+                size={100}
+                level="H"
+                fgColor="#B22222"
+                bgColor="#FFFFFF"
               />
             </div>
+            <p className="text-xs text-center mt-1 text-brand-dark font-medium">Scan</p>
+          </div>
+        )}
 
-            {/* Send Panel */}
-            <div className="bg-gradient-to-br from-red-600 to-red-500 rounded-3xl shadow-2xl p-10 text-white">
-              <h3 className="text-4xl font-black text-center mb-8">Launch Campaign</h3>
-              <p className="text-2xl text-center mb-12">Ready to send to <strong>{emailList.length}</strong> runners?</p>
-              <div className="space-y-6">
-                <button
-                  onClick={sendTestEmail}
-                  disabled={testSending}
-                  className="w-full py-6 bg-white text-red-600 text-2xl font-black rounded-full shadow-xl hover:scale-105 transition disabled:opacity-60"
-                >
-                  {testSending ? 'Sending Test...' : 'Send Test Email'}
-                </button>
-                <button
-                  onClick={sendAllEmails}
-                  disabled={sending}
-                  className="w-full py-8 bg-orange-500 text-white text-3xl font-black rounded-full shadow-2xl hover:scale-105 transition disabled:opacity-60"
-                >
-                  {sending ? 'Sending to All...' : 'Send to All Recipients'}
-                </button>
-              </div>
-              <p className="text-center mt-8 text-lg opacity-90">
-                Always send a test first!
-              </p>
+        {/* Countdown */}
+        {countdown !== null && !showEmailForm && (
+          <div className="fixed top-4 right-4 text-3xl font-black bg-black/70 px-6 py-3 rounded-full shadow-2xl z-40">
+            {countdown}s
+          </div>
+        )}
+
+        {loadingResults && (
+          <div className="text-4xl font-bold animate-pulse mt-16">Loading results...</div>
+        )}
+
+        {/* Search */}
+        {!participant && matches.length === 0 && !loadingResults && (
+          <div className="w-full max-w-3xl z-10 mt-6">
+            <input
+              id="kiosk-search-input"
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && performSearch(searchTerm)}
+              placeholder="Enter bib or last name"
+              className="w-full text-5xl text-center bg-white text-brand-dark placeholder-text-muted border-6 border-brand-turquoise rounded-3xl py-10 px-8 focus:outline-none focus:ring-8 focus:ring-brand-turquoise/50 shadow-2xl"
+              autoFocus
+            />
+            <div className="text-center mt-8">
+              <button
+                onClick={() => performSearch(searchTerm)}
+                className="px-20 py-10 bg-white text-brand-turquoise text-5xl font-black rounded-full hover:scale-110 transition shadow-2xl"
+              >
+                GO!
+              </button>
             </div>
           </div>
-        </>
-      )}
-    </section>
+        )}
+
+        {/* Multiple Matches */}
+        {matches.length > 0 && (
+          <div className="w-full max-w-4xl z-10 mt-6">
+            <p className="text-4xl text-center mb-8 font-black drop-shadow-2xl">Tap Your Name</p>
+            <div className="grid gap-8 grid-cols-1 md:grid-cols-2">
+              {matches.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => selectParticipant(p)}
+                  className="bg-white/95 text-brand-dark rounded-3xl shadow-2xl p-10 hover:scale-105 transition border-6 border-brand-turquoise"
+                >
+                  <div className="text-5xl font-black mb-4">
+                    {p.first_name} {p.last_name}
+                  </div>
+                  <div className="text-4xl text-brand-red font-bold">
+                    Bib #{p.bib}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="text-center mt-10">
+              <button
+                onClick={resetToSearch}
+                className="px-16 py-6 bg-brand-dark text-white text-3xl font-black rounded-full hover:opacity-90 shadow-2xl"
+              >
+                ← Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Athlete Result Card */}
+        {participant && typeof participant === 'object' && (
+          <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-8 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-4">
+            <div className="text-7xl font-black text-brand-red mb-4 drop-shadow-lg">
+              #{formatPlace(participant.place || '—')}
+            </div>
+
+            <h2 className="text-4xl font-black mb-4">
+              {participant.first_name} {participant.last_name}
+            </h2>
+            <p className="text-2xl text-text-muted mb-6">Bib #{participant.bib}</p>
+
+            <div className="grid grid-cols-2 gap-6 text-2xl mb-8">
+              <div className="bg-brand-red/15 rounded-3xl py-6 shadow-lg">
+                <div className="font-black text-brand-red text-4xl">
+                  {formatChronoTime(participant.chip_time)}
+                </div>
+                <div className="text-text-muted mt-2 text-lg">Chip Time</div>
+              </div>
+              <div className="bg-brand-red/10 rounded-3xl py-6 shadow-lg">
+                <div className="font-black text-brand-dark text-4xl">
+                  {participant.pace ? formatChronoTime(participant.pace) : '—'}
+                </div>
+                <div className="text-text-muted mt-2 text-lg">Pace</div>
+              </div>
+            </div>
+
+            <div className="text-xl space-y-3 mb-8">
+              <p><strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
+              {participant.age_group_place && (
+                <p><strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}</p>
+              )}
+              {participant._status === 'DNF' && (
+                <p className="text-brand-red font-bold text-3xl">Did Not Finish</p>
+              )}
+            </div>
+
+            {/* Email My Stats – Inline */}
+            <div className="mt-6">
+              {!showEmailForm ? (
+                <button
+                  onClick={() => {
+                    setShowEmailForm(true);
+                    setCountdown(null);
+                  }}
+                  className="px-20 py-8 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
+                >
+                  Email Me My Stats
+                </button>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="flex-1 w-full sm:max-w-md text-2xl text-center px-6 py-5 rounded-3xl border-4 border-brand-turquoise focus:outline-none focus:ring-4 focus:ring-brand-turquoise/50 bg-white"
+                      autoFocus
+                    />
+                    <button
+                      onClick={sendEmail}
+                      disabled={!email || !optIn || emailStatus === 'sending'}
+                      className="px-12 py-5 bg-brand-turquoise text-white text-2xl font-black rounded-full disabled:opacity-70 shadow-xl whitespace-nowrap"
+                    >
+                      {emailStatus === 'sending' ? 'Sending...' : 'Send Email'}
+                    </button>
+                  </div>
+
+                  <label className="flex items-center justify-center gap-4 text-lg">
+                    <input
+                      type="checkbox"
+                      checked={optIn}
+                      onChange={(e) => setOptIn(e.target.checked)}
+                      className="w-6 h-6 text-brand-turquoise rounded focus:ring-brand-turquoise"
+                    />
+                    <span>Yes, I accept emails from Gemini Timing</span>
+                  </label>
+
+                  <div className="text-center">
+                    <button
+                      onClick={() => {
+                        setShowEmailForm(false);
+                        setEmail('');
+                        setOptIn(false);
+                        setEmailStatus('');
+                        startCountdown();
+                      }}
+                      className="px-12 py-4 bg-brand-dark text-white text-xl font-black rounded-full shadow-xl"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {emailStatus === 'success' && (
+                    <p className="text-green-600 text-2xl font-bold animate-pulse">✓ Email sent! Returning to search...</p>
+                  )}
+                  {emailStatus === 'error' && (
+                    <p className="text-brand-red text-2xl font-bold">✗ Send failed – try again</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Not Found */}
+        {participant === 'not-found' && (
+          <div className="text-center max-w-3xl z-10 mt-16">
+            <div className="text-8xl mb-6">😅</div>
+            <h2 className="text-5xl font-black mb-4 drop-shadow-2xl">
+              No Results Found Yet
+            </h2>
+            <p className="text-3xl leading-relaxed mb-10 opacity-90">
+              Results may still be syncing.<br />Ask timing staff for help.
+            </p>
+            <button
+              onClick={resetToSearch}
+              className="px-20 py-10 bg-white text-brand-turquoise text-5xl font-black rounded-full hover:scale-110 shadow-2xl"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
