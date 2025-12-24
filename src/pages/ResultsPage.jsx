@@ -216,7 +216,7 @@ export default function ResultsPage() {
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const raceSlugPart = slugify(raceName);
 
-    // CRITICAL FIX: Pass arrays, not the object wrapper
+    // FIXED: Pass the correct results structure (object with finishers/nonFinishers arrays)
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: {
         participant,
@@ -228,7 +228,6 @@ export default function ResultsPage() {
       },
     });
   };
-
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Master landing tiles
