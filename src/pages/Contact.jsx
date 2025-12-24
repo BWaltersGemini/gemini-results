@@ -1,4 +1,5 @@
 // src/pages/Contact.jsx
+// FULLY RESTYLED — December 2025 Rebrand Compliant
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useContext } from 'react';
@@ -22,7 +23,7 @@ export default function Contact() {
     raceName: '',
     expectedParticipants: '',
     eventDate: '',
-    raceUrl: '', // New: for services inquiries
+    raceUrl: '',
     bibQuantity: '',
     medalQuantity: '',
     shirtQuantity: '',
@@ -105,7 +106,7 @@ export default function Contact() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Contact Form <onboarding@resend.dev>', // Update to your verified domain
+          from: 'Contact Form <onboarding@resend.dev>',
           to: ['info@youkeepmoving.com'],
           reply_to: formData.email,
           subject: `[YKM Inquiry] ${inquiryType === 'results' ? 'Results Question' : inquiryType.charAt(0).toUpperCase() + inquiryType.slice(1)} - ${formData.name}`,
@@ -156,33 +157,51 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-20 px-6">
+    <div className="min-h-screen bg-brand-light py-20 px-6">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-5xl font-bold text-center text-gemini-dark-gray mb-12">
+        <h1 className="text-5xl md:text-6xl font-black text-brand-dark text-center mb-12">
           Contact Us
         </h1>
 
-        <div className="bg-white rounded-3xl shadow-2xl p-10 md:p-16">
-          <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="bg-white rounded-3xl shadow-2xl p-10 md:p-16 border border-primary/20">
+          <form onSubmit={handleSubmit} className="space-y-10">
+            {/* Honeypot */}
             <input type="text" name="honeypot" value={formData.honeypot} onChange={handleChange} className="hidden" />
 
+            {/* Name & Email */}
             <div className="grid md:grid-cols-2 gap-8">
               <div>
-                <label className="block text-lg font-semibold text-gemini-dark-gray mb-2">Your Name *</label>
-                <input required name="name" value={formData.name} onChange={handleChange}
-                  className="w-full px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:border-gemini-blue" />
+                <label className="block text-xl font-bold text-brand-dark mb-3">Your Name *</label>
+                <input
+                  required
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition"
+                />
               </div>
               <div>
-                <label className="block text-lg font-semibold text-gemini-dark-gray mb-2">Email *</label>
-                <input required type="email" name="email" value={formData.email} onChange={handleChange}
-                  className="w-full px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:border-gemini-blue" />
+                <label className="block text-xl font-bold text-brand-dark mb-3">Email *</label>
+                <input
+                  required
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition"
+                />
               </div>
             </div>
 
+            {/* Inquiry Type */}
             <div>
-              <label className="block text-lg font-semibold text-gemini-dark-gray mb-2">Inquiry Type *</label>
-              <select required value={inquiryType} onChange={(e) => setInquiryType(e.target.value)}
-                className="w-full px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:border-gemini-blue">
+              <label className="block text-xl font-bold text-brand-dark mb-3">What can we help you with? *</label>
+              <select
+                required
+                value={inquiryType}
+                onChange={(e) => setInquiryType(e.target.value)}
+                className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition bg-white"
+              >
                 <option value="general">General Question</option>
                 <option value="results">Question About My Results</option>
                 <option value="timing">Race Timing Services</option>
@@ -195,50 +214,89 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
 
             {/* Results Question */}
             {inquiryType === 'results' && (
-              <div className="space-y-6 p-6 bg-gemini-blue/5 rounded-2xl">
-                <div>
-                  <label className="block text-lg font-semibold mb-2">Event Name</label>
-                  <input name="eventName" value={formData.eventName} onChange={handleChange}
-                    className="w-full px-6 py-4 border border-gray-300 rounded-xl" />
-                </div>
-                <div className="grid md:grid-cols-2 gap-6">
+              <div className="p-8 bg-primary/5 rounded-3xl border border-primary/20">
+                <h3 className="text-2xl font-bold text-brand-dark mb-6">Results Inquiry Details</h3>
+                <div className="space-y-6">
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Bib Number</label>
-                    <input name="bib" value={formData.bib} onChange={handleChange}
-                      className="w-full px-6 py-4 border border-gray-300 rounded-xl" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Event Name</label>
+                    <input
+                      name="eventName"
+                      value={formData.eventName}
+                      onChange={handleChange}
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
+                    />
                   </div>
-                  <div>
-                    <label className="block text-lg font-semibold mb-2">Your Name (as registered)</label>
-                    <input name="participantName" value={formData.participantName} onChange={handleChange}
-                      className="w-full px-6 py-4 border border-gray-300 rounded-xl" />
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-lg font-bold text-brand-dark mb-3">Bib Number</label>
+                      <input
+                        name="bib"
+                        value={formData.bib}
+                        onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-lg font-bold text-brand-dark mb-3">Your Name (as registered)</label>
+                      <input
+                        name="participantName"
+                        value={formData.participantName}
+                        onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Services: Timing / Marketing / Registration */}
+            {/* Services Inquiries */}
             {['timing', 'marketing', 'registration'].includes(inquiryType) && (
-              <div className="space-y-6 p-6 bg-gemini-blue/5 rounded-2xl">
-                <div>
-                  <label className="block text-lg font-semibold mb-2">Race / Event Name</label>
-                  <input name="raceName" value={formData.raceName} onChange={handleChange}
-                    className="w-full px-6 py-4 border border-gray-300 rounded-xl" />
-                </div>
-                <div>
-                  <label className="block text-lg font-semibold mb-2">Race Website / Registration URL</label>
-                  <input type="url" name="raceUrl" value={formData.raceUrl} onChange={handleChange} placeholder="https://..."
-                    className="w-full px-6 py-4 border border-gray-300 rounded-xl" />
-                </div>
-                <div className="grid md:grid-cols-2 gap-6">
+              <div className="p-8 bg-primary/5 rounded-3xl border border-primary/20">
+                <h3 className="text-2xl font-bold text-brand-dark mb-6">Event Details</h3>
+                <div className="space-y-6">
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Expected Participants</label>
-                    <input type="number" min="0" name="expectedParticipants" value={formData.expectedParticipants} onChange={handleChange}
-                      className="w-full px-6 py-4 border border-gray-300 rounded-xl" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Race / Event Name</label>
+                    <input
+                      name="raceName"
+                      value={formData.raceName}
+                      onChange={handleChange}
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
+                    />
                   </div>
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Event Date (approx)</label>
-                    <input type="date" name="eventDate" value={formData.eventDate} onChange={handleChange}
-                      className="w-full px-6 py-4 border border-gray-300 rounded-xl" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Race Website / Registration URL</label>
+                    <input
+                      type="url"
+                      name="raceUrl"
+                      value={formData.raceUrl}
+                      onChange={handleChange}
+                      placeholder="https://..."
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
+                    />
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-lg font-bold text-brand-dark mb-3">Expected Participants</label>
+                      <input
+                        type="number"
+                        min="0"
+                        name="expectedParticipants"
+                        value={formData.expectedParticipants}
+                        onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-lg font-bold text-brand-dark mb-3">Event Date (approx)</label>
+                      <input
+                        type="date"
+                        name="eventDate"
+                        value={formData.eventDate}
+                        onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -246,37 +304,63 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
 
             {/* Apparel */}
             {inquiryType === 'apparel' && (
-              <div className="space-y-8 p-6 bg-gemini-blue/5 rounded-2xl">
-                <h3 className="text-2xl font-bold text-gemini-dark-gray">Quantities</h3>
-                <div className="grid md:grid-cols-3 gap-6">
+              <div className="p-8 bg-primary/5 rounded-3xl border border-primary/20">
+                <h3 className="text-2xl font-bold text-brand-dark mb-6">Custom Item Order</h3>
+
+                <div className="grid md:grid-cols-3 gap-8 mb-10">
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Custom Bibs</label>
-                    <input type="number" min="0" name="bibQuantity" value={formData.bibQuantity} onChange={handleChange}
-                      className="w-full px-6 py-4 border border-gray-300 rounded-xl" placeholder="0" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Custom Bibs</label>
+                    <input
+                      type="number"
+                      min="0"
+                      name="bibQuantity"
+                      value={formData.bibQuantity}
+                      onChange={handleChange}
+                      placeholder="0"
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center"
+                    />
                   </div>
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Finisher Medals</label>
-                    <input type="number" min="0" name="medalQuantity" value={formData.medalQuantity} onChange={handleChange}
-                      className="w-full px-6 py-4 border border-gray-300 rounded-xl" placeholder="0" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Finisher Medals</label>
+                    <input
+                      type="number"
+                      min="0"
+                      name="medalQuantity"
+                      value={formData.medalQuantity}
+                      onChange={handleChange}
+                      placeholder="0"
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center"
+                    />
                   </div>
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Event Shirts</label>
-                    <input type="number" min="0" name="shirtQuantity" value={formData.shirtQuantity} onChange={handleChange}
-                      className="w-full px-6 py-4 border border-gray-300 rounded-xl" placeholder="0" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Event Shirts</label>
+                    <input
+                      type="number"
+                      min="0"
+                      name="shirtQuantity"
+                      value={formData.shirtQuantity}
+                      onChange={handleChange}
+                      placeholder="0"
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center"
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-8">
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Bibs Artwork (PDF, AI, PNG, etc.)</label>
-                    <input type="file" multiple onChange={(e) => handleFileChange('bibs', e)}
-                      className="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-800 hover:file:bg-gray-200" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Bibs Artwork (PDF, AI, PNG, etc.)</label>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => handleFileChange('bibs', e)}
+                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition"
+                    />
                     {files.bibs.length > 0 && (
                       <div className="mt-4 space-y-2">
                         {files.bibs.map((file, i) => (
-                          <div key={i} className="flex items-center justify-between bg-gray-100 p-3 rounded-lg">
-                            <span className="truncate text-sm">{file.filename}</span>
-                            <button type="button" onClick={() => removeFile('bibs', i)} className="text-red-600 hover:underline text-sm">Remove</button>
+                          <div key={i} className="flex items-center justify-between bg-gray-100 p-4 rounded-xl">
+                            <span className="text-sm truncate">{file.filename}</span>
+                            <button type="button" onClick={() => removeFile('bibs', i)} className="text-primary hover:underline text-sm font-bold">Remove</button>
                           </div>
                         ))}
                       </div>
@@ -284,15 +368,19 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
                   </div>
 
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Medals Artwork</label>
-                    <input type="file" multiple onChange={(e) => handleFileChange('medals', e)}
-                      className="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-800 hover:file:bg-gray-200" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Medals Artwork</label>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => handleFileChange('medals', e)}
+                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition"
+                    />
                     {files.medals.length > 0 && (
                       <div className="mt-4 space-y-2">
                         {files.medals.map((file, i) => (
-                          <div key={i} className="flex items-center justify-between bg-gray-100 p-3 rounded-lg">
-                            <span className="truncate text-sm">{file.filename}</span>
-                            <button type="button" onClick={() => removeFile('medals', i)} className="text-red-600 hover:underline text-sm">Remove</button>
+                          <div key={i} className="flex items-center justify-between bg-gray-100 p-4 rounded-xl">
+                            <span className="text-sm truncate">{file.filename}</span>
+                            <button type="button" onClick={() => removeFile('medals', i)} className="text-primary hover:underline text-sm font-bold">Remove</button>
                           </div>
                         ))}
                       </div>
@@ -300,15 +388,19 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
                   </div>
 
                   <div>
-                    <label className="block text-lg font-semibold mb-2">Shirts Artwork</label>
-                    <input type="file" multiple onChange={(e) => handleFileChange('shirts', e)}
-                      className="block w-full text-sm text-gray-700 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-800 hover:file:bg-gray-200" />
+                    <label className="block text-lg font-bold text-brand-dark mb-3">Shirts Artwork</label>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => handleFileChange('shirts', e)}
+                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition"
+                    />
                     {files.shirts.length > 0 && (
                       <div className="mt-4 space-y-2">
                         {files.shirts.map((file, i) => (
-                          <div key={i} className="flex items-center justify-between bg-gray-100 p-3 rounded-lg">
-                            <span className="truncate text-sm">{file.filename}</span>
-                            <button type="button" onClick={() => removeFile('shirts', i)} className="text-red-600 hover:underline text-sm">Remove</button>
+                          <div key={i} className="flex items-center justify-between bg-gray-100 p-4 rounded-xl">
+                            <span className="text-sm truncate">{file.filename}</span>
+                            <button type="button" onClick={() => removeFile('shirts', i)} className="text-primary hover:underline text-sm font-bold">Remove</button>
                           </div>
                         ))}
                       </div>
@@ -316,32 +408,44 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
                   </div>
                 </div>
 
-                <p className="text-center text-gray-600 italic">
-                  Don’t have artwork ready? No problem! We offer professional graphic design services — just let us know your vision.
+                <p className="text-center text-brand-dark italic mt-8 text-lg">
+                  Don’t have artwork ready? No problem — we offer professional graphic design services. Just describe your vision!
                 </p>
               </div>
             )}
 
+            {/* Message */}
             <div>
-              <label className="block text-lg font-semibold text-gemini-dark-gray mb-2">Message *</label>
-              <textarea required name="message" rows={8} value={formData.message} onChange={handleChange}
-                className="w-full px-6 py-4 border border-gray-300 rounded-xl focus:outline-none focus:border-gemini-blue resize-none" />
+              <label className="block text-xl font-bold text-brand-dark mb-3">Your Message *</label>
+              <textarea
+                required
+                name="message"
+                rows={8}
+                value={formData.message}
+                onChange={handleChange}
+                className="w-full px-8 py-6 text-lg border-2 border-gray-200 rounded-3xl focus:outline-none focus:border-primary resize-none"
+              />
             </div>
 
-            <div className="text-center">
-              <button type="submit" disabled={status === 'sending'}
-                className="px-16 py-6 bg-gemini-blue text-white text-2xl font-bold rounded-full hover:bg-gemini-blue/90 shadow-2xl transition disabled:opacity-70">
+            {/* Submit */}
+            <div className="text-center pt-6">
+              <button
+                type="submit"
+                disabled={status === 'sending'}
+                className="px-20 py-7 bg-primary text-white text-3xl font-black rounded-full hover:bg-primary/90 shadow-2xl transition disabled:opacity-70 transform hover:scale-105"
+              >
                 {status === 'sending' ? 'Sending...' : 'Send Message'}
               </button>
             </div>
 
+            {/* Status */}
             {status === 'success' && (
-              <div className="text-center text-2xl font-bold text-green-600">
-                Thank you! Your message has been sent. We'll get back to you soon.
+              <div className="text-center text-3xl font-bold text-green-600 animate-pulse">
+                Thank you! Your message has been sent. We'll reply soon.
               </div>
             )}
             {status === 'error' && (
-              <div className="text-center text-2xl font-bold text-red-600">
+              <div className="text-center text-3xl font-bold text-primary">
                 Error: {errorMsg}
               </div>
             )}
