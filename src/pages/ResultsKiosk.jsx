@@ -1,4 +1,6 @@
-// src/pages/ResultsKiosk.jsx (FIXED — Compatible with new RaceContext results object)
+// src/pages/ResultsKiosk.jsx
+// FINAL – December 2025 Rebrand + Compatible with new RaceContext (finishers/nonFinishers)
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Confetti from 'react-confetti';
@@ -10,7 +12,7 @@ export default function ResultsKiosk() {
   const navigate = useNavigate();
   const {
     events = [],
-    results,                    // ← Now { finishers: [], nonFinishers: [] }
+    results,
     selectedEvent,
     setSelectedEvent,
     masterGroups = {},
@@ -29,7 +31,7 @@ export default function ResultsKiosk() {
   const AUTO_RESET_SECONDS = 10;
   const ACCESS_PIN = import.meta.env.VITE_KIOSK_ACCESS_PIN || 'gemini2025';
 
-  // Combine finishers + non-finishers for search (both are valid participants)
+  // Combine finishers + non-finishers for search
   const allParticipants = [
     ...(results?.finishers || []),
     ...(results?.nonFinishers || [])
@@ -46,7 +48,7 @@ export default function ResultsKiosk() {
   const masterKey = getMasterKeyForEvent();
   const logoUrl = masterKey ? eventLogos[masterKey] || null : null;
 
-  // Results URL for QR
+  // QR Code URL
   const getResultsUrl = () => {
     if (!masterKey || !selectedEvent?.start_time) return 'https://gemini-results.vercel.app/results';
     const year = new Date(selectedEvent.start_time * 1000).getFullYear();
@@ -60,7 +62,7 @@ export default function ResultsKiosk() {
 
   const getEventDisplayName = () => selectedEvent?.name || 'Race Results';
 
-  // Search logic — now uses combined allParticipants
+  // Search
   const performSearch = (query) => {
     if (!query.trim()) {
       setMatches([]);
@@ -130,10 +132,10 @@ export default function ResultsKiosk() {
   // === ACCESS PIN STAGE ===
   if (stage === 'access-pin') {
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center p-8">
-        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-12 max-w-lg w-full text-center border-4 border-white">
+      <div className="fixed inset-0 bg-gradient-to-br from-brand-red to-brand-red/80 flex items-center justify-center p-8">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-12 max-w-lg w-full text-center border-8 border-white">
           <h1 className="text-5xl font-black text-brand-dark mb-10">Timing Team Access</h1>
-          <p className="text-2xl text-gray-700 mb-10">Enter Access Pin to configure kiosk</p>
+          <p className="text-2xl text-text-muted mb-10">Enter Access Pin to configure kiosk</p>
           <input
             id="access-pin-input"
             type="password"
@@ -145,7 +147,7 @@ export default function ResultsKiosk() {
                 setStage('event-select');
               }
             }}
-            className="w-full text-6xl text-center tracking-widest px-10 py-8 border-8 border-primary rounded-3xl mb-10 focus:outline-none focus:ring-8 focus:ring-primary/30"
+            className="w-full text-6xl text-center tracking-widest px-10 py-8 border-8 border-brand-red rounded-3xl mb-10 focus:outline-none focus:ring-8 focus:ring-brand-red/30"
             autoFocus
           />
           <button
@@ -158,7 +160,7 @@ export default function ResultsKiosk() {
                 setAccessPinInput('');
               }
             }}
-            className="px-20 py-8 bg-primary text-white text-4xl font-black rounded-full hover:scale-110 transition shadow-2xl"
+            className="px-20 py-8 bg-brand-red text-white text-4xl font-black rounded-full hover:scale-110 transition shadow-2xl"
           >
             Enter
           </button>
@@ -171,8 +173,8 @@ export default function ResultsKiosk() {
   if (stage === 'event-select') {
     const sortedEvents = [...events].sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
     return (
-      <div className="fixed inset-0 bg-brand-light flex flex-col">
-        <div className="bg-primary text-white p-10 text-center shadow-2xl">
+      <div className="fixed inset-0 bg-bg-light flex flex-col">
+        <div className="bg-brand-red text-white p-10 text-center shadow-2xl">
           <h1 className="text-5xl font-black">Select Event for Kiosk</h1>
         </div>
         <div className="flex-1 overflow-y-auto p-10">
@@ -195,24 +197,24 @@ export default function ResultsKiosk() {
                       setSelectedEvent(event);
                       setStage('kiosk');
                     }}
-                    className="bg-white rounded-3xl shadow-2xl p-12 hover:shadow-3xl hover:scale-105 transition-all duration-300 border-4 border-primary/20"
+                    className="bg-white rounded-3xl shadow-2xl p-12 hover:shadow-3xl hover:scale-105 transition-all duration-300 border-8 border-brand-turquoise/30"
                   >
                     {eventLogo && (
                       <img
                         src={eventLogo}
-                        alt="Logo"
-                        className="max-h-40 mx-auto mb-8 object-contain drop-shadow-xl"
+                        alt="Event Logo"
+                        className="max-h-40 mx-auto mb-8 object-contain drop-shadow-2xl"
                       />
                     )}
                     <h3 className="text-3xl font-black text-brand-dark mb-6">{event.name}</h3>
-                    <p className="text-2xl text-gray-600 mb-4">
+                    <p className="text-2xl text-text-muted mb-6">
                       {new Date(event.start_time * 1000).toLocaleDateString('en-US', {
                         month: 'long',
                         day: 'numeric',
                         year: 'numeric',
                       })}
                     </p>
-                    <p className="text-xl font-bold text-primary">
+                    <p className="text-xl font-bold text-brand-red">
                       Tap to Load Results
                     </p>
                   </button>
@@ -231,19 +233,19 @@ export default function ResultsKiosk() {
       {showConfetti && (
         <Confetti
           recycle={false}
-          numberOfPieces={500}
+          numberOfPieces={600}
           gravity={0.15}
-          colors={['#B22222', '#48D1CC', '#FFD700', '#FF6B6B']}
+          colors={['#B22222', '#48D1CC', '#FFFFFF', '#FFD700']}
         />
       )}
-      <div className="fixed inset-0 bg-gradient-to-br from-primary to-primary/90 flex flex-col items-center justify-center text-white p-8 relative overflow-hidden">
+      <div className="fixed inset-0 bg-gradient-to-br from-brand-red to-brand-red/90 flex flex-col items-center justify-center text-text-light p-8 relative overflow-hidden">
         {/* Header */}
         <div className="text-center mb-12 z-10">
           {logoUrl && (
             <img
               src={logoUrl}
               alt="Event Logo"
-              className="mx-auto max-h-48 mb-10 object-contain drop-shadow-2xl"
+              className="mx-auto max-h-56 mb-10 object-contain drop-shadow-2xl"
             />
           )}
           <h1 className="text-6xl md:text-8xl font-black drop-shadow-2xl">
@@ -263,7 +265,7 @@ export default function ResultsKiosk() {
           <div className="text-6xl font-bold animate-pulse">Loading results...</div>
         )}
 
-        {/* Search */}
+        {/* Search Input */}
         {!participant && matches.length === 0 && !loadingResults && (
           <div className="w-full max-w-4xl z-10">
             <p className="text-4xl md:text-5xl text-center mb-12 font-light drop-shadow-lg">
@@ -276,13 +278,13 @@ export default function ResultsKiosk() {
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && performSearch(searchTerm)}
               placeholder="Enter bib or name..."
-              className="w-full text-6xl md:text-8xl text-center bg-white/20 backdrop-blur-xl border-8 border-white/60 rounded-3xl py-12 px-12 text-white placeholder-white/70 focus:outline-none focus:border-white focus:ring-8 focus:ring-white/30 shadow-2xl"
+              className="w-full text-6xl md:text-8xl text-center bg-white/20 backdrop-blur-xl border-8 border-white/60 rounded-3xl py-12 px-12 placeholder-white/70 focus:outline-none focus:border-white focus:ring-8 focus:ring-white/30 shadow-2xl"
               autoFocus
             />
             <div className="text-center mt-16">
               <button
                 onClick={() => performSearch(searchTerm)}
-                className="px-24 py-12 bg-white text-primary text-6xl font-black rounded-full hover:scale-110 transition shadow-2xl"
+                className="px-24 py-12 bg-white text-brand-red text-6xl font-black rounded-full hover:scale-110 transition shadow-2xl"
               >
                 GO!
               </button>
@@ -301,15 +303,15 @@ export default function ResultsKiosk() {
                 <button
                   key={i}
                   onClick={() => selectParticipant(p)}
-                  className="bg-white/95 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-16 hover:scale-110 transition-all duration-300 border-8 border-primary/30"
+                  className="bg-white/95 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-16 hover:scale-110 transition-all duration-300 border-8 border-brand-turquoise"
                 >
                   <div className="text-6xl md:text-7xl font-black mb-6">
                     {p.first_name} {p.last_name}
                   </div>
-                  <div className="text-5xl md:text-6xl text-primary font-black">
+                  <div className="text-5xl md:text-6xl text-brand-red font-black">
                     Bib #{p.bib}
                   </div>
-                  <div className="mt-12 text-3xl text-gray-600 flex items-center justify-center gap-6">
+                  <div className="mt-12 text-3xl text-text-muted flex items-center justify-center gap-6">
                     Tap here <span className="text-6xl">→</span>
                   </div>
                 </button>
@@ -318,7 +320,7 @@ export default function ResultsKiosk() {
             <div className="text-center mt-20">
               <button
                 onClick={resetToSearch}
-                className="px-20 py-8 bg-brand-dark text-white text-4xl font-black rounded-full hover:bg-brand-dark/90 transition shadow-2xl"
+                className="px-20 py-8 bg-brand-dark text-white text-4xl font-black rounded-full hover:opacity-90 transition shadow-2xl"
               >
                 ← Back to Search
               </button>
@@ -326,30 +328,32 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Single Participant Result */}
+        {/* Participant Result Card */}
         {participant && typeof participant === 'object' && (
-          <div className="bg-white/95 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-12 max-w-4xl w-full text-center border-8 border-primary/30 z-10">
-            <div className="text-7xl md:text-9xl font-black text-primary mb-8 drop-shadow-2xl">
+          <div className="bg-white/96 backdrop-blur-2xl text-brand-dark rounded-3xl shadow-2xl p-12 max-w-4xl w-full text-center border-8 border-brand-turquoise z-10">
+            <div className="text-8xl md:text-9xl font-black text-brand-red mb-8 drop-shadow-2xl">
               #{formatPlace(participant.place || '—')}
             </div>
             <h2 className="text-5xl md:text-7xl font-black mb-6">
               {participant.first_name} {participant.last_name}
             </h2>
-            <p className="text-3xl md:text-4xl text-gray-600 mb-12">Bib #{participant.bib}</p>
+            <p className="text-3xl md:text-4xl text-text-muted mb-12">Bib #{participant.bib}</p>
+
             <div className="grid grid-cols-2 gap-12 text-3xl md:text-4xl mb-16">
-              <div className="bg-primary/10 rounded-3xl py-10 shadow-xl">
-                <div className="font-black text-primary text-5xl md:text-6xl">
+              <div className="bg-brand-red/10 rounded-3xl py-10 shadow-xl">
+                <div className="font-black text-brand-red text-5xl md:text-6xl">
                   {formatTime(participant.chip_time)}
                 </div>
-                <div className="text-gray-700 mt-4 text-xl">Chip Time</div>
+                <div className="text-text-muted mt-4 text-xl">Chip Time</div>
               </div>
-              <div className="bg-brand-light rounded-3xl py-10 shadow-xl">
+              <div className="bg-brand-turquoise/10 rounded-3xl py-10 shadow-xl">
                 <div className="font-black text-brand-dark text-5xl md:text-6xl">
                   {participant.pace || '—'}
                 </div>
-                <div className="text-gray-700 mt-4 text-xl">Pace</div>
+                <div className="text-text-muted mt-4 text-xl">Pace</div>
               </div>
             </div>
+
             <div className="text-3xl md:text-4xl space-y-6 mb-16">
               <p>
                 <strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}
@@ -360,15 +364,17 @@ export default function ResultsKiosk() {
                 </p>
               )}
               {participant._status === 'DNF' && (
-                <p className="text-red-600 font-bold text-4xl">Did Not Finish</p>
+                <p className="text-brand-red font-bold text-5xl">Did Not Finish</p>
               )}
             </div>
+
+            {/* QR Code */}
             <div className="mb-12">
               <p className="text-3xl font-black mb-8">Scan for Full Results</p>
-              <div className="mx-auto w-64 h-64 bg-white p-8 rounded-3xl shadow-2xl border-8 border-primary/20">
-                <QRCode value={getResultsUrl()} size={224} level="H" fgColor="#B22222" />
+              <div className="mx-auto w-72 h-72 bg-white p-10 rounded-3xl shadow-2xl border-8 border-brand-turquoise/50">
+                <QRCode value={getResultsUrl()} size={256} level="H" fgColor="#B22222" />
               </div>
-              <p className="text-2xl mt-8 text-gray-600">Scan with your phone</p>
+              <p className="text-2xl mt-8 text-text-light/90">Scan with your phone</p>
             </div>
           </div>
         )}
@@ -380,13 +386,13 @@ export default function ResultsKiosk() {
             <h2 className="text-6xl md:text-8xl font-black mb-10 drop-shadow-2xl">
               No Results Found Yet
             </h2>
-            <p className="text-4xl md:text-5xl leading-relaxed mb-16">
+            <p className="text-4xl md:text-5xl leading-relaxed mb-16 opacity-90">
               Results may still be syncing!<br />
               Please check with timing staff nearby.
             </p>
             <button
               onClick={resetToSearch}
-              className="px-24 py-12 bg-white text-primary text-6xl font-black rounded-full hover:scale-110 transition shadow-2xl"
+              className="px-24 py-12 bg-white text-brand-red text-6xl font-black rounded-full hover:scale-110 transition shadow-2xl"
             >
               Search Again
             </button>
