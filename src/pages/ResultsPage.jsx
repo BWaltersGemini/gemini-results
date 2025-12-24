@@ -1,10 +1,13 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Fixed: "Show Top 5" now correctly shows the actual top 5 overall finishers
-// • Removed Age Group breakdowns section
-// • NEW: Filter bar with "Race" and "Age Group" dropdowns (age groups dynamically update per selected race)
-// • Year selector now uses clean buttons instead of dropdown
-// • All other features preserved: pagination, DNF, live updates, search, mobile support
+// • Races are now properly separated into individual tables (e.g., Sprint Triathlon, 5K, 10K)
+// • Each race has its own "Overall Results" with correct race-specific place ranking
+// • Top 5 / View All + full pagination per race
+// • Filters: Race dropdown + Age Group dropdown (dynamic per selected race)
+// • Year buttons instead of dropdown
+// • Fixed sorting — top 5 always shows true race leaders
+// • DNF per race
+// • Clean, professional UX
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -21,7 +24,6 @@ export default function ResultsPage() {
     events = [],
     results = { finishers: [], nonFinishers: [] },
     loadingResults,
-    uniqueDivisions = [],
     eventLogos = {},
     ads = [],
     setSelectedEvent,
@@ -38,13 +40,13 @@ export default function ResultsPage() {
   const [highlightedBib, setHighlightedBib] = useState(location.state?.highlightBib || null);
 
   // Filters
-  const [selectedRaceId, setSelectedRaceId] = useState('all'); // 'all' or specific race_id
-  const [selectedDivision, setSelectedDivision] = useState('all'); // 'all' or division name
+  const [selectedRaceId, setSelectedRaceId] = useState('all');
+  const [selectedDivision, setSelectedDivision] = useState('all');
 
   // Per-race state
-  const [expandedRaces, setExpandedRaces] = useState({});              // Top 5 vs View All (overall)
+  const [expandedRaces, setExpandedRaces] = useState({});        // { race_id: true/false } for Top 5 vs View All
   const [expandedDnfSections, setExpandedDnfSections] = useState({});
-  const [racePagination, setRacePagination] = useState({});
+  const [racePagination, setRacePagination] = useState({});      // { race_id: { currentPage, pageSize } }
 
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
@@ -85,9 +87,7 @@ export default function ResultsPage() {
   useEffect(() => {
     setExpandedRaces({});
     setRacePagination({});
-    setSelectedRaceId('all');
-    setSelectedDivision('all');
-  }, [searchQuery]);
+  }, [searchQuery, selectedRaceId, selectedDivision]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -158,95 +158,35 @@ export default function ResultsPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // ====================== GLOBAL DATA & FILTERING ======================
-  const allParticipants = useMemo(() => [
-    ...results.finishers,
-    ...results.nonFinishers
-  ], [results.finishers, results.nonFinishers]);
-
-  const globalFilteredResults = useMemo(() => {
-    if (!searchQuery) return allParticipants;
-    const lowerQuery = searchQuery.toLowerCase();
-    return allParticipants.filter(r =>
-      r.bib?.toString().includes(searchQuery) ||
-      `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
-    );
-  }, [searchQuery, allParticipants]);
-
+  // ====================== DATA & FILTERING ======================
   const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
 
-  // Apply filters: race + division
-  const filteredFinishers = useMemo(() => {
-    let filtered = results.finishers;
+  // Races to display based on raceSlug or filters
+  let displayedRaces = embeddedRaces;
 
-    if (selectedRaceId !== 'all') {
-      filtered = filtered.filter(r => r.race_id === selectedRaceId);
-    }
+  if (raceSlug) {
+    displayedRaces = displayedRaces.filter((race) => slugify(race.race_name || '') === raceSlug);
+  }
 
-    if (selectedDivision !== 'all') {
-      filtered = filtered.filter(r => r.age_group_name === selectedDivision);
-    }
+  if (selectedRaceId !== 'all') {
+    displayedRaces = displayedRaces.filter((race) => race.race_id === selectedRaceId);
+  }
 
-    // Apply search on top
-    if (searchQuery) {
-      const lowerQuery = searchQuery.toLowerCase();
-      filtered = filtered.filter(r =>
-        r.bib?.toString().includes(searchQuery) ||
-        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
-      );
-    }
-
-    return filtered;
-  }, [results.finishers, selectedRaceId, selectedDivision, searchQuery]);
-
-  const filteredNonFinishers = useMemo(() => {
-    let filtered = results.nonFinishers;
-
-    if (selectedRaceId !== 'all') {
-      filtered = filtered.filter(r => r.race_id === selectedRaceId);
-    }
-
-    if (searchQuery) {
-      const lowerQuery = searchQuery.toLowerCase();
-      filtered = filtered.filter(r =>
-        r.bib?.toString().includes(searchQuery) ||
-        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
-      );
-    }
-
-    return filtered;
-  }, [results.nonFinishers, selectedRaceId, searchQuery]);
-
-  // Sort overall finishers by place (critical fix!)
-  const sortedFinishers = useMemo(() => {
-    return [...filteredFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-  }, [filteredFinishers]);
-
-  // Current race for dynamic age groups
-  const currentRace = selectedRaceId === 'all'
-    ? null
-    : embeddedRaces.find(r => r.race_id === selectedRaceId);
-
-  // Available divisions for selected race (or all if 'all')
+  // Available divisions for the selected race (or all if 'all')
   const availableDivisions = useMemo(() => {
-    if (selectedRaceId === 'all') {
-      return [...new Set(results.finishers.map(r => r.age_group_name).filter(Boolean))].sort();
-    }
-    if (!currentRace) return [];
-    return [...new Set(
-      results.finishers
-        .filter(r => r.race_id === selectedRaceId)
-        .map(r => r.age_group_name)
-        .filter(Boolean)
-    )].sort();
+    const relevantFinishers = selectedRaceId === 'all'
+      ? results.finishers
+      : results.finishers.filter(r => r.race_id === selectedRaceId);
+
+    return [...new Set(relevantFinishers.map(r => r.age_group_name).filter(Boolean))].sort();
   }, [results.finishers, selectedRaceId]);
 
-  // Reset division when race changes
+  // Reset division if invalid after race change
   useEffect(() => {
-    if (selectedRaceId !== 'all' && !availableDivisions.includes(selectedDivision)) {
+    if (selectedDivision !== 'all' && !availableDivisions.includes(selectedDivision)) {
       setSelectedDivision('all');
     }
-  }, [selectedRaceId, availableDivisions, selectedDivision]);
+  }, [availableDivisions, selectedDivision]);
 
   const currentMasterKey = Object.keys(masterGroups).find(key =>
     masterGroups[key]?.includes(String(selectedEvent?.id))
@@ -255,10 +195,6 @@ export default function ResultsPage() {
   const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
   const fallbackLogo = eventLogos[selectedEvent?.id];
   const displayLogo = masterLogo || fallbackLogo;
-
-  const totalFinishers = filteredFinishers.length;
-  const maleFinishers = filteredFinishers.filter(r => r.gender === 'M').length;
-  const femaleFinishers = filteredFinishers.filter(r => r.gender === 'F').length;
 
   let availableYears = [];
   if (currentMasterKey) {
@@ -282,13 +218,13 @@ export default function ResultsPage() {
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const raceSlugPart = slugify(raceName);
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
-      state: { participant, selectedEvent, results: allParticipants },
+      state: { participant, selectedEvent, results: { finishers: results.finishers, nonFinishers: results.nonFinishers } },
     });
   };
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  // Master landing tiles
+  // Master landing tiles (unchanged)
   const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
   const masterEventTiles = visibleMasters
     .map((storedKey) => {
@@ -379,25 +315,6 @@ export default function ResultsPage() {
     );
   }
 
-  const isOverallExpanded = expandedRaces['overall'] ?? false;
-  const pag = racePagination['overall'] || { currentPage: 1, pageSize: 50 };
-
-  const updatePage = (newPage) => {
-    if (newPage > 1 && !isOverallExpanded) {
-      setExpandedRaces(prev => ({ ...prev, overall: true }));
-    }
-    setRacePagination(prev => ({ ...prev, overall: { ...prev.overall, currentPage: newPage } }));
-  };
-
-  const updatePageSize = (newSize) => {
-    setRacePagination(prev => ({ ...prev, overall: { currentPage: 1, pageSize: newSize } }));
-    if (!isOverallExpanded) {
-      setExpandedRaces(prev => ({ ...prev, overall: true }));
-    }
-  };
-
-  const displayFinishers = isOverallExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
       {liveToast && (
@@ -415,7 +332,7 @@ export default function ResultsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by bib or name (includes DNFs)..."
+              placeholder="Search by bib or name..."
               className="w-full px-6 py-4 text-xl placeholder-gray-500 border-0 focus:outline-none text-brand-dark"
             />
             {searchQuery && (
@@ -447,9 +364,7 @@ export default function ResultsPage() {
                 key={y}
                 onClick={() => handleYearChange(y)}
                 className={`px-8 py-4 rounded-full font-bold text-lg transition shadow-lg ${
-                  y === year
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  y === year ? 'bg-primary text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
                 {y}
@@ -493,95 +408,152 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        {/* Stats */}
-        {totalFinishers > 0 && (
-          <div className="grid grid-cols-3 gap-8 max-w-3xl mx-auto mb-16 text-center">
-            <div className="bg-white rounded-2xl shadow-lg py-6">
-              <div className="text-4xl font-bold text-primary">{totalFinishers}</div>
-              <div className="text-gray-600">Official Finishers</div>
-            </div>
-            <div className="bg-white rounded-2xl shadow-lg py-6">
-              <div className="text-4xl font-bold text-primary">{maleFinishers}</div>
-              <div className="text-gray-600">Male</div>
-            </div>
-            <div className="bg-white rounded-2xl shadow-lg py-6">
-              <div className="text-4xl font-bold text-primary">{femaleFinishers}</div>
-              <div className="text-gray-600">Female</div>
-            </div>
-          </div>
-        )}
-
-        {/* Overall Results */}
+        {/* Race Results — Separated Tables */}
         <div ref={resultsSectionRef}>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-6">
-            <h2 className="text-4xl font-bold text-brand-dark">Overall Results</h2>
-            <div className="flex flex-wrap items-center gap-4">
-              <span className="text-lg text-gray-600">
-                {sortedFinishers.length} finisher{sortedFinishers.length !== 1 ? 's' : ''}
-              </span>
-              {sortedFinishers.length > 5 && (
-                <button
-                  onClick={() => {
-                    setExpandedRaces(prev => ({ ...prev, overall: !prev.overall }));
-                    if (isOverallExpanded) {
-                      setRacePagination(prev => ({ ...prev, overall: { currentPage: 1, pageSize: 50 } }));
-                    }
-                  }}
-                  className={`px-8 py-4 rounded-full font-bold transition shadow-xl ${
-                    isOverallExpanded ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-primary text-white hover:bg-primary/90'
-                  }`}
-                >
-                  {isOverallExpanded ? 'Show Top 5' : `View All (${sortedFinishers.length})`}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {sortedFinishers.length > 0 ? (
-            <ResultsTable
-              data={displayFinishers}
-              totalResults={sortedFinishers.length}
-              currentPage={pag.currentPage}
-              setCurrentPage={updatePage}
-              pageSize={pag.pageSize}
-              setPageSize={updatePageSize}
-              onNameClick={handleNameClick}
-              isMobile={window.innerWidth < 768}
-              highlightedBib={highlightedBib}
-            />
-          ) : (
+          {displayedRaces.length === 0 ? (
             <div className="text-center py-32">
               <div className="text-6xl mb-8">🏁</div>
-              <h2 className="text-4xl font-bold text-brand-dark mb-6">No Results Match Current Filters</h2>
-              <p className="text-2xl text-gray-600">Try adjusting race, age group, or search.</p>
+              <h2 className="text-4xl font-bold text-brand-dark mb-6">No Races Match Current Filters</h2>
+              <p className="text-2xl text-gray-600">Try adjusting the race filter.</p>
             </div>
-          )}
+          ) : (
+            displayedRaces.map((race) => {
+              const raceId = race.race_id;
+              const isExpanded = expandedRaces[raceId] ?? false;
 
-          {/* DNF Section */}
-          {filteredNonFinishers.length > 0 && (
-            <div className="mt-16">
-              <button
-                onClick={() => setExpandedDnfSections(prev => ({ ...prev, overall: !prev.overall }))}
-                className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold text-xl py-5 px-8 rounded-2xl transition flex items-center justify-between shadow-lg"
-              >
-                <span>Did Not Finish ({filteredNonFinishers.length})</span>
-                <span className="text-3xl">{expandedDnfSections.overall ? '−' : '+'}</span>
-              </button>
-              {expandedDnfSections.overall && (
-                <div className="mt-8">
-                  <ResultsTable
-                    data={filteredNonFinishers}
-                    onNameClick={handleNameClick}
-                    isMobile={window.innerWidth < 768}
-                    highlightedBib={highlightedBib}
-                    isDnfTable={true}
-                  />
-                  <p className="text-center text-gray-600 mt-6 text-sm">
-                    These athletes started but did not officially finish the full course.
-                  </p>
-                </div>
-              )}
-            </div>
+              // Finishers for this race
+              let raceFinishers = results.finishers.filter(r => r.race_id === raceId);
+
+              // Apply division filter
+              if (selectedDivision !== 'all') {
+                raceFinishers = raceFinishers.filter(r => r.age_group_name === selectedDivision);
+              }
+
+              // Apply search
+              if (searchQuery) {
+                const lowerQuery = searchQuery.toLowerCase();
+                raceFinishers = raceFinishers.filter(r =>
+                  r.bib?.toString().includes(searchQuery) ||
+                  `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
+                );
+              }
+
+              // Sort by place within this race
+              const sortedFinishers = [...raceFinishers].sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+
+              const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
+
+              // Pagination
+              const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
+              const updatePage = (newPage) => {
+                if (newPage > 1 && !isExpanded) {
+                  setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
+                }
+                setRacePagination(prev => ({
+                  ...prev,
+                  [raceId]: { ...prev[raceId], currentPage: newPage }
+                }));
+              };
+              const updatePageSize = (newSize) => {
+                setRacePagination(prev => ({
+                  ...prev,
+                  [raceId]: { currentPage: 1, pageSize: newSize }
+                }));
+                if (!isExpanded) {
+                  setExpandedRaces(prev => ({ ...prev, [raceId]: true }));
+                }
+              };
+
+              // DNF for this race
+              let raceDnf = results.nonFinishers.filter(r => r.race_id === raceId);
+              if (searchQuery) {
+                const lowerQuery = searchQuery.toLowerCase();
+                raceDnf = raceDnf.filter(r =>
+                  r.bib?.toString().includes(searchQuery) ||
+                  `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
+                );
+              }
+              const isDnfExpanded = expandedDnfSections[raceId];
+
+              return (
+                <section key={raceId} id={`race-${raceId}`} className="mb-32">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-6">
+                    <h2 className="text-4xl font-bold text-brand-dark">
+                      {editedEvents[selectedEvent.id]?.races?.[raceId] || race.race_name}
+                    </h2>
+
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className="text-lg text-gray-600">
+                        {sortedFinishers.length} finisher{sortedFinishers.length !== 1 ? 's' : ''}
+                      </span>
+                      {sortedFinishers.length > 5 && (
+                        <button
+                          onClick={() => {
+                            setExpandedRaces(prev => ({ ...prev, [raceId]: !prev[raceId] }));
+                            if (isExpanded) {
+                              setRacePagination(prev => ({
+                                ...prev,
+                                [raceId]: { currentPage: 1, pageSize: 50 }
+                              }));
+                            }
+                          }}
+                          className={`px-8 py-4 rounded-full font-bold transition shadow-xl ${
+                            isExpanded ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-primary text-white hover:bg-primary/90'
+                          }`}
+                        >
+                          {isExpanded ? 'Show Top 5' : `View All (${sortedFinishers.length})`}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {sortedFinishers.length > 0 ? (
+                    <ResultsTable
+                      data={displayFinishers}
+                      totalResults={sortedFinishers.length}
+                      currentPage={pag.currentPage}
+                      setCurrentPage={updatePage}
+                      pageSize={pag.pageSize}
+                      setPageSize={updatePageSize}
+                      onNameClick={handleNameClick}
+                      isMobile={window.innerWidth < 768}
+                      highlightedBib={highlightedBib}
+                    />
+                  ) : (
+                    <div className="text-center py-16 text-gray-500">
+                      <p className="text-2xl font-medium">No finishers match current filters in this race</p>
+                    </div>
+                  )}
+
+                  {/* DNF for this race */}
+                  {raceDnf.length > 0 && (
+                    <div className="mt-16">
+                      <button
+                        onClick={() => setExpandedDnfSections(prev => ({ ...prev, [raceId]: !prev[raceId] }))}
+                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold text-xl py-5 px-8 rounded-2xl transition flex items-center justify-between shadow-lg"
+                      >
+                        <span>Did Not Finish ({raceDnf.length})</span>
+                        <span className="text-3xl">{isDnfExpanded ? '−' : '+'}</span>
+                      </button>
+                      {isDnfExpanded && (
+                        <div className="mt-8">
+                          <ResultsTable
+                            data={raceDnf}
+                            onNameClick={handleNameClick}
+                            isMobile={window.innerWidth < 768}
+                            highlightedBib={highlightedBib}
+                            isDnfTable={true}
+                          />
+                          <p className="text-center text-gray-600 mt-6 text-sm">
+                            These athletes started but did not officially finish the full course.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+              );
+            })
           )}
         </div>
 
