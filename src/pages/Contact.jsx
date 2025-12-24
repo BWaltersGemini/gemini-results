@@ -143,8 +143,8 @@ export default function Contact() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          to: ['info@youkeepmoving.com'], // Change if you want multiple recipients
-          subject: `[YKM Contact] ${inquiryType.charAt(0).toUpperCase() + inquiryType.slice(1)} - ${formData.name}`,
+          to: ['info@geminitiming.com'], // Change if you want multiple recipients
+          subject: `[GRR Contact] ${inquiryType.charAt(0).toUpperCase() + inquiryType.slice(1)} - ${formData.name}`,
           html: htmlBody,
         }),
       });
