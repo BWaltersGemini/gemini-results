@@ -1,5 +1,5 @@
 // src/pages/Contact.jsx
-// FULLY RESTYLED — December 2025 Rebrand Compliant
+// FULLY RESTYLED — December 2025 Rebrand + Secure Email via /api/send-email
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useContext } from 'react';
@@ -92,67 +92,74 @@ export default function Contact() {
     setStatus('sending');
     setErrorMsg('');
 
-    const allAttachments = [
-      ...files.bibs.map(f => ({ ...f, filename: `bib_${f.filename}` })),
-      ...files.medals.map(f => ({ ...f, filename: `medal_${f.filename}` })),
-      ...files.shirts.map(f => ({ ...f, filename: `shirt_${f.filename}` }))
-    ];
+    // Build rich HTML email
+    const htmlBody = `
+      <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9; border-radius: 12px;">
+        <h1 style="color: #B22222; text-align: center;">New Contact Form Submission</h1>
+        <p><strong>Name:</strong> ${formData.name}</p>
+        <p><strong>Email:</strong> <a href="mailto:${formData.email}">${formData.email}</a></p>
+        <p><strong>Inquiry Type:</strong> ${inquiryType.charAt(0).toUpperCase() + inquiryType.slice(1)}</p>
+
+        ${inquiryType === 'results' ? `
+          <h2 style="color: #B22222; margin-top: 24px;">Results Question Details</h2>
+          <ul>
+            <li><strong>Event:</strong> ${formData.eventName}</li>
+            <li><strong>Bib:</strong> ${formData.bib || 'Not provided'}</li>
+            <li><strong>Name on Registration:</strong> ${formData.participantName || 'Not provided'}</li>
+          </ul>
+        ` : ''}
+
+        ${inquiryType === 'apparel' ? `
+          <h2 style="color: #B22222; margin-top: 24px;">Custom Items Order</h2>
+          <ul>
+            <li>Bib Quantity: ${formData.bibQuantity || '0'}</li>
+            <li>Medal Quantity: ${formData.medalQuantity || '0'}</li>
+            <li>Shirt Quantity: ${formData.shirtQuantity || '0'}</li>
+          </ul>
+          <p><em>Note: Artwork files were uploaded — check the form for details (attachments not forwarded yet).</em></p>
+        ` : ''}
+
+        ${['timing', 'marketing', 'registration'].includes(inquiryType) ? `
+          <h2 style="color: #B22222; margin-top: 24px;">Service Inquiry Details</h2>
+          <ul>
+            <li><strong>Race Name:</strong> ${formData.raceName || 'Not provided'}</li>
+            <li><strong>Expected Participants:</strong> ${formData.expectedParticipants || 'Not specified'}</li>
+            <li><strong>Event Date:</strong> ${formData.eventDate || 'Not specified'}</li>
+            <li><strong>Race URL:</strong> ${formData.raceUrl ? `<a href="${formData.raceUrl}">${formData.raceUrl}</a>` : 'Not provided'}</li>
+          </ul>
+        ` : ''}
+
+        <h2 style="color: #B22222; margin-top: 24px;">Message</h2>
+        <p style="background: white; padding: 16px; border-radius: 8px; border-left: 4px solid #48D1CC;">
+          ${formData.message.replace(/\n/g, '<br>')}
+        </p>
+      </div>
+    `;
 
     try {
-      const response = await fetch('https://api.resend.com/emails', {
+      const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_RESEND_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Contact Form <onboarding@resend.dev>',
-          to: ['info@youkeepmoving.com'],
-          reply_to: formData.email,
-          subject: `[YKM Inquiry] ${inquiryType === 'results' ? 'Results Question' : inquiryType.charAt(0).toUpperCase() + inquiryType.slice(1)} - ${formData.name}`,
-          text: `
-Name: ${formData.name}
-Email: ${formData.email}
-Inquiry Type: ${inquiryType}
-
-${inquiryType === 'results' ? `
-Event: ${formData.eventName}
-Bib: ${formData.bib}
-Participant Name: ${formData.participantName}
-` : ''}
-
-${inquiryType === 'apparel' ? `
-Bib Quantity: ${formData.bibQuantity || '0'}
-Medal Quantity: ${formData.medalQuantity || '0'}
-Shirt Quantity: ${formData.shirtQuantity || '0'}
-` : ''}
-
-${['timing', 'marketing', 'registration'].includes(inquiryType) ? `
-Race Name: ${formData.raceName}
-Expected Participants: ${formData.expectedParticipants}
-Event Date: ${formData.eventDate}
-Race Website/URL: ${formData.raceUrl}
-` : ''}
-
-Message:
-${formData.message}
-
-${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename).join(', ')}` : 'No attachments'}
-          `.trim(),
-          attachments: allAttachments.length > 0 ? allAttachments : undefined,
+          to: ['info@youkeepmoving.com'], // Change if you want multiple recipients
+          subject: `[YKM Contact] ${inquiryType.charAt(0).toUpperCase() + inquiryType.slice(1)} - ${formData.name}`,
+          html: htmlBody,
         }),
       });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || 'Failed to send');
+      if (response.ok) {
+        setStatus('success');
+        setTimeout(() => navigate('/'), 5000);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to send');
       }
-
-      setStatus('success');
-      setTimeout(() => navigate('/'), 5000);
     } catch (err) {
+      console.error('Form submit error:', err);
       setStatus('error');
-      setErrorMsg(err.message || 'Something went wrong');
+      setErrorMsg(err.message || 'Failed to send message. Please try again later.');
     }
   };
 
@@ -165,43 +172,25 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
 
         <div className="bg-white rounded-3xl shadow-2xl p-10 md:p-16 border border-primary/20">
           <form onSubmit={handleSubmit} className="space-y-10">
-            {/* Honeypot */}
             <input type="text" name="honeypot" value={formData.honeypot} onChange={handleChange} className="hidden" />
 
-            {/* Name & Email */}
             <div className="grid md:grid-cols-2 gap-8">
               <div>
                 <label className="block text-xl font-bold text-brand-dark mb-3">Your Name *</label>
-                <input
-                  required
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition"
-                />
+                <input required name="name" value={formData.name} onChange={handleChange}
+                  className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition" />
               </div>
               <div>
                 <label className="block text-xl font-bold text-brand-dark mb-3">Email *</label>
-                <input
-                  required
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition"
-                />
+                <input required type="email" name="email" value={formData.email} onChange={handleChange}
+                  className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition" />
               </div>
             </div>
 
-            {/* Inquiry Type */}
             <div>
               <label className="block text-xl font-bold text-brand-dark mb-3">What can we help you with? *</label>
-              <select
-                required
-                value={inquiryType}
-                onChange={(e) => setInquiryType(e.target.value)}
-                className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition bg-white"
-              >
+              <select required value={inquiryType} onChange={(e) => setInquiryType(e.target.value)}
+                className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition bg-white">
                 <option value="general">General Question</option>
                 <option value="results">Question About My Results</option>
                 <option value="timing">Race Timing Services</option>
@@ -212,149 +201,87 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
               </select>
             </div>
 
-            {/* Results Question */}
             {inquiryType === 'results' && (
               <div className="p-8 bg-primary/5 rounded-3xl border border-primary/20">
                 <h3 className="text-2xl font-bold text-brand-dark mb-6">Results Inquiry Details</h3>
                 <div className="space-y-6">
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Event Name</label>
-                    <input
-                      name="eventName"
-                      value={formData.eventName}
-                      onChange={handleChange}
-                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
-                    />
+                    <input name="eventName" value={formData.eventName} onChange={handleChange}
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full" />
                   </div>
                   <div className="grid md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-lg font-bold text-brand-dark mb-3">Bib Number</label>
-                      <input
-                        name="bib"
-                        value={formData.bib}
-                        onChange={handleChange}
-                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
-                      />
+                      <input name="bib" value={formData.bib} onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full" />
                     </div>
                     <div>
                       <label className="block text-lg font-bold text-brand-dark mb-3">Your Name (as registered)</label>
-                      <input
-                        name="participantName"
-                        value={formData.participantName}
-                        onChange={handleChange}
-                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
-                      />
+                      <input name="participantName" value={formData.participantName} onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full" />
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Services Inquiries */}
             {['timing', 'marketing', 'registration'].includes(inquiryType) && (
               <div className="p-8 bg-primary/5 rounded-3xl border border-primary/20">
                 <h3 className="text-2xl font-bold text-brand-dark mb-6">Event Details</h3>
                 <div className="space-y-6">
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Race / Event Name</label>
-                    <input
-                      name="raceName"
-                      value={formData.raceName}
-                      onChange={handleChange}
-                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
-                    />
+                    <input name="raceName" value={formData.raceName} onChange={handleChange}
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full" />
                   </div>
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Race Website / Registration URL</label>
-                    <input
-                      type="url"
-                      name="raceUrl"
-                      value={formData.raceUrl}
-                      onChange={handleChange}
-                      placeholder="https://..."
-                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
-                    />
+                    <input type="url" name="raceUrl" value={formData.raceUrl} onChange={handleChange} placeholder="https://..."
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full" />
                   </div>
                   <div className="grid md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-lg font-bold text-brand-dark mb-3">Expected Participants</label>
-                      <input
-                        type="number"
-                        min="0"
-                        name="expectedParticipants"
-                        value={formData.expectedParticipants}
-                        onChange={handleChange}
-                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
-                      />
+                      <input type="number" min="0" name="expectedParticipants" value={formData.expectedParticipants} onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full" />
                     </div>
                     <div>
                       <label className="block text-lg font-bold text-brand-dark mb-3">Event Date (approx)</label>
-                      <input
-                        type="date"
-                        name="eventDate"
-                        value={formData.eventDate}
-                        onChange={handleChange}
-                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full"
-                      />
+                      <input type="date" name="eventDate" value={formData.eventDate} onChange={handleChange}
+                        className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full" />
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Apparel */}
             {inquiryType === 'apparel' && (
               <div className="p-8 bg-primary/5 rounded-3xl border border-primary/20">
                 <h3 className="text-2xl font-bold text-brand-dark mb-6">Custom Item Order</h3>
-
                 <div className="grid md:grid-cols-3 gap-8 mb-10">
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Custom Bibs</label>
-                    <input
-                      type="number"
-                      min="0"
-                      name="bibQuantity"
-                      value={formData.bibQuantity}
-                      onChange={handleChange}
-                      placeholder="0"
-                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center"
-                    />
+                    <input type="number" min="0" name="bibQuantity" value={formData.bibQuantity} onChange={handleChange} placeholder="0"
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center" />
                   </div>
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Finisher Medals</label>
-                    <input
-                      type="number"
-                      min="0"
-                      name="medalQuantity"
-                      value={formData.medalQuantity}
-                      onChange={handleChange}
-                      placeholder="0"
-                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center"
-                    />
+                    <input type="number" min="0" name="medalQuantity" value={formData.medalQuantity} onChange={handleChange} placeholder="0"
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center" />
                   </div>
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Event Shirts</label>
-                    <input
-                      type="number"
-                      min="0"
-                      name="shirtQuantity"
-                      value={formData.shirtQuantity}
-                      onChange={handleChange}
-                      placeholder="0"
-                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center"
-                    />
+                    <input type="number" min="0" name="shirtQuantity" value={formData.shirtQuantity} onChange={handleChange} placeholder="0"
+                      className="w-full px-8 py-5 text-lg border-2 border-gray-200 rounded-full text-center" />
                   </div>
                 </div>
 
                 <div className="space-y-8">
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Bibs Artwork (PDF, AI, PNG, etc.)</label>
-                    <input
-                      type="file"
-                      multiple
-                      onChange={(e) => handleFileChange('bibs', e)}
-                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition"
-                    />
+                    <input type="file" multiple onChange={(e) => handleFileChange('bibs', e)}
+                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition" />
                     {files.bibs.length > 0 && (
                       <div className="mt-4 space-y-2">
                         {files.bibs.map((file, i) => (
@@ -369,12 +296,8 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
 
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Medals Artwork</label>
-                    <input
-                      type="file"
-                      multiple
-                      onChange={(e) => handleFileChange('medals', e)}
-                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition"
-                    />
+                    <input type="file" multiple onChange={(e) => handleFileChange('medals', e)}
+                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition" />
                     {files.medals.length > 0 && (
                       <div className="mt-4 space-y-2">
                         {files.medals.map((file, i) => (
@@ -389,12 +312,8 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
 
                   <div>
                     <label className="block text-lg font-bold text-brand-dark mb-3">Shirts Artwork</label>
-                    <input
-                      type="file"
-                      multiple
-                      onChange={(e) => handleFileChange('shirts', e)}
-                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition"
-                    />
+                    <input type="file" multiple onChange={(e) => handleFileChange('shirts', e)}
+                      className="block w-full text-sm text-brand-dark file:mr-6 file:py-4 file:px-8 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent file:text-brand-dark hover:file:bg-accent/90 transition" />
                     {files.shirts.length > 0 && (
                       <div className="mt-4 space-y-2">
                         {files.shirts.map((file, i) => (
@@ -414,31 +333,19 @@ ${allAttachments.length > 0 ? `Attachments: ${allAttachments.map(f => f.filename
               </div>
             )}
 
-            {/* Message */}
             <div>
               <label className="block text-xl font-bold text-brand-dark mb-3">Your Message *</label>
-              <textarea
-                required
-                name="message"
-                rows={8}
-                value={formData.message}
-                onChange={handleChange}
-                className="w-full px-8 py-6 text-lg border-2 border-gray-200 rounded-3xl focus:outline-none focus:border-primary resize-none"
-              />
+              <textarea required name="message" rows={8} value={formData.message} onChange={handleChange}
+                className="w-full px-8 py-6 text-lg border-2 border-gray-200 rounded-3xl focus:outline-none focus:border-primary resize-none" />
             </div>
 
-            {/* Submit */}
             <div className="text-center pt-6">
-              <button
-                type="submit"
-                disabled={status === 'sending'}
-                className="px-20 py-7 bg-primary text-white text-3xl font-black rounded-full hover:bg-primary/90 shadow-2xl transition disabled:opacity-70 transform hover:scale-105"
-              >
+              <button type="submit" disabled={status === 'sending'}
+                className="px-20 py-7 bg-primary text-white text-3xl font-black rounded-full hover:bg-primary/90 shadow-2xl transition disabled:opacity-70 transform hover:scale-105">
                 {status === 'sending' ? 'Sending...' : 'Send Message'}
               </button>
             </div>
 
-            {/* Status */}
             {status === 'success' && (
               <div className="text-center text-3xl font-bold text-green-600 animate-pulse">
                 Thank you! Your message has been sent. We'll reply soon.
