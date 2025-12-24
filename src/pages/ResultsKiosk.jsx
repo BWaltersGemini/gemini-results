@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – iPad Optimized + High Contrast Athlete Card + QR Fix + Exit Warning
+// FINAL – iPad Optimized + Chip Time in Red + QR Fully Visible + Reliable Exit Warning
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -125,34 +125,39 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // === Prevent Accidental Exit from Kiosk Mode ===
+  // === Reliable Exit Protection for Kiosk Mode ===
   useEffect(() => {
     if (stage !== 'kiosk') return;
 
-    const handleBackButton = (e) => {
+    // Prevent back button
+    const preventBack = (e) => {
       e.preventDefault();
-      if (window.confirm('Are you sure you want to leave kiosk mode?')) {
+      const confirmed = window.confirm('Are you sure you want to leave kiosk mode?');
+      if (confirmed) {
         setStage('event-select');
       } else {
-        // Stay in kiosk
-        navigate('/kiosk', { replace: true });
+        window.history.pushState(null, '', window.location.href);
       }
     };
 
-    const handleBeforeUnload = (e) => {
+    // Prevent refresh/close
+    const preventUnload = (e) => {
       e.preventDefault();
       e.returnValue = 'Are you sure you want to leave kiosk mode?';
       return 'Are you sure you want to leave kiosk mode?';
     };
 
-    window.addEventListener('popstate', handleBackButton);
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // Push an extra history state so back button triggers popstate
+    window.history.pushState(null, '', window.location.href);
+
+    window.addEventListener('popstate', preventBack);
+    window.addEventListener('beforeunload', preventUnload);
 
     return () => {
-      window.removeEventListener('popstate', handleBackButton);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', preventBack);
+      window.removeEventListener('beforeunload', preventUnload);
     };
-  }, [stage, navigate]);
+  }, [stage]);
 
   // === ACCESS PIN STAGE ===
   if (stage === 'access-pin') {
@@ -255,7 +260,7 @@ export default function ResultsKiosk() {
         />
       )}
       <div className="fixed inset-0 bg-gradient-to-br from-brand-turquoise to-brand-turquoise/90 flex flex-col items-center justify-start text-text-light pt-8 px-6 pb-12 overflow-hidden">
-        {/* Compact Header */}
+        {/* Header */}
         <div className="text-center mb-6 z-10">
           {logoUrl && (
             <img src={logoUrl} alt="Event Logo" className="mx-auto max-h-40 mb-4 object-contain drop-shadow-xl" />
@@ -335,10 +340,10 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Athlete Result Card – High Contrast + Full QR */}
+        {/* Athlete Result Card – Chip Time Now Red + Larger QR */}
         {participant && typeof participant === 'object' && (
-          <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-10 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-8">
-            {/* Place – Bold Red */}
+          <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-10 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-4">
+            {/* Overall Place – Bold Red */}
             <div className="text-8xl font-black text-brand-red mb-4 drop-shadow-lg">
               #{formatPlace(participant.place || '—')}
             </div>
@@ -349,10 +354,10 @@ export default function ResultsKiosk() {
             </h2>
             <p className="text-2xl text-text-muted mb-8">Bib #{participant.bib}</p>
 
-            {/* Time Boxes – Strong Contrast */}
+            {/* Time Boxes – Both Key Metrics in Red for Emphasis */}
             <div className="grid grid-cols-2 gap-8 text-2xl mb-10">
-              <div className="bg-brand-turquoise/15 rounded-3xl py-8 shadow-lg">
-                <div className="font-black text-brand-turquoise text-5xl">
+              <div className="bg-brand-red/15 rounded-3xl py-8 shadow-lg">
+                <div className="font-black text-brand-red text-5xl">
                   {formatTime(participant.chip_time)}
                 </div>
                 <div className="text-text-muted mt-2 text-lg">Chip Time</div>
@@ -366,7 +371,7 @@ export default function ResultsKiosk() {
             </div>
 
             {/* Division / Gender */}
-            <div className="text-2xl space-y-4 mb-12">
+            <div className="text-2xl space-y-4 mb-10">
               <p><strong>Gender Place:</strong> {formatPlace(participant.gender_place)} {participant.gender}</p>
               {participant.age_group_place && (
                 <p><strong>Division:</strong> {formatPlace(participant.age_group_place)} in {participant.age_group_name}</p>
@@ -376,15 +381,15 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            {/* QR Code – Larger & Centered */}
-            <div className="mx-auto max-w-xs">
+            {/* QR Code – Extra Space, Guaranteed Visible */}
+            <div className="mx-auto max-w-md mt-8">
               <p className="text-2xl font-black mb-6">Scan for Full Results</p>
-              <div className="mx-auto w-72 h-72 bg-white p-8 rounded-3xl shadow-2xl border-8 border-brand-turquoise">
+              <div className="mx-auto w-80 h-80 bg-white p-10 rounded-3xl shadow-2xl border-8 border-brand-turquoise">
                 <QRCode
                   value={getResultsUrl()}
-                  size={240}
+                  size={272}
                   level="H"
-                  fgColor="#48D1CC"
+                  fgColor="#B22222"
                   bgColor="#FFFFFF"
                 />
               </div>
