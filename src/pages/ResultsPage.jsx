@@ -1,12 +1,11 @@
 // src/pages/ResultsPage.jsx
 // FINAL VERSION — December 23, 2025
-// • Fixed crash on athlete click (state now correctly passes arrays)
-// • Restored "Jump to Results" button after search
-// • Races separated with correct per-race ranking
+// • Races with 0 participants are now hidden from Race dropdown and results tables
+// • Age Group dropdown only shows divisions that actually exist in selected race(s)
+// • No crashes on participant click
+// • Jump to Results button accurate
 // • Top 5 / View All + pagination per race
-// • Filters: Race + dynamic Age Group
-// • Year buttons
-// • DNF per race
+// • All other features preserved
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -160,7 +159,15 @@ export default function ResultsPage() {
   // ====================== DATA & FILTERING ======================
   const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
 
-  let displayedRaces = embeddedRaces;
+  // Races with at least one finisher
+  const racesWithParticipants = useMemo(() => {
+    return embeddedRaces.filter(race => 
+      results.finishers.some(r => r.race_id === race.race_id)
+    );
+  }, [embeddedRaces, results.finishers]);
+
+  // Displayed races: respect URL raceSlug, filter selectedRaceId, and only show races with participants
+  let displayedRaces = racesWithParticipants;
 
   if (raceSlug) {
     displayedRaces = displayedRaces.filter((race) => slugify(race.race_name || '') === raceSlug);
@@ -170,13 +177,14 @@ export default function ResultsPage() {
     displayedRaces = displayedRaces.filter((race) => race.race_id === selectedRaceId);
   }
 
+  // Available divisions for selected race(s)
   const availableDivisions = useMemo(() => {
     const relevantFinishers = selectedRaceId === 'all'
       ? results.finishers
-      : results.finishers.filter(r => r.race_id === selectedRaceId);
+      : results.finishers.filter(r => displayedRaces.some(d => d.race_id === r.race_id));
 
     return [...new Set(relevantFinishers.map(r => r.age_group_name).filter(Boolean))].sort();
-  }, [results.finishers, selectedRaceId]);
+  }, [results.finishers, selectedRaceId, displayedRaces]);
 
   useEffect(() => {
     if (selectedDivision !== 'all' && !availableDivisions.includes(selectedDivision)) {
@@ -216,7 +224,6 @@ export default function ResultsPage() {
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const raceSlugPart = slugify(raceName);
 
-    // FIXED: Pass the correct results structure (object with finishers/nonFinishers arrays)
     navigate(`/results/${masterSlug}/${eventYear}/${raceSlugPart}/bib/${participant.bib}`, {
       state: {
         participant,
@@ -228,6 +235,7 @@ export default function ResultsPage() {
       },
     });
   };
+
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Master landing tiles
@@ -249,6 +257,20 @@ export default function ResultsPage() {
     .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
     .slice(0, 3);
 
+  // Count for "Jump to Results" button
+  const totalMatching = useMemo(() => {
+    if (!searchQuery) return 0;
+    const lowerQuery = searchQuery.toLowerCase();
+    return displayedRaces.reduce((count, race) => {
+      const raceFinishers = results.finishers.filter(r => r.race_id === race.race_id);
+      const matches = raceFinishers.filter(r =>
+        r.bib?.toString().includes(searchQuery) ||
+        `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(lowerQuery)
+      );
+      return count + matches.length;
+    }, 0);
+  }, [searchQuery, displayedRaces, results.finishers]);
+
   // ====================== RENDER ======================
   if ((masterKey || year) && !selectedEvent) {
     return (
@@ -262,6 +284,7 @@ export default function ResultsPage() {
   }
 
   if (!selectedEvent) {
+    // Master landing page unchanged
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-light to-white pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
@@ -319,18 +342,6 @@ export default function ResultsPage() {
       </div>
     );
   }
-
-  // Total matching participants across all displayed races (for jump button)
-  const totalMatching = displayedRaces.reduce((sum, race) => {
-    const finishers = results.finishers.filter(r => r.race_id === race.race_id);
-    const searched = searchQuery
-      ? finishers.filter(r => 
-          r.bib?.toString().includes(searchQuery) ||
-          `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : finishers;
-    return sum + searched.length;
-  }, 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-light to-white">
@@ -412,7 +423,7 @@ export default function ResultsPage() {
                 className="w-full px-6 py-4 text-lg border border-gray-300 rounded-full focus:outline-none focus:ring-4 focus:ring-primary/30"
               >
                 <option value="all">All Races</option>
-                {embeddedRaces.map(race => (
+                {racesWithParticipants.map(race => (
                   <option key={race.race_id} value={race.race_id}>
                     {editedEvents[selectedEvent.id]?.races?.[race.race_id] || race.race_name}
                   </option>
