@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – iPad Optimized + Chip Time in Red + QR Fully Visible + Reliable Exit Warning
+// FINAL – iPad Optimized + White Search Field + Inline Placeholder + Formatted Times + Reliable Exit Protection
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +7,7 @@ import Confetti from 'react-confetti';
 import { useContext } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import QRCode from 'react-qr-code';
+import { formatChronoTime } from '../utils/timeUtils'; // ← NEW IMPORT
 
 export default function ResultsKiosk() {
   const navigate = useNavigate();
@@ -53,7 +54,6 @@ export default function ResultsKiosk() {
     return `https://gemini-results.vercel.app/results/${slug}/${year}`;
   };
 
-  const formatTime = (timeStr) => (timeStr?.trim() ? timeStr.trim() : '—');
   const formatPlace = (place) =>
     !place ? '—' : place === 1 ? '1st' : place === 2 ? '2nd' : place === 3 ? '3rd' : `${place}th`;
 
@@ -125,11 +125,10 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // === Reliable Exit Protection for Kiosk Mode ===
+  // === Reliable Exit Protection ===
   useEffect(() => {
     if (stage !== 'kiosk') return;
 
-    // Prevent back button
     const preventBack = (e) => {
       e.preventDefault();
       const confirmed = window.confirm('Are you sure you want to leave kiosk mode?');
@@ -140,14 +139,12 @@ export default function ResultsKiosk() {
       }
     };
 
-    // Prevent refresh/close
     const preventUnload = (e) => {
       e.preventDefault();
       e.returnValue = 'Are you sure you want to leave kiosk mode?';
       return 'Are you sure you want to leave kiosk mode?';
     };
 
-    // Push an extra history state so back button triggers popstate
     window.history.pushState(null, '', window.location.href);
 
     window.addEventListener('popstate', preventBack);
@@ -282,20 +279,17 @@ export default function ResultsKiosk() {
           <div className="text-5xl font-bold animate-pulse mt-20">Loading results...</div>
         )}
 
-        {/* Search */}
+        {/* Search – White Background + Placeholder Only */}
         {!participant && matches.length === 0 && !loadingResults && (
           <div className="w-full max-w-3xl z-10 mt-8">
-            <p className="text-3xl text-center mb-8 font-medium drop-shadow-md">
-              Enter bib or last name
-            </p>
             <input
               id="kiosk-search-input"
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && performSearch(searchTerm)}
-              placeholder="Bib # or Last Name"
-              className="w-full text-5xl text-center bg-white/20 backdrop-blur-md border-6 border-white/60 rounded-3xl py-10 px-8 placeholder-white/60 focus:outline-none focus:border-white shadow-2xl"
+              placeholder="Enter bib or last name"
+              className="w-full text-5xl text-center bg-white text-brand-dark placeholder-text-muted border-6 border-brand-turquoise rounded-3xl py-10 px-8 focus:outline-none focus:ring-8 focus:ring-brand-turquoise/50 shadow-2xl"
               autoFocus
             />
             <div className="text-center mt-10">
@@ -340,10 +334,10 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Athlete Result Card – Chip Time Now Red + Larger QR */}
+        {/* Athlete Result Card */}
         {participant && typeof participant === 'object' && (
           <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-10 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-4">
-            {/* Overall Place – Bold Red */}
+            {/* Overall Place */}
             <div className="text-8xl font-black text-brand-red mb-4 drop-shadow-lg">
               #{formatPlace(participant.place || '—')}
             </div>
@@ -354,17 +348,17 @@ export default function ResultsKiosk() {
             </h2>
             <p className="text-2xl text-text-muted mb-8">Bib #{participant.bib}</p>
 
-            {/* Time Boxes – Both Key Metrics in Red for Emphasis */}
+            {/* Time Boxes – Chip Time in Red */}
             <div className="grid grid-cols-2 gap-8 text-2xl mb-10">
               <div className="bg-brand-red/15 rounded-3xl py-8 shadow-lg">
                 <div className="font-black text-brand-red text-5xl">
-                  {formatTime(participant.chip_time)}
+                  {formatChronoTime(participant.chip_time)}
                 </div>
                 <div className="text-text-muted mt-2 text-lg">Chip Time</div>
               </div>
               <div className="bg-brand-red/10 rounded-3xl py-8 shadow-lg">
                 <div className="font-black text-brand-dark text-5xl">
-                  {participant.pace || '—'}
+                  {participant.pace ? formatChronoTime(participant.pace) : '—'}
                 </div>
                 <div className="text-text-muted mt-2 text-lg">Pace</div>
               </div>
@@ -381,7 +375,7 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            {/* QR Code – Extra Space, Guaranteed Visible */}
+            {/* QR Code */}
             <div className="mx-auto max-w-md mt-8">
               <p className="text-2xl font-black mb-6">Scan for Full Results</p>
               <div className="mx-auto w-80 h-80 bg-white p-10 rounded-3xl shadow-2xl border-8 border-brand-turquoise">
