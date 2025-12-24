@@ -1,4 +1,6 @@
-// src/pages/ParticipantPage.jsx (COMPLETE FINAL VERSION — All Features Restored + Fixed Shareable Card Horizontal Alignment)
+// src/pages/ParticipantPage.jsx
+// COMPLETE FINAL VERSION — All Features Restored + Fixed Direct URL Refresh + Fixed Shareable Card Alignment
+
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -16,25 +18,33 @@ export default function ParticipantPage() {
   const { bib } = params;
 
   const {
-    events,
+    events = [],
     selectedEvent: contextSelectedEvent,
-    results: contextResults,
+    results: contextResults = { finishers: [], nonFinishers: [] },
+    loadingResults,
     eventLogos = {},
     ads = [],
-    loading: contextLoading,
-    setSelectedEvent,
     masterGroups = {},
   } = useContext(RaceContext);
 
   const [masterGroupsLocal] = useLocalStorage('masterGroups', {});
   const [editedEventsLocal] = useLocalStorage('editedEvents', {});
 
-  const initialState = location.state || {};
-  const [participant, setParticipant] = useState(initialState.participant || null);
-  const [selectedEvent, setLocalSelectedEvent] = useState(initialState.selectedEvent || contextSelectedEvent);
-  const [results, setResults] = useState(initialState.results || contextResults || []);
+  // Priority: navigation state first
+  const navState = location.state || {};
+  const initialParticipant = navState.participant || null;
+  const initialSelectedEvent = navState.selectedEvent || null;
+  const initialResults = navState.results || { finishers: [], nonFinishers: [] };
+
+  const [participant, setParticipant] = useState(initialParticipant);
+  const [selectedEvent, setSelectedEvent] = useState(initialSelectedEvent);
+  const [results, setResults] = useState({
+    finishers: initialResults.finishers || [],
+    nonFinishers: initialResults.nonFinishers || []
+  });
+
   const [showSplits, setShowSplits] = useState(false);
-  const [loading, setLoading] = useState(!initialState.participant);
+  const [loading, setLoading] = useState(!initialParticipant);
   const [fetchError, setFetchError] = useState(null);
   const [timeRevealed, setTimeRevealed] = useState(false);
   const [showCardPreview, setShowCardPreview] = useState(false);
@@ -49,12 +59,6 @@ export default function ParticipantPage() {
   // Direct link + QR code
   const participantResultsUrl = window.location.href;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF`;
-
-  useEffect(() => {
-    if (contextSelectedEvent && contextSelectedEvent.id === selectedEvent?.id) {
-      setLocalSelectedEvent(contextSelectedEvent);
-    }
-  }, [contextSelectedEvent]);
 
   // Fetch upcoming events
   useEffect(() => {
@@ -127,10 +131,10 @@ export default function ParticipantPage() {
 
   const removePhoto = () => setUserPhoto(null);
 
-  // Load participant data
+  // Load participant — works on navigation AND direct refresh
   useEffect(() => {
-    const fetchDataIfMissing = async () => {
-      if (participant && selectedEvent && results.length > 0) {
+    const loadParticipant = async () => {
+      if (participant && selectedEvent && results.finishers.length > 0 && results.nonFinishers.length >= 0) {
         if (!timeRevealed && participant.chip_time) {
           confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
         }
@@ -141,34 +145,50 @@ export default function ParticipantPage() {
       setFetchError(null);
 
       try {
-        if (contextLoading || events.length === 0) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+        // Wait for context basics
+        if (events.length === 0 || !contextSelectedEvent) {
+          // Gentle poll until ready
+          const interval = setInterval(() => {
+            if (events.length > 0 && contextSelectedEvent) {
+              clearInterval(interval);
+              loadParticipant();
+            }
+          }, 200);
+          setTimeout(() => clearInterval(interval), 10000);
+          return;
         }
-        if (events.length === 0) throw new Error('Events not loaded yet');
 
         let targetEvent = selectedEvent || contextSelectedEvent;
-        if (!targetEvent) {
-          const resultWithBib = contextResults?.find(r => String(r.bib) === String(bib));
-          if (resultWithBib) targetEvent = events.find(e => e.id === resultWithBib.event_id);
-        }
-        if (!targetEvent) throw new Error('Event not found');
 
-        setLocalSelectedEvent(targetEvent);
+        if (!targetEvent) {
+          const allResults = [...contextResults.finishers, ...contextResults.nonFinishers];
+          const match = allResults.find(r => String(r.bib) === String(bib));
+          if (match?.event_id) {
+            targetEvent = events.find(e => e.id === match.event_id);
+          }
+        }
+
+        if (!targetEvent) throw new Error('Event not found for this participant');
+
         setSelectedEvent(targetEvent);
 
-        const { data: fetchedResults, error: resultsError } = await supabase
+        const { data: fetchedResults, error } = await supabase
           .from('chronotrack_results')
           .select('*')
           .eq('event_id', targetEvent.id);
 
-        if (resultsError) throw resultsError;
-        const allResults = fetchedResults || [];
-        setResults(allResults);
+        if (error) throw error;
 
-        const found = allResults.find(r => String(r.bib) === String(bib));
-        if (!found) throw new Error('Participant not found with this bib');
+        const finishers = fetchedResults?.filter(r => r.chip_time && r.chip_time.trim() !== '') || [];
+        const nonFinishers = fetchedResults?.filter(r => !r.chip_time || r.chip_time.trim() === '') || [];
+
+        setResults({ finishers, nonFinishers });
+
+        const found = fetchedResults?.find(r => String(r.bib) === String(bib));
+        if (!found) throw new Error('Participant not found');
 
         setParticipant(found);
+
         confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
       } catch (err) {
         console.error('[ParticipantPage] Load error:', err);
@@ -178,8 +198,8 @@ export default function ParticipantPage() {
       }
     };
 
-    fetchDataIfMissing();
-  }, [bib, events, contextResults, contextLoading, initialState]);
+    loadParticipant();
+  }, [bib, events, contextSelectedEvent, contextResults, loadingResults]);
 
   const handleTimeComplete = () => setTimeRevealed(true);
 
@@ -293,7 +313,7 @@ export default function ParticipantPage() {
   };
 
   // Loading / Error
-  if (loading || contextLoading) {
+  if (loading || loadingResults) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-brand-light to-white pt-40 flex items-center justify-center">
         <div className="text-center">
@@ -319,9 +339,9 @@ export default function ParticipantPage() {
   }
 
   // Stats
-  const overallTotal = results.length;
-  const genderTotal = results.filter(r => r.gender === participant.gender).length;
-  const divisionTotal = results.filter(r => r.age_group_name === participant.age_group_name).length;
+  const overallTotal = results.finishers.length + results.nonFinishers.length;
+  const genderTotal = results.finishers.filter(r => r.gender === participant.gender).length;
+  const divisionTotal = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
   const chipTimeSeconds = parseChipTime(participant.chip_time);
@@ -704,7 +724,7 @@ export default function ParticipantPage() {
         </div>
       </div>
 
-      {/* Card Preview Modal — FIXED: Perfect Horizontal & Vertical Centering */}
+      {/* Card Preview Modal */}
       {showCardPreview && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
           <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
@@ -715,8 +735,6 @@ export default function ParticipantPage() {
               ×
             </button>
             <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
-
-            {/* Fixed Preview: Perfectly centered and scaled card */}
             <div className="flex justify-center mb-10">
               <div className="relative w-full max-w-lg aspect-square rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200 bg-black">
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -724,7 +742,7 @@ export default function ParticipantPage() {
                     className="w-[1080px] h-[1080px]"
                     style={{
                       transform: 'scale(0.45)',
-                      transformOrigin: 'center center', // Critical: centers the scaled card perfectly
+                      transformOrigin: 'center center',
                     }}
                   >
                     {cardRef.current && (
@@ -740,8 +758,6 @@ export default function ParticipantPage() {
                 </div>
               </div>
             </div>
-
-            {/* Photo Upload */}
             <div className="mb-10">
               <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
               <div className="flex justify-center gap-6 mb-6">
@@ -755,8 +771,6 @@ export default function ParticipantPage() {
                 </div>
               )}
             </div>
-
-            {/* Actions */}
             <div className="flex justify-center gap-6">
               <button onClick={generateResultCard} className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl">
                 {isMobileDevice ? 'Save to Photos' : 'Download Image'}
