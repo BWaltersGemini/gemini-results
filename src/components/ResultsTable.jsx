@@ -1,17 +1,10 @@
 // src/components/ResultsTable.jsx
-// COMPLETE & FIXED VERSION — Works perfectly with ResultsPage
-// • Full pagination (desktop) + "Load More" (mobile)
-// • Page size selector
-// • DNF table styling
-// • Highlighting
-// • Mobile cards with full info
-// • Safe defaults when pagination props are missing
-
 import { useNavigate } from 'react-router-dom';
+import { formatChronoTime } from '../utils/timeUtils'; // ← NEW IMPORT
 
 export default function ResultsTable({
   data = [],
-  totalResults,           // Optional — if not provided, use data.length
+  totalResults,
   currentPage = 1,
   setCurrentPage,
   pageSize = 50,
@@ -19,7 +12,7 @@ export default function ResultsTable({
   onNameClick,
   isMobile = false,
   highlightedBib = null,
-  isDnfTable = false,     // True for "Did Not Finish" section
+  isDnfTable = false,
 }) {
   const formatPlace = (place) => {
     if (!place || place < 1) return '—';
@@ -40,7 +33,6 @@ export default function ResultsTable({
 
   const getRowKey = (r) => (r.entry_id ? r.entry_id : `${r.bib || 'unknown'}-${r.race_id || 'overall'}`);
 
-  // Use provided totalResults or fall back to data.length
   const safeTotalResults = totalResults !== undefined ? Number(totalResults) : data.length;
   const safePageSize = Number(pageSize) || 50;
 
@@ -57,16 +49,12 @@ export default function ResultsTable({
     );
   }
 
-  // Pagination logic — only active if setCurrentPage and setPageSize are provided
   const hasPagination = typeof setCurrentPage === 'function' && typeof setPageSize === 'function';
   const totalPages = hasPagination && safePageSize > 0 ? Math.ceil(safeTotalResults / safePageSize) : 1;
   const safeCurrentPage = hasPagination ? Math.max(1, Math.min(currentPage, totalPages)) : 1;
-
   const startIdx = hasPagination ? (safeCurrentPage - 1) * safePageSize : 0;
   const endIdx = hasPagination ? Math.min(startIdx + safePageSize, safeTotalResults) : safeTotalResults;
-
   const displayedData = hasPagination ? data.slice(startIdx, endIdx) : data;
-
   const pageOptions = [25, 50, 100, 200];
 
   // ====================== MOBILE VIEW ======================
@@ -91,23 +79,21 @@ export default function ResultsTable({
                   <div className="text-2xl font-bold text-brand-dark">Bib {r.bib || '—'}</div>
                 </div>
               </div>
-
               <h3 className="text-3xl font-bold text-brand-dark mb-3 flex items-center gap-2">
                 {r.first_name} {r.last_name}
                 <span className="text-xl text-gray-400">→</span>
               </h3>
-
               {isDnfTable ? (
                 <div className="text-center py-4">
                   <p className="text-2xl font-bold text-red-600">Did Not Finish</p>
                   <p className="text-lg text-gray-600 mt-2">
-                    Last recorded time: {r.chip_time || '—'}
+                    Last recorded time: {formatChronoTime(r.chip_time)}
                   </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div className="bg-primary/10 rounded-xl py-4">
-                    <div className="text-2xl font-bold text-primary">{r.chip_time || '—'}</div>
+                    <div className="text-2xl font-bold text-primary">{formatChronoTime(r.chip_time)}</div>
                     <div className="text-sm text-gray-700">Chip Time</div>
                   </div>
                   <div className="bg-brand-light rounded-xl py-4">
@@ -129,8 +115,6 @@ export default function ResultsTable({
             </div>
           );
         })}
-
-        {/* Mobile Load More */}
         {hasPagination && endIdx < safeTotalResults && (
           <div className="text-center mt-10">
             <button
@@ -239,7 +223,9 @@ export default function ResultsTable({
                       </td>
                     </>
                   )}
-                  <td className="px-6 py-5 font-semibold text-brand-dark">{r.chip_time || '—'}</td>
+                  <td className="px-6 py-5 font-semibold text-brand-dark">
+                    {formatChronoTime(r.chip_time)} {/* ← Formatted time */}
+                  </td>
                   <td className="px-6 py-5 text-brand-dark">{r.pace || '—'}</td>
                   <td className="px-6 py-5 text-brand-dark">{r.age || '—'}</td>
                   <td className="px-6 py-5 text-gray-600">
@@ -252,7 +238,7 @@ export default function ResultsTable({
         </table>
       </div>
 
-      {/* Bottom Pagination Info */}
+      {/* Bottom Pagination */}
       {hasPagination && (
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mt-12 px-6">
           <div className="text-lg text-brand-dark">
