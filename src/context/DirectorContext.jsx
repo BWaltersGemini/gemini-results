@@ -2,19 +2,28 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
-import { useRace } from './RaceContext'; // ← Import RaceContext to get masterGroups
+import { useRace } from './RaceContext'; // ← Get masterGroups
+import { fetchEvents } from '../api/chronotrackapi'; // ← Import to fetch all events for SuperAdmin
 
 const DirectorContext = createContext();
 
 export function DirectorProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(undefined); // undefined = loading, null = logged out, object = logged in
   const [assignedEvents, setAssignedEvents] = useState([]); // Directly assigned event IDs
-  const [expandedAssignedEvents, setExpandedAssignedEvents] = useState([]); // All accessible (via master groups)
+  const [expandedAssignedEvents, setExpandedAssignedEvents] = useState([]); // All accessible (via master groups or superadmin)
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedEventName, setSelectedEventName] = useState('No Event Selected');
 
   const { masterGroups = {} } = useRace(); // Get masterGroups from global RaceContext
   const navigate = useNavigate();
+
+  // === SUPERADMIN CONFIGURATION ===
+  // Replace with your actual email (or add your UUID for extra safety)
+  const SUPERADMIN_EMAIL = 'brandon1@geminitiming.com'; // ← Change if different
+  // Optional: const SUPERADMIN_UUID = 'a047c35a-355b-4971-8695-7303c7f3cf1c';
+
+  const isSuperAdmin = currentUser?.email === SUPERADMIN_EMAIL;
+  // || currentUser?.id === SUPERADMIN_UUID;
 
   // Auth setup
   useEffect(() => {
@@ -28,7 +37,7 @@ export function DirectorProvider({ children }) {
       setCurrentUser(user);
 
       if (user) {
-        loadAssignedEvents(user.id);
+        loadEventsForUser(user);
       }
     };
 
@@ -39,7 +48,7 @@ export function DirectorProvider({ children }) {
       setCurrentUser(user);
 
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (user) loadAssignedEvents(user.id);
+        if (user) loadEventsForUser(user);
       }
 
       if (event === 'SIGNED_OUT') {
@@ -54,43 +63,51 @@ export function DirectorProvider({ children }) {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Load directly assigned events
-  const loadAssignedEvents = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('director_event_assignments')
-        .select('event_id')
-        .eq('user_id', userId);
+  // Unified event loading: SuperAdmin vs Regular Director
+  const loadEventsForUser = async (user) => {
+    if (isSuperAdmin) {
+      console.log('[DirectorContext] SUPERADMIN MODE ACTIVATED — Loading ALL events');
+      try {
+        const allEvents = await fetchEvents(); // Direct from ChronoTrack
+        const allEventIds = allEvents.map(e => e.id.toString());
+        setAssignedEvents(allEventIds); // Treat as "assigned"
+        setExpandedAssignedEvents(allEventIds);
+      } catch (err) {
+        console.error('[DirectorContext] SuperAdmin failed to load all events:', err);
+        setAssignedEvents([]);
+        setExpandedAssignedEvents([]);
+      }
+    } else {
+      // Regular director logic
+      try {
+        const { data, error } = await supabase
+          .from('director_event_assignments')
+          .select('event_id')
+          .eq('user_id', user.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const eventIds = data?.map(row => row.event_id.toString()) || [];
-      setAssignedEvents(eventIds);
-    } catch (err) {
-      console.error('[DirectorContext] Failed to load assigned events:', err);
-      setAssignedEvents([]);
+        const directIds = data?.map(row => row.event_id.toString()) || [];
+        setAssignedEvents(directIds);
+
+        // Expand via masterGroups
+        const expanded = new Set(directIds);
+        Object.values(masterGroups).forEach((eventIdList) => {
+          const stringList = eventIdList.map(String);
+          const hasAccessToOne = directIds.some(id => stringList.includes(id));
+          if (hasAccessToOne) {
+            stringList.forEach(id => expanded.add(id));
+          }
+        });
+
+        setExpandedAssignedEvents(Array.from(expanded));
+      } catch (err) {
+        console.error('[DirectorContext] Failed to load assigned events:', err);
+        setAssignedEvents([]);
+        setExpandedAssignedEvents([]);
+      }
     }
   };
-
-  // Expand access using masterGroups
-  useEffect(() => {
-    if (assignedEvents.length === 0 || Object.keys(masterGroups).length === 0) {
-      setExpandedAssignedEvents(assignedEvents);
-      return;
-    }
-
-    const expanded = new Set(assignedEvents);
-
-    Object.values(masterGroups).forEach((eventIdList) => {
-      const stringList = eventIdList.map(String);
-      const hasAccessToOne = assignedEvents.some(id => stringList.includes(id));
-      if (hasAccessToOne) {
-        stringList.forEach(id => expanded.add(id));
-      }
-    });
-
-    setExpandedAssignedEvents(Array.from(expanded));
-  }, [assignedEvents, masterGroups]);
 
   // Fetch selected event name from chronotrack_events
   useEffect(() => {
@@ -128,6 +145,7 @@ export function DirectorProvider({ children }) {
 
   // Logging
   console.log('[DirectorContext] State:', {
+    mode: isSuperAdmin ? 'SUPERADMIN' : 'DIRECTOR',
     user: currentUser ? 'LOGGED IN' : currentUser === null ? 'LOGGED OUT' : 'LOADING',
     assignedCount: assignedEvents.length,
     expandedCount: expandedAssignedEvents.length,
@@ -141,11 +159,12 @@ export function DirectorProvider({ children }) {
         currentUser,
         setCurrentUser,
         assignedEvents,
-        expandedAssignedEvents, // ← Use this in dropdowns/analytics
+        expandedAssignedEvents,
         selectedEventId,
         setSelectedEventId,
         selectedEventName,
         setSelectedEvent,
+        isSuperAdmin, // ← Optional: expose if you want UI indicators
       }}
     >
       {children}
