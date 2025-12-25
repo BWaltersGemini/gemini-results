@@ -552,7 +552,8 @@ export default function ParticipantPage() {
         bibLogo={bibLogo}
         raceDisplayName={raceDisplayName}
         participantResultsUrl={participantResultsUrl}
-        results={results} // ← ADD THIS
+        results={results}
+        userPhoto={userPhoto}
       />
 
       {/* Email Results Form */}
