@@ -1,5 +1,5 @@
 // src/pages/director/DirectorLayout.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDirector } from '../../context/DirectorContext';
 import { supabase } from '../../supabaseClient';
@@ -7,40 +7,13 @@ import { supabase } from '../../supabaseClient';
 export default function DirectorLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, selectedEventId } = useDirector();
+  const { 
+    currentUser, 
+    selectedEventId, 
+    selectedEventName 
+  } = useDirector();
 
-  const [eventName, setEventName] = useState('Loading event...');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Fetch event name when selectedEventId changes
-  useEffect(() => {
-    if (!selectedEventId) {
-      setEventName('No Event Selected');
-      return;
-    }
-
-    const fetchEventName = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('chronotrack_results')
-          .select('event_name')
-          .eq('event_id', selectedEventId)
-          .limit(1)
-          .single();
-
-        if (error || !data) {
-          setEventName(`Event ${selectedEventId}`);
-        } else {
-          setEventName(data.event_name || `Event ${selectedEventId}`);
-        }
-      } catch (err) {
-        console.error('Failed to fetch event name:', err);
-        setEventName(`Event ${selectedEventId}`);
-      }
-    };
-
-    fetchEventName();
-  }, [selectedEventId]);
 
   const navItems = [
     { path: '/race-directors-hub', label: 'Dashboard', icon: '🏠' },
@@ -51,7 +24,7 @@ export default function DirectorLayout({ children }) {
       disabled: !selectedEventId,
     },
     { path: '/director-awards', label: 'Awards', icon: '🏆' },
-    { path: '/director-analytics', label: 'Analytics', icon: '📈' }, // ← Fully active!
+    { path: '/director-analytics', label: 'Analytics', icon: '📈' },
   ];
 
   const handleSignOut = async () => {
@@ -81,7 +54,7 @@ export default function DirectorLayout({ children }) {
           </p>
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
-            <p className="text-lg font-semibold truncate">{eventName}</p>
+            <p className="text-lg font-semibold truncate">{selectedEventName}</p>
           </div>
         </div>
 
@@ -127,7 +100,7 @@ export default function DirectorLayout({ children }) {
         <header className="md:hidden bg-text-dark text-text-light p-4 flex justify-between items-center shadow-lg">
           <div>
             <h2 className="text-2xl font-bold">Director Hub</h2>
-            <p className="text-sm opacity-80 truncate max-w-xs">{eventName}</p>
+            <p className="text-sm opacity-80 truncate max-w-xs">{selectedEventName}</p>
           </div>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
