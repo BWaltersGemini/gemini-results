@@ -12,6 +12,7 @@ export default function ResultCardPreviewModal({
   bibLogo,
   raceDisplayName,
   participantResultsUrl,
+  results, // ← NEW PROP
 }) {
   const cardRef = useRef(null);
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -102,7 +103,6 @@ export default function ResultCardPreviewModal({
     }
   };
 
-  // === Social Sharing Functions — Moved Here ===
   const shareOnFacebook = () => {
     const url = encodeURIComponent(participantResultsUrl);
     const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
@@ -119,6 +119,11 @@ export default function ResultCardPreviewModal({
   };
 
   if (!show) return null;
+
+  // Calculate stats for card using passed results
+  const overallTotal = results.finishers.length + results.nonFinishers.length;
+  const genderTotal = results.finishers.filter(r => r.gender === participant.gender).length;
+  const divisionTotal = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
 
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
@@ -143,7 +148,6 @@ export default function ResultCardPreviewModal({
                 }}
               >
                 <div ref={cardRef} className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden">
-                  {/* Card content — same as before */}
                   <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
                     {masterLogo ? (
                       <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
@@ -175,17 +179,17 @@ export default function ResultCardPreviewModal({
                     <div>
                       <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
                       <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
-                      <p className="text-xl text-gray-400 mt-2">of {results.finishers.length + results.nonFinishers.length}</p>
+                      <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
                     </div>
                     <div>
                       <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
                       <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
-                      <p className="text-xl text-gray-400 mt-2">of {results.finishers.filter(r => r.gender === participant.gender).length}</p>
+                      <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
                     </div>
                     <div>
                       <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
                       <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
-                      <p className="text-xl text-gray-400 mt-2">of {results.finishers.filter(r => r.age_group_name === participant.age_group_name).length}</p>
+                      <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
                     </div>
                   </div>
                   <div className="absolute bottom-24 right-8 flex flex-col items-center">
