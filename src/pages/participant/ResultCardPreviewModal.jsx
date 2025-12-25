@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL VERSION — No QR Code, Square Preview Maintained, Downloaded Card Perfect
+// FINAL VERSION — With Helpful Message About Photo in Preview
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -102,7 +102,7 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden Full-Size Card — No QR Code */}
+      {/* Hidden Full-Size Card — Your Perfect Working Version */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -153,14 +153,13 @@ export default function ResultCardPreviewModal({
               <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
             </div>
           </div>
-          {/* QR Code Removed */}
           <p className="text-3xl text-white italic mt-auto mb-8">
             Find your next race at www.youkeepmoving.com
           </p>
         </div>
       </div>
 
-      {/* Modal Preview — Square (aspect-square) Maintained */}
+      {/* Modal Preview */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
           <button
@@ -170,8 +169,9 @@ export default function ResultCardPreviewModal({
             ×
           </button>
           <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
+
+          {/* Preview Frame */}
           <div className="flex justify-center mb-10">
-            {/* Square Preview Frame */}
             <div className="relative w-full max-w-lg aspect-square rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200 bg-black">
               <div className="absolute inset-0 flex items-center justify-center">
                 <div
@@ -194,8 +194,21 @@ export default function ResultCardPreviewModal({
               </div>
             </div>
           </div>
-          <div className="mb-10">
-            <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
+
+          {/* Helpful Message */}
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-10 text-center">
+            <p className="text-lg font-medium text-blue-900 mb-2">📸 Your Finish Line Photo</p>
+            <p className="text-base text-blue-800">
+              The photo you take or upload will appear on the final downloaded/shared card.
+            </p>
+            <p className="text-base text-blue-800">
+              It is not shown in this live preview for performance reasons, but it will be included when you download or share!
+            </p>
+          </div>
+
+          {/* Photo Upload Section */}
+          <div className="mb-10 text-center">
+            <p className="text-2xl font-bold mb-6">Add Your Finish Line Photo!</p>
             <div className="flex justify-center gap-6 mb-6">
               <button onClick={triggerCamera} className="px-8 py-4 bg-primary text-white font-bold rounded-full hover:bg-primary/90 transition">📷 Take Photo</button>
               <button onClick={triggerGallery} className="px-8 py-4 bg-brand-dark text-white font-bold rounded-full hover:bg-brand-dark/90 transition">🖼️ Choose from Gallery</button>
@@ -207,6 +220,8 @@ export default function ResultCardPreviewModal({
               </div>
             )}
           </div>
+
+          {/* Action Buttons */}
           <div className="flex justify-center gap-6">
             <button onClick={generateResultCard} className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl">
               {isMobileDevice ? 'Save to Photos' : 'Download Image'}
