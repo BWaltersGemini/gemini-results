@@ -26,56 +26,68 @@ export default function EmailResultsForm({
 
     const fullName = `${participant.first_name} ${participant.last_name}`.trim() || 'Champion';
     const eventName = selectedEvent.name;
-    const totalFinishers = 1698; // You can pass this in props if needed
-    const genderCount = 850; // Placeholder — ideally pass real numbers
-    const divisionCount = 120; // Placeholder
-    const raceStory = "Strong, steady performance throughout!"; // Could pass in if calculated
+    const raceName = raceDisplayName; // ← Moved up
+    const raceStory = "Strong, steady performance throughout!"; // Placeholder — can enhance later
+    const totalFinishers = 1698; // Placeholder — ideally pass real numbers
+    const genderCount = 850;
+    const divisionCount = 120;
+    const baseUrl = window.location.origin;
 
-    const getResultsUrl = () => window.location.origin + '/results'; // Simplified
+    const getResultsUrl = () => `${baseUrl}/results`; // Simplified
 
     const brandedHtml = `
       <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;">
         <tr>
           <td align="center" style="padding:20px 0;">
             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-collapse:collapse;">
               <!-- Logo Header -->
               <tr>
                 <td align="center" style="padding:40px 20px 20px;">
-                  <img src="${window.location.origin}/GRR.png" alt="Gemini Race Results" width="220" style="display:block;" />
+                  <img src="${baseUrl}/GRR.png" alt="Gemini Race Results" width="220" style="display:block; max-width:100%; height:auto;" />
                 </td>
               </tr>
-              <!-- Hero -->
+              <!-- Hero Section -->
               <tr>
                 <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
-                  <h1 style="font-size:48px; font-weight:900; margin:0 0 20px;">CONGRATULATIONS!</h1>
-                  <h2 style="font-size:36px; font-weight:700; margin:0 0 16px;">${fullName}</h2>
-                  <p style="font-size:24px; margin:0 0 30px;">You conquered the ${raceName}!</p>
-                  <p style="font-size:20px; margin:0 0 8px;">Official Chip Time</p>
-                  <p style="font-size:56px; font-weight:900; margin:16px 0;">${formatChronoTime(participant.chip_time)}</p>
-                  <p style="font-size:20px; margin:0;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
+                  <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
+                  <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">${fullName}</h2>
+                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
+                  <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
+                  <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
+                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
                 </td>
               </tr>
-              <!-- Stats -->
+              <!-- Stats Section -->
               <tr>
                 <td style="padding:50px 30px; background:#F0F8FF;">
-                  <h3 style="font-size:28px; font-weight:800; color:#263238; text-align:center; margin:0 0 40px;">Your Race Highlights</h3>
-                  <table width="100%" cellpadding="0" cellspacing="0">
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0">
                     <tr>
-                      <td align="center" width="33%" style="padding:15px;">
-                        <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Overall</p>
-                        <p style="font-size:48px; font-weight:900; color:#B22222; margin:0;">${ordinal(participant.place)}</p>
-                        <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${totalFinishers}</p>
+                      <td align="center">
+                        <h3 style="font-size:28px; font-weight:800; color:#263238; margin:0 0 40px;">Your Race Highlights</h3>
                       </td>
-                      <td align="center" width="33%" style="padding:15px;">
-                        <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Gender</p>
-                        <p style="font-size:48px; font-weight:900; color:#B22222; margin:0;">${ordinal(participant.gender_place)}</p>
-                        <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${genderCount}</p>
-                      </td>
-                      <td align="center" width="33%" style="padding:15px;">
-                        <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Division</p>
-                        <p style="font-size:48px; font-weight:900; color:#B22222; margin:0;">${ordinal(participant.age_group_place)}</p>
-                        <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${divisionCount} (${participant.age_group_name || ''})</p>
+                    </tr>
+                    <tr>
+                      <td align="center" style="padding:20px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Overall</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${totalFinishers}</p>
+                            </td>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Gender</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.gender_place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${genderCount}</p>
+                            </td>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Division</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.age_group_place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${divisionCount} (${participant.age_group_name || ''})</p>
+                            </td>
+                          </tr>
+                        </table>
                       </td>
                     </tr>
                   </table>
@@ -84,7 +96,7 @@ export default function EmailResultsForm({
               <!-- Race Story -->
               <tr>
                 <td align="center" style="padding:40px 30px;">
-                  <table width="100%" style="max-width:500px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
                     <tr>
                       <td style="background:#ffffff; padding:40px; border-left:8px solid #B22222; box-shadow:0 4px 20px rgba(178,34,34,0.15);">
                         <p style="font-size:24px; font-weight:700; color:#263238; margin:0; line-height:1.5;">
