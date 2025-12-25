@@ -136,10 +136,19 @@ export default function ParticipantPage() {
 
   const removePhoto = () => setUserPhoto(null);
 
-  // Email sending — full branded template matching ResultsKiosk
+  // Ordinal helper (used in email template)
+  const ordinal = (n) => {
+    if (!n) return '—';
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
+  // Email sending — full branded template
   const sendEmail = async () => {
     if (!email || !optIn) return;
     setEmailStatus('sending');
+
     const fullName = `${participant.first_name} ${participant.last_name}`.trim() || 'Champion';
     const eventName = selectedEvent.name;
     const raceName = participant.race_name || eventName;
@@ -148,6 +157,7 @@ export default function ParticipantPage() {
     const genderCount = results.finishers.filter(r => r.gender === participant.gender).length;
     const divisionCount = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
     const baseUrl = window.location.origin;
+
     const getResultsUrl = () => {
       const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
       let masterSlug = 'overall';
@@ -158,6 +168,7 @@ export default function ParticipantPage() {
       const year = getYearFromEvent(selectedEvent);
       return `${baseUrl}/results/${masterSlug}/${year}`;
     };
+
     const brandedHtml = `
       <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
       <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;">
@@ -955,11 +966,11 @@ export default function ParticipantPage() {
             {/* Responsive preview */}
             <div className="flex justify-center mb-10">
               <div className="relative w-full max-w-md aspect-square rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200 bg-black">
-                <div className="absolute inset-0 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center justify-center p-4">
                   <div
                     className="w-full h-full"
                     style={{
-                      transform: 'scale(0.9)',
+                      transform: 'scale(0.85)',
                       transformOrigin: 'center center',
                     }}
                   >
