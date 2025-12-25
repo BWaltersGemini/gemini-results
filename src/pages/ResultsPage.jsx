@@ -1,10 +1,8 @@
 // src/pages/ResultsPage.jsx
-// FINAL VERSION — December 23, 2025
-// • Top 5 mode: "View All" button above & below table (right-aligned)
-// • No pagination in Top 5 mode
-// • Full pagination returns in View All mode
-// • All features preserved
-// • Added: "Question about my results?" button with pre-fill
+// FINAL VERSION — December 25, 2025
+// • Correct participant URLs
+// • Tracked Athletes section
+// • All previous features preserved
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
@@ -47,6 +45,7 @@ export default function ResultsPage() {
 
   const resultsSectionRef = useRef(null);
   const backToTopRef = useRef(null);
+  const trackedSectionRef = useRef(null);
   const prevMasterKeyRef = useRef(masterKey);
 
   // ====================== EFFECTS ======================
@@ -124,20 +123,24 @@ export default function ResultsPage() {
 
   useEffect(() => {
     if (!masterKey || !year || events.length === 0 || Object.keys(masterGroups).length === 0) return;
-
     const urlSlug = slugify(decodeURIComponent(masterKey));
     const storedMasterKey = Object.keys(masterGroups).find((key) => slugify(key) === urlSlug);
     if (!storedMasterKey) return;
-
     const groupEventIds = (masterGroups[storedMasterKey] || []).map(String);
     const yearEvents = events
       .filter((e) => e?.id && groupEventIds.includes(String(e.id)) && getYearFromEvent(e) === year)
       .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
     if (yearEvents.length > 0 && yearEvents[0].id !== selectedEvent?.id) {
       setSelectedEvent(yearEvents[0]);
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
+
+  // Auto-scroll to tracked athletes if coming from "Track Me"
+  useEffect(() => {
+    if (highlightedBib && trackedSectionRef.current) {
+      trackedSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [highlightedBib]);
 
   // ====================== HELPERS ======================
   const slugify = (text) => {
@@ -158,7 +161,6 @@ export default function ResultsPage() {
 
   // ====================== DATA & FILTERING ======================
   const embeddedRaces = Array.isArray(selectedEvent?.races) ? selectedEvent.races : [];
-
   const racesWithParticipants = useMemo(() => {
     return embeddedRaces.filter(race =>
       results.finishers.some(r => r.race_id === race.race_id) ||
@@ -206,14 +208,17 @@ export default function ResultsPage() {
     navigate(`/results/${masterKey}/${newYear}`);
   };
 
+  // Updated handleNameClick — correct participant URL
   const handleNameClick = (participant) => {
     if (!participant || !selectedEvent) return;
 
+    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(masterGroups).find(([_, ids]) => ids.includes(String(selectedEvent.id)));
+    const foundMaster = Object.entries(allMasterGroups).find(([_, ids]) => ids.includes(String(selectedEvent.id)));
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
 
     const eventYear = getYearFromEvent(selectedEvent);
+
     const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
     const raceName = participantRace?.race_name || participant.race_name || 'overall';
     const raceSlugPart = slugify(raceName);
@@ -263,6 +268,14 @@ export default function ResultsPage() {
     .filter(Boolean)
     .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
     .slice(0, 3);
+
+  // Tracked Athletes — from state.highlightBib (set by "Track Me")
+  const trackedAthletes = useMemo(() => {
+    if (!highlightedBib) return [];
+    const bibStr = String(highlightedBib);
+    const all = [...results.finishers, ...results.nonFinishers];
+    return all.filter(r => String(r.bib) === bibStr);
+  }, [highlightedBib, results]);
 
   // ====================== RENDER ======================
   if ((masterKey || year) && !selectedEvent) {
@@ -379,8 +392,6 @@ export default function ResultsPage() {
             {editedEvents[selectedEvent.id]?.name || selectedEvent.name}
           </h1>
           <p className="text-2xl text-gray-600">{formatDate(selectedEvent.start_time)}</p>
-
-          {/* NEW: Question about my results? button */}
           <div className="mt-10">
             <button
               onClick={() =>
@@ -397,7 +408,6 @@ export default function ResultsPage() {
               Question about my results?
             </button>
           </div>
-
           {isLiveRace && (
             <div className="flex items-center justify-center gap-3 mt-6 text-green-600 font-bold text-xl">
               <div className="w-4 h-4 bg-green-600 rounded-full animate-ping"></div>
@@ -420,6 +430,46 @@ export default function ResultsPage() {
                 {y}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Tracked Athletes Section */}
+        {trackedAthletes.length > 0 && (
+          <div ref={trackedSectionRef} className="mb-20">
+            <h2 className="text-4xl font-bold text-center text-brand-dark mb-10">
+              ⭐ Tracked Athletes ({trackedAthletes.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {trackedAthletes.map((athlete) => (
+                <button
+                  key={athlete.entry_id || athlete.bib}
+                  onClick={() => handleNameClick(athlete)}
+                  className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-3xl shadow-2xl p-8 hover:shadow-3xl hover:scale-105 transition-all border-4 border-primary/30 text-center"
+                >
+                  <p className="text-5xl font-black text-primary mb-4">Bib {athlete.bib}</p>
+                  <p className="text-3xl font-bold text-brand-dark mb-2">
+                    {athlete.first_name} {athlete.last_name}
+                  </p>
+                  <p className="text-xl text-gray-600 mb-4">
+                    {athlete.race_name || 'Overall'}
+                  </p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {formatChronoTime(athlete.chip_time) || 'On Course'}
+                  </p>
+                  <p className="text-lg text-gray-600 mt-2">
+                    Overall: {athlete.place ? `#${athlete.place}` : '—'}
+                  </p>
+                </button>
+              ))}
+            </div>
+            <div className="text-center mt-8">
+              <button
+                onClick={() => setHighlightedBib(null)}
+                className="px-10 py-4 bg-gray-600 text-white font-bold rounded-full hover:bg-gray-700 transition"
+              >
+                Clear Tracked Athletes
+              </button>
+            </div>
           </div>
         )}
 
@@ -471,7 +521,7 @@ export default function ResultsPage() {
               const raceId = race.race_id;
               const isExpanded = expandedRaces[raceId] ?? false;
 
-              // Finishers — official finishers only
+              // Finishers
               let raceFinishers = results.finishers.filter(r => r.race_id === raceId);
               if (selectedDivision !== 'all') {
                 raceFinishers = raceFinishers.filter(r => r.age_group_name === selectedDivision);
@@ -487,7 +537,7 @@ export default function ResultsPage() {
               const totalResults = sortedFinishers.length;
               const displayFinishers = isExpanded ? sortedFinishers : sortedFinishers.slice(0, 5);
 
-              // Pagination state (only used when expanded)
+              // Pagination
               const pag = racePagination[raceId] || { currentPage: 1, pageSize: 50 };
               const updatePage = (newPage) => {
                 setRacePagination(prev => ({
@@ -516,7 +566,7 @@ export default function ResultsPage() {
               }
               const isInProgressExpanded = expandedInProgressSections[raceId];
 
-              // DNF (includes short course with chip_time)
+              // DNF
               let raceDnf = [
                 ...results.finishers.filter(r => r.race_id === raceId && r._status === 'DNF'),
                 ...results.nonFinishers.filter(r => r.race_id === raceId)
@@ -545,10 +595,8 @@ export default function ResultsPage() {
 
                   {totalResults > 0 ? (
                     <>
-                      {/* Top 5 Mode */}
                       {!isExpanded ? (
                         <div>
-                          {/* View All button above table */}
                           {totalResults > 5 && (
                             <div className="text-right mb-6">
                               <button
@@ -569,7 +617,6 @@ export default function ResultsPage() {
                           <div className="mt-8 space-y-4">
                             <p className="text-center text-xl font-semibold text-brand-dark">Top 5 Finishers</p>
                             <p className="text-center text-lg text-gray-600">Showing 1–5 of {totalResults} results</p>
-                            {/* View All button below table */}
                             {totalResults > 5 && (
                               <div className="text-right">
                                 <button
@@ -583,7 +630,6 @@ export default function ResultsPage() {
                           </div>
                         </div>
                       ) : (
-                        /* View All Mode — full pagination */
                         <ResultsTable
                           data={displayFinishers}
                           totalResults={totalResults}

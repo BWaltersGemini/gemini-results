@@ -1,14 +1,14 @@
-// src/pages/ParticipantPage.jsx
-// COMPLETE FINAL VERSION — All Features + Fixes
+// src/pages/participant/ParticipantPage.jsx
+// MAIN PARTICIPANT PAGE — Refactored (uses separate modal and email form)
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useContext, useRef } from 'react';
-import { RaceContext } from '../context/RaceContext';
-import { supabase } from '../supabaseClient';
-import { useLocalStorage } from '../utils/useLocalStorage';
-import { formatChronoTime, parseChipTime } from '../utils/timeUtils';
+import { useState, useEffect, useContext } from 'react';
+import { RaceContext } from '../../context/RaceContext';
+import { supabase } from '../../supabaseClient';
+import { formatChronoTime, parseChipTime } from '../../utils/timeUtils';
 import CountUp from 'react-countup';
 import confetti from 'canvas-confetti';
-import html2canvas from 'html2canvas';
+import ResultCardPreviewModal from './ResultCardPreviewModal';
+import EmailResultsForm from './EmailResultsForm';
 
 export default function ParticipantPage() {
   const location = useLocation();
@@ -26,10 +26,6 @@ export default function ParticipantPage() {
     masterGroups = {},
   } = useContext(RaceContext);
 
-  const [masterGroupsLocal] = useLocalStorage('masterGroups', {});
-  const [editedEventsLocal] = useLocalStorage('editedEvents', {});
-
-  // Priority: navigation state first
   const navState = location.state || {};
   const initialParticipant = navState.participant || null;
   const initialSelectedEvent = navState.selectedEvent || null;
@@ -47,23 +43,11 @@ export default function ParticipantPage() {
   const [fetchError, setFetchError] = useState(null);
   const [timeRevealed, setTimeRevealed] = useState(false);
   const [showCardPreview, setShowCardPreview] = useState(false);
-  const [userPhoto, setUserPhoto] = useState(null);
-  const photoInputRef = useRef(null);
+  const [showEmailForm, setShowEmailForm] = useState(false);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
 
-  // Email feature
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [email, setEmail] = useState('');
-  const [optIn, setOptIn] = useState(false);
-  const [emailStatus, setEmailStatus] = useState('');
-
-  const cardRef = useRef(null);
-  const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-  // Direct link + QR code
   const participantResultsUrl = window.location.href;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF`;
 
   // Fetch upcoming events
   useEffect(() => {
@@ -103,201 +87,10 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Photo upload — updates preview instantly
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const size = Math.min(img.width, img.height);
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, size, size);
-        setUserPhoto(canvas.toDataURL('image/jpeg', 0.9));
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const triggerCamera = () => {
-    photoInputRef.current?.setAttribute('capture', 'environment');
-    photoInputRef.current?.click();
-  };
-
-  const triggerGallery = () => {
-    photoInputRef.current?.removeAttribute('capture');
-    photoInputRef.current?.click();
-  };
-
-  const removePhoto = () => setUserPhoto(null);
-
-  // Ordinal helper (used in email template)
-  const ordinal = (n) => {
-    if (!n) return '—';
-    const s = ['th', 'st', 'nd', 'rd'];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
-  };
-
-  // Email sending — full branded template
-  const sendEmail = async () => {
-    if (!email || !optIn) return;
-    setEmailStatus('sending');
-
-    const fullName = `${participant.first_name} ${participant.last_name}`.trim() || 'Champion';
-    const eventName = selectedEvent.name;
-    const raceName = participant.race_name || eventName;
-    const raceStory = getRaceStory(participant.splits || [], participant.place);
-    const totalFinishers = results.finishers.length + results.nonFinishers.length;
-    const genderCount = results.finishers.filter(r => r.gender === participant.gender).length;
-    const divisionCount = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
-    const baseUrl = window.location.origin;
-
-    const getResultsUrl = () => {
-      const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
-      let masterSlug = 'overall';
-      const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
-        ids.includes(selectedEvent.id.toString())
-      );
-      if (foundMaster) masterSlug = slugify(foundMaster[0]);
-      const year = getYearFromEvent(selectedEvent);
-      return `${baseUrl}/results/${masterSlug}/${year}`;
-    };
-
-    const brandedHtml = `
-      <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;">
-        <tr>
-          <td align="center" style="padding:20px 0;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-collapse:collapse;">
-              <!-- Logo Header -->
-              <tr>
-                <td align="center" style="padding:40px 20px 20px;">
-                  <img src="${baseUrl}/GRR.png" alt="Gemini Race Results" width="220" style="display:block; max-width:100%; height:auto;" />
-                </td>
-              </tr>
-              <!-- Hero Section -->
-              <tr>
-                <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
-                  <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
-                  <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">${fullName}</h2>
-                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
-                  <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
-                  <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
-                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
-                </td>
-              </tr>
-              <!-- Stats Section -->
-              <tr>
-                <td style="padding:50px 30px; background:#F0F8FF;">
-                  <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                    <tr>
-                      <td align="center">
-                        <h3 style="font-size:28px; font-weight:800; color:#263238; margin:0 0 40px;">Your Race Highlights</h3>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td align="center" style="padding:20px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                          <tr>
-                            <td align="center" width="33%" style="padding:15px;">
-                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Overall</p>
-                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.place)}</p>
-                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${totalFinishers}</p>
-                            </td>
-                            <td align="center" width="33%" style="padding:15px;">
-                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Gender</p>
-                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.gender_place)}</p>
-                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${genderCount}</p>
-                            </td>
-                            <td align="center" width="33%" style="padding:15px;">
-                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Division</p>
-                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.age_group_place)}</p>
-                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${divisionCount} (${participant.age_group_name || ''})</p>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              <!-- Race Story -->
-              <tr>
-                <td align="center" style="padding:40px 30px;">
-                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
-                    <tr>
-                      <td style="background:#ffffff; padding:40px; border-left:8px solid #B22222; box-shadow:0 4px 20px rgba(178,34,34,0.15);">
-                        <p style="font-size:24px; font-weight:700; color:#263238; margin:0; line-height:1.5;">
-                          ${raceStory}
-                        </p>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              <!-- CTAs -->
-              <tr>
-                <td align="center" style="padding:40px 30px; background:#F0F8FF;">
-                  <p style="margin:0 0 20px;">
-                    <a href="${getResultsUrl()}" target="_blank" style="display:inline-block; background:#B22222; color:#ffffff; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
-                      View Full Results →
-                    </a>
-                  </p>
-                  <p style="margin:0;">
-                    <a href="https://youkeepmoving.com/events" target="_blank" style="display:inline-block; background:#48D1CC; color:#263238; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
-                      Find Your Next Race →
-                    </a>
-                  </p>
-                </td>
-              </tr>
-              <!-- Footer -->
-              <tr>
-                <td align="center" style="background:#263238; color:#aaaaaa; padding:40px 20px;">
-                  <p style="font-size:18px; margin:0 0 12px; color:#ffffff;">— The Gemini Timing Team</p>
-                  <p style="margin:0;">
-                    <a href="https://geminitiming.com" target="_blank" style="color:#48D1CC; font-size:16px; text-decoration:underline;">geminitiming.com</a>
-                  </p>
-                  <p style="font-size:12px; margin-top:20px; color:#94a3b8;">You received this because you participated in ${eventName}.</p>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    `;
-
-    try {
-      const res = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: [email],
-          subject: `${fullName.split(' ')[0]}, Your Official ${eventName} Results!`,
-          html: brandedHtml,
-        }),
-      });
-      if (res.ok) {
-        setEmailStatus('success');
-        setTimeout(() => setShowEmailForm(false), 3000);
-      } else {
-        setEmailStatus('error');
-      }
-    } catch (err) {
-      console.error('Send failed:', err);
-      setEmailStatus('error');
-    }
-  };
-
-  // Load participant — works on navigation AND direct refresh
+  // Load participant
   useEffect(() => {
     const loadParticipant = async () => {
-      if (participant && selectedEvent && results.finishers.length > 0 && results.nonFinishers.length >= 0) {
+      if (participant && selectedEvent && results.finishers.length > 0) {
         if (!timeRevealed && participant.chip_time) {
           confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
         }
@@ -328,7 +121,7 @@ export default function ParticipantPage() {
           }
         }
 
-        if (!targetEvent) throw new Error('Event not found for this participant');
+        if (!targetEvent) throw new Error('Event not found');
 
         setSelectedEvent(targetEvent);
 
@@ -361,80 +154,11 @@ export default function ParticipantPage() {
 
   const handleTimeComplete = () => setTimeRevealed(true);
 
-  // Generate/share card
-  const generateResultCard = async () => {
-    if (!cardRef.current) return;
-    try {
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 2.5,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-        logging: false,
-        width: 1080,
-        height: 1080,
-      });
-      const image = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `${participant.first_name}_${participant.last_name}_result.png`;
-      link.href = image;
-      link.click();
-    } catch (err) {
-      console.error('Card generation failed:', err);
-      alert('Failed to generate card — please try again!');
-    }
-  };
-
-  const shareResultCard = async () => {
-    if (!cardRef.current) return;
-    try {
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 2.5,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-        width: 1080,
-        height: 1080,
-      });
-      canvas.toBlob(async (blob) => {
-        const file = new File([blob], 'result-card.png', { type: 'image/png' });
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: 'My Race Result!',
-            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏁\n\nFull results: ${participantResultsUrl}`,
-          });
-        } else {
-          generateResultCard();
-        }
-      });
-    } catch (err) {
-      generateResultCard();
-    }
-  };
-
-  // Social sharing
-  const shareOnFacebook = () => {
-    const url = encodeURIComponent(participantResultsUrl);
-    const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`, '_blank');
-  };
-
-  const shareOnX = () => {
-    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! Overall: ${participant.place}, Gender: ${participant.gender_place}, Division: ${participant.age_group_place} 🏁\n\n${participantResultsUrl}`);
-    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
-  };
-
-  const shareOnInstagram = () => {
-    alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
-  };
-
-  // Division click
   const handleDivisionClick = () => {
     if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
-    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+    const foundMaster = Object.entries(allMasterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
@@ -444,11 +168,10 @@ export default function ParticipantPage() {
     });
   };
 
-  // Track Me
   const trackMe = () => {
-    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+    const foundMaster = Object.entries(allMasterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
@@ -461,7 +184,7 @@ export default function ParticipantPage() {
       navigate('/results');
       return;
     }
-    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
     const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
       ids.includes(selectedEvent.id.toString())
@@ -471,7 +194,6 @@ export default function ParticipantPage() {
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
 
-  // Loading / Error
   if (loading || loadingResults) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-brand-light to-white pt-40 flex items-center justify-center">
@@ -497,7 +219,6 @@ export default function ParticipantPage() {
     );
   }
 
-  // Stats
   const overallTotal = results.finishers.length + results.nonFinishers.length;
   const genderTotal = results.finishers.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
@@ -510,7 +231,6 @@ export default function ParticipantPage() {
   const isTop10Percent = participant.place && overallTotal > 10 && participant.place <= Math.ceil(overallTotal * 0.1);
   const isAgeGroupWinner = participant.age_group_place === 1;
 
-  // Race Story
   const getRaceStory = () => {
     if (!participant.splits || participant.splits.length === 0) return null;
     const splitsWithPlace = participant.splits.filter(s => s.place);
@@ -568,7 +288,6 @@ export default function ParticipantPage() {
                 {participant.first_name} {participant.last_name}
               </p>
               <p className="text-xl sm:text-2xl text-gray-600 italic mt-2">You crushed the {raceDisplayName}!</p>
-              {/* Division Display */}
               <p className="text-2xl text-gray-700 mt-4">
                 Division: <button onClick={handleDivisionClick} className="font-bold text-accent hover:underline">
                   {participant.age_group_name || 'N/A'}
@@ -731,61 +450,12 @@ export default function ParticipantPage() {
 
         {/* Email Results */}
         <div className="text-center mb-16">
-          {!showEmailForm ? (
-            <button
-              onClick={() => setShowEmailForm(true)}
-              className="px-16 py-6 bg-green-600 text-white font-bold text-2xl rounded-full hover:bg-green-700 transition shadow-xl"
-            >
-              📧 Email Me My Results
-            </button>
-          ) : (
-            <div className="max-w-lg mx-auto bg-gray-50 rounded-3xl p-8 shadow-xl">
-              <p className="text-2xl font-bold mb-6">Send Your Results</p>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="w-full px-6 py-4 text-xl rounded-full border-2 border-gray-300 focus:border-primary focus:outline-none mb-6"
-                autoFocus
-              />
-              <label className="flex items-center gap-4 text-lg mb-6">
-                <input
-                  type="checkbox"
-                  checked={optIn}
-                  onChange={(e) => setOptIn(e.target.checked)}
-                  className="w-6 h-6 text-primary rounded focus:ring-primary"
-                />
-                <span>Yes, send me future race updates from Gemini Timing</span>
-              </label>
-              <div className="flex justify-center gap-6">
-                <button
-                  onClick={sendEmail}
-                  disabled={!email || !optIn || emailStatus === 'sending'}
-                  className="px-12 py-5 bg-primary text-white font-bold text-xl rounded-full disabled:opacity-60 shadow-xl"
-                >
-                  {emailStatus === 'sending' ? 'Sending...' : 'Send Results'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowEmailForm(false);
-                    setEmail('');
-                    setOptIn(false);
-                    setEmailStatus('');
-                  }}
-                  className="px-12 py-5 bg-gray-500 text-white font-bold text-xl rounded-full hover:bg-gray-600 shadow-xl"
-                >
-                  Cancel
-                </button>
-              </div>
-              {emailStatus === 'success' && (
-                <p className="text-green-600 text-2xl font-bold mt-6">✓ Email sent!</p>
-              )}
-              {emailStatus === 'error' && (
-                <p className="text-red-600 text-xl mt-6">✗ Failed to send — try again</p>
-              )}
-            </div>
-          )}
+          <button
+            onClick={() => setShowEmailForm(true)}
+            className="px-16 py-6 bg-green-600 text-white font-bold text-2xl rounded-full hover:bg-green-700 transition shadow-xl"
+          >
+            📧 Email Me My Results
+          </button>
         </div>
 
         {/* Social Share */}
@@ -887,132 +557,26 @@ export default function ParticipantPage() {
         </div>
       </div>
 
-      {/* Hidden Photo Input */}
-      <input type="file" ref={photoInputRef} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+      {/* Result Card Modal */}
+      <ResultCardPreviewModal
+        show={showCardPreview}
+        onClose={() => setShowCardPreview(false)}
+        participant={participant}
+        selectedEvent={selectedEvent}
+        masterLogo={masterLogo}
+        bibLogo={bibLogo}
+        raceDisplayName={raceDisplayName}
+        participantResultsUrl={participantResultsUrl}
+      />
 
-      {/* Hidden Full-Size Card for html2canvas */}
-      <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
-        <div
-          ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden relative"
-          style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
-        >
-          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
-            {masterLogo ? (
-              <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
-            ) : eventLogos[selectedEvent.id] ? (
-              <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-24 object-contain mx-auto" crossOrigin="anonymous" />
-            ) : (
-              <h2 className="text-4xl font-black text-brand-dark">{selectedEvent.name}</h2>
-            )}
-          </div>
-          <p className="text-3xl font-black text-accent mb-2">{raceDisplayName}</p>
-          <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-          <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
-            {userPhoto && (
-              <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
-                <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
-              </div>
-            )}
-            <h1 className={`font-black text-white drop-shadow-2xl leading-none ${userPhoto ? 'text-6xl' : 'text-7xl'}`}>
-              {participant.first_name}<br />{participant.last_name}
-            </h1>
-          </div>
-          <div className="mb-10">
-            <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
-            <p className="text-9xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
-              {formatChronoTime(participant.chip_time)}
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-12">
-            <div>
-              <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
-              <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
-              <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
-            </div>
-            <div>
-              <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
-              <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
-              <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
-            </div>
-            <div>
-              <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
-              <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
-              <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
-            </div>
-          </div>
-          <div className="absolute bottom-24 right-8 flex flex-col items-center">
-            <p className="text-white text-xl font-bold mb-3">View Full Results</p>
-            <img src={qrCodeUrl} alt="QR Code" className="w-40 h-40 border-6 border-white rounded-2xl shadow-2xl" crossOrigin="anonymous" />
-          </div>
-          <p className="text-3xl text-white italic mt-auto mb-8">
-            Find your next race at www.youkeepmoving.com
-          </p>
-        </div>
-      </div>
-
-      {/* Card Preview Modal — Mobile-friendly scaling */}
-      {showCardPreview && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCardPreview(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => setShowCardPreview(false)}
-              className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-brand-dark text-3xl font-light hover:bg-gray-100 transition z-50"
-            >
-              ×
-            </button>
-            <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
-
-            {/* Responsive preview */}
-            <div className="flex justify-center mb-10">
-              <div className="relative w-full max-w-md aspect-square rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200 bg-black">
-                <div className="absolute inset-0 flex items-center justify-center p-4">
-                  <div
-                    className="w-full h-full"
-                    style={{
-                      transform: 'scale(0.85)',
-                      transformOrigin: 'center center',
-                    }}
-                  >
-                    {cardRef.current && (
-                      <div
-                        dangerouslySetInnerHTML={{
-                          __html: cardRef.current.outerHTML
-                            .replace(/className/g, 'class')
-                            .replace(/crossOrigin="anonymous"/g, '')
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-10">
-              <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
-              <div className="flex justify-center gap-6 mb-6">
-                <button onClick={triggerCamera} className="px-8 py-4 bg-primary text-white font-bold rounded-full hover:bg-primary/90 transition">📷 Take Photo</button>
-                <button onClick={triggerGallery} className="px-8 py-4 bg-brand-dark text-white font-bold rounded-full hover:bg-brand-dark/90 transition">🖼️ Choose from Gallery</button>
-              </div>
-              {userPhoto && (
-                <div className="text-center">
-                  <img src={userPhoto} alt="Your photo" className="w-32 h-32 object-cover rounded-full mx-auto shadow-xl mb-4" />
-                  <button onClick={removePhoto} className="text-primary underline">Remove Photo</button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-center gap-6">
-              <button onClick={generateResultCard} className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl">
-                {isMobileDevice ? 'Save to Photos' : 'Download Image'}
-              </button>
-              <button onClick={shareResultCard} className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition shadow-xl">
-                Share Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Email Results Form */}
+      <EmailResultsForm
+        show={showEmailForm}
+        onClose={() => setShowEmailForm(false)}
+        participant={participant}
+        selectedEvent={selectedEvent}
+        raceDisplayName={raceDisplayName}
+      />
     </div>
   );
 }
