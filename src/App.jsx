@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { RaceProvider } from './context/RaceContext';
-import { DirectorProvider } from './context/DirectorContext'; // ← New
+import { DirectorProvider } from './context/DirectorContext'; // ← Added
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ScrollToTop from './components/ScrollToTop';
@@ -21,6 +21,7 @@ import ResultsKiosk from './pages/ResultsKiosk';
 import DirectorLogin from './pages/director/DirectorLogin';
 import RaceDirectorsHub from './pages/director/RaceDirectorsHub';
 import LiveTrackingPage from './pages/director/LiveTrackingPage';
+import AwardsPage from './pages/director/AwardsPage'; // ← Added
 
 import ReactGA from 'react-ga4';
 
@@ -48,11 +49,13 @@ function AnalyticsTracker() {
   return null;
 }
 
-// Layout wrapper to hide Navbar & Footer on kiosk routes
+// Layout wrapper to hide Navbar & Footer on kiosk and director routes
 function Layout({ children }) {
   const location = useLocation();
   const isKiosk = location.pathname.startsWith('/kiosk');
-  const isDirectorArea = location.pathname.startsWith('/director') || location.pathname.startsWith('/race-directors-hub');
+  const isDirectorArea =
+    location.pathname.startsWith('/director') ||
+    location.pathname.startsWith('/race-directors-hub');
 
   return (
     <>
@@ -107,11 +110,23 @@ export default function App() {
                     </DirectorProvider>
                   }
                 />
+
+                {/* Live Tracking – uses selectedEventId from context */}
                 <Route
-                  path="/director-live-tracking/:eventId"
+                  path="/director-live-tracking"
                   element={
                     <DirectorProvider>
                       <LiveTrackingPage />
+                    </DirectorProvider>
+                  }
+                />
+
+                {/* Awards Page */}
+                <Route
+                  path="/director-awards"
+                  element={
+                    <DirectorProvider>
+                      <AwardsPage />
                     </DirectorProvider>
                   }
                 />
