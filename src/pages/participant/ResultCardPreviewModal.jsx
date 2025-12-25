@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
 
@@ -13,9 +13,12 @@ export default function ResultCardPreviewModal({
   raceDisplayName,
   participantResultsUrl,
   results,
-  userPhoto, // Now passed from ParticipantPage
+  userPhoto,
+  triggerCamera,
+  triggerGallery,
+  removePhoto,
 }) {
-  const cardRef = useRef(null); // This is the hidden full-size card for html2canvas
+  const cardRef = useRef(null);
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   const overallTotal = results.finishers.length + results.nonFinishers.length;
@@ -98,7 +101,7 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden Full-Size Card for html2canvas (includes userPhoto) */}
+      {/* Hidden Full-Size Card for html2canvas */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -137,21 +140,9 @@ export default function ResultCardPreviewModal({
           </div>
 
           <div className="grid grid-cols-3 gap-16 text-white w-full max-w-5xl mb-16">
-            <div>
-              <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
-              <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
-              <p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p>
-            </div>
-            <div>
-              <p className="text-3xl text-gray-400 uppercase mb-3">Gender</p>
-              <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
-              <p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p>
-            </div>
-            <div>
-              <p className="text-3xl text-gray-400 uppercase mb-3">Division</p>
-              <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
-              <p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p>
-            </div>
+            <div><p className="text-3xl text-gray-400 uppercase mb-3">Overall</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p></div>
+            <div><p className="text-3xl text-gray-400 uppercase mb-3">Gender</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p></div>
+            <div><p className="text-3xl text-gray-400 uppercase mb-3">Division</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p></div>
           </div>
 
           <div className="absolute bottom-28 right-12">
@@ -170,7 +161,7 @@ export default function ResultCardPreviewModal({
         </div>
       </div>
 
-      {/* Visible Modal with Live Preview */}
+      {/* Modal */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div
           className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto"
@@ -185,18 +176,14 @@ export default function ResultCardPreviewModal({
 
           <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
 
-          {/* Perfect Phone-Style Preview */}
+          {/* Phone Preview */}
           <div className="flex justify-center mb-12">
             <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300 w-96 h-[600px]">
               <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
                 <div
                   className="w-[1080px] h-[1080px] origin-top"
-                  style={{
-                    transform: 'scale(0.355)',
-                    transformOrigin: 'top center',
-                  }}
+                  style={{ transform: 'scale(0.355)', transformOrigin: 'top center' }}
                 >
-                  {/* Duplicate card content for live preview */}
                   <div className="w-full h-full bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16 overflow-hidden">
                     <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 mb-8">
                       {masterLogo ? (
@@ -249,23 +236,21 @@ export default function ResultCardPreviewModal({
             </div>
           </div>
 
-          {/* Photo Upload Section */}
+          {/* Photo Upload */}
           <div className="mb-12 text-center">
             <p className="text-3xl font-bold mb-8">📸 Add Your Finish Line Photo!</p>
             <div className="flex justify-center gap-8 mb-8">
-              <button onClick={() => document.getElementById('photo-input').setAttribute('capture', 'environment') || document.getElementById('photo-input').click()}
-                className="px-10 py-5 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-lg">
+              <button onClick={triggerCamera} className="px-10 py-5 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-lg">
                 📷 Take Photo
               </button>
-              <button onClick={() => document.getElementById('photo-input').removeAttribute('capture') || document.getElementById('photo-input').click()}
-                className="px-10 py-5 bg-brand-dark text-white font-bold text-xl rounded-full hover:bg-brand-dark/90 transition shadow-lg">
+              <button onClick={triggerGallery} className="px-10 py-5 bg-brand-dark text-white font-bold text-xl rounded-full hover:bg-brand-dark/90 transition shadow-lg">
                 🖼️ Choose from Gallery
               </button>
             </div>
             {userPhoto && (
               <div className="inline-block">
                 <img src={userPhoto} alt="Your photo" className="w-40 h-40 object-cover rounded-full shadow-2xl border-4 border-white" />
-                <button onClick={onClose /* parent handles remove */} className="block mt-4 text-primary font-semibold underline">
+                <button onClick={removePhoto} className="block mt-4 text-primary font-semibold underline">
                   Remove Photo
                 </button>
               </div>
@@ -282,7 +267,7 @@ export default function ResultCardPreviewModal({
             </button>
           </div>
 
-          {/* Social Buttons */}
+          {/* Social Share */}
           <div className="text-center">
             <p className="text-2xl font-bold text-brand-dark mb-6">Or Share Directly</p>
             <div className="flex justify-center gap-6 flex-wrap">

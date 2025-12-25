@@ -1,7 +1,7 @@
 // src/pages/participant/ParticipantPage.jsx
-// MAIN PARTICIPANT PAGE — Refactored (uses separate modal and email form)
+// MAIN PARTICIPANT PAGE — Fully Fixed with Photo Upload + Perfect Card Preview
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../../context/RaceContext';
 import { supabase } from '../../supabaseClient';
 import { formatChronoTime, parseChipTime } from '../../utils/timeUtils';
@@ -15,7 +15,6 @@ export default function ParticipantPage() {
   const navigate = useNavigate();
   const params = useParams();
   const { bib } = params;
-
   const {
     events = [],
     selectedEvent: contextSelectedEvent,
@@ -37,7 +36,6 @@ export default function ParticipantPage() {
     finishers: initialResults.finishers || [],
     nonFinishers: initialResults.nonFinishers || []
   });
-
   const [showSplits, setShowSplits] = useState(false);
   const [loading, setLoading] = useState(!initialParticipant);
   const [fetchError, setFetchError] = useState(null);
@@ -46,6 +44,10 @@ export default function ParticipantPage() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
+
+  // Photo upload state and ref
+  const [userPhoto, setUserPhoto] = useState(null);
+  const photoInputRef = useRef(null);
 
   const participantResultsUrl = window.location.href;
 
@@ -87,7 +89,41 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Load participant
+  // Photo upload handlers
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = Math.min(img.width, img.height);
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, size, size);
+        setUserPhoto(canvas.toDataURL('image/jpeg', 0.9));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerCamera = () => {
+    photoInputRef.current?.setAttribute('capture', 'environment');
+    photoInputRef.current?.click();
+  };
+
+  const triggerGallery = () => {
+    photoInputRef.current?.removeAttribute('capture');
+    photoInputRef.current?.click();
+  };
+
+  const removePhoto = () => setUserPhoto(null);
+
+  // Load participant data
   useEffect(() => {
     const loadParticipant = async () => {
       if (participant && selectedEvent && results.finishers.length > 0) {
@@ -96,10 +132,8 @@ export default function ParticipantPage() {
         }
         return;
       }
-
       setLoading(true);
       setFetchError(null);
-
       try {
         if (events.length === 0 || !contextSelectedEvent) {
           const interval = setInterval(() => {
@@ -111,7 +145,6 @@ export default function ParticipantPage() {
           setTimeout(() => clearInterval(interval), 10000);
           return;
         }
-
         let targetEvent = selectedEvent || contextSelectedEvent;
         if (!targetEvent) {
           const allResults = [...contextResults.finishers, ...contextResults.nonFinishers];
@@ -120,25 +153,18 @@ export default function ParticipantPage() {
             targetEvent = events.find(e => e.id === match.event_id);
           }
         }
-
         if (!targetEvent) throw new Error('Event not found');
-
         setSelectedEvent(targetEvent);
-
         const { data: fetchedResults, error } = await supabase
           .from('chronotrack_results')
           .select('*')
           .eq('event_id', targetEvent.id);
-
         if (error) throw error;
-
         const finishers = fetchedResults?.filter(r => r.chip_time && r.chip_time.trim() !== '') || [];
         const nonFinishers = fetchedResults?.filter(r => !r.chip_time || r.chip_time.trim() === '') || [];
         setResults({ finishers, nonFinishers });
-
         const found = fetchedResults?.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found');
-
         setParticipant(found);
         confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
       } catch (err) {
@@ -148,7 +174,6 @@ export default function ParticipantPage() {
         setLoading(false);
       }
     };
-
     loadParticipant();
   }, [bib, events, contextSelectedEvent, contextResults, loadingResults]);
 
@@ -156,9 +181,8 @@ export default function ParticipantPage() {
 
   const handleDivisionClick = () => {
     if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
-    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([_, ids]) =>
+    const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
@@ -169,9 +193,8 @@ export default function ParticipantPage() {
   };
 
   const trackMe = () => {
-    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([_, ids]) =>
+    const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
@@ -184,9 +207,8 @@ export default function ParticipantPage() {
       navigate('/results');
       return;
     }
-    const allMasterGroups = masterGroups;
     let masterSlug = 'overall';
-    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+    const foundMaster = Object.entries(masterGroups).find(([key, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
@@ -305,7 +327,6 @@ export default function ParticipantPage() {
               </div>
             </div>
           </div>
-
           {/* Badges */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             {isTop10Percent && (
@@ -317,7 +338,6 @@ export default function ParticipantPage() {
               </span>
             )}
           </div>
-
           <div className="mb-8">
             <h2 className="text-4xl font-bold text-brand-dark">{selectedEvent.name}</h2>
             <p className="text-xl text-gray-600 italic">{formatDate(selectedEvent.start_time)}</p>
@@ -346,7 +366,6 @@ export default function ParticipantPage() {
               )}
             </p>
           </div>
-
           <div className="grid grid-cols-3 gap-6 text-center">
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Overall</p>
@@ -458,7 +477,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        
         {/* Track Me */}
         <div className="text-center mb-16">
           <button
@@ -531,8 +549,8 @@ export default function ParticipantPage() {
           )}
         </section>
 
-        {/* Action Buttons */}
-        <div className="text-center mt-16 space-y-8">
+        {/* Back Button */}
+        <div className="text-center mt-16">
           <button
             onClick={goBackToResults}
             className="px-12 py-5 bg-brand-dark text-white font-bold text-xl rounded-full hover:bg-brand-dark/90 transition shadow-xl"
@@ -540,30 +558,42 @@ export default function ParticipantPage() {
             ← Back to Results
           </button>
         </div>
+
+        {/* Hidden Photo Input */}
+        <input
+          type="file"
+          ref={photoInputRef}
+          accept="image/*"
+          onChange={handlePhotoUpload}
+          className="hidden"
+        />
+
+        {/* Result Card Modal */}
+        <ResultCardPreviewModal
+          show={showCardPreview}
+          onClose={() => setShowCardPreview(false)}
+          participant={participant}
+          selectedEvent={selectedEvent}
+          masterLogo={masterLogo}
+          bibLogo={bibLogo}
+          raceDisplayName={raceDisplayName}
+          participantResultsUrl={participantResultsUrl}
+          results={results}
+          userPhoto={userPhoto}
+          triggerCamera={triggerCamera}
+          triggerGallery={triggerGallery}
+          removePhoto={removePhoto}
+        />
+
+        {/* Email Results Form */}
+        <EmailResultsForm
+          show={showEmailForm}
+          onClose={() => setShowEmailForm(false)}
+          participant={participant}
+          selectedEvent={selectedEvent}
+          raceDisplayName={raceDisplayName}
+        />
       </div>
-
-      {/* Result Card Modal */}
-      <ResultCardPreviewModal
-        show={showCardPreview}
-        onClose={() => setShowCardPreview(false)}
-        participant={participant}
-        selectedEvent={selectedEvent}
-        masterLogo={masterLogo}
-        bibLogo={bibLogo}
-        raceDisplayName={raceDisplayName}
-        participantResultsUrl={participantResultsUrl}
-        results={results}
-        userPhoto={userPhoto}
-      />
-
-      {/* Email Results Form */}
-      <EmailResultsForm
-        show={showEmailForm}
-        onClose={() => setShowEmailForm(false)}
-        participant={participant}
-        selectedEvent={selectedEvent}
-        raceDisplayName={raceDisplayName}
-      />
     </div>
   );
 }
