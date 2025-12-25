@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInDirector, signUpDirector } from '../../utils/auth';
+import { supabase } from '../../supabaseClient'; // ← Added import
 
 export default function DirectorLogin() {
   const [email, setEmail] = useState('');
@@ -10,6 +11,7 @@ export default function DirectorLogin() {
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -25,11 +27,23 @@ export default function DirectorLogin() {
     }
 
     if (res.error) {
-      setError(res.error.message);
-    } else {
-      navigate('/race-directors-hub');
+      setError(res.error.message || 'An error occurred. Please try again.');
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    // Success: Force Supabase to establish/refresh the session
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError || !sessionData?.session) {
+      setError('Login succeeded but session could not be established. Please try logging in again.');
+      setLoading(false);
+      return;
+    }
+
+    // Full page redirect ensures DirectorContext picks up the session on fresh load
+    // This is the most reliable way to avoid the "stuck loading" issue
+    window.location.href = '/race-directors-hub';
   };
 
   return (
@@ -38,7 +52,6 @@ export default function DirectorLogin() {
         <h1 className="text-4xl font-bold text-center text-text-dark mb-8">
           {isSignup ? 'Create Director Account' : 'Director Login'}
         </h1>
-
         <form onSubmit={handleSubmit} className="space-y-6">
           {isSignup && (
             <input
@@ -50,7 +63,6 @@ export default function DirectorLogin() {
               className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
             />
           )}
-
           <input
             type="email"
             placeholder="Email"
@@ -59,7 +71,6 @@ export default function DirectorLogin() {
             required
             className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
           />
-
           <input
             type="password"
             placeholder="Password"
@@ -68,9 +79,7 @@ export default function DirectorLogin() {
             required
             className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
           />
-
           {error && <p className="text-red-600 text-center font-medium">{error}</p>}
-
           <button
             type="submit"
             disabled={loading}
@@ -79,7 +88,6 @@ export default function DirectorLogin() {
             {loading ? 'Loading...' : isSignup ? 'Sign Up' : 'Log In'}
           </button>
         </form>
-
         <p className="text-center mt-8 text-text-muted">
           {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
           <button
