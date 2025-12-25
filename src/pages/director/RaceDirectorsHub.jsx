@@ -23,14 +23,12 @@ export default function RaceDirectorsHub() {
   // Load assigned events + ChronoTrack events
   useEffect(() => {
     if (!currentUser) {
-      // Wait for auth listener to restore user — do NOT redirect here
       return;
     }
 
     const loadData = async () => {
       setLoading(true);
       setError('');
-
       try {
         // Fetch assigned event IDs
         const { data: assignments, error: assignError } = await supabase
@@ -57,7 +55,6 @@ export default function RaceDirectorsHub() {
 
         // Sort by most recent first
         const sorted = filtered.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
         setAllEvents(sorted);
 
         // Auto-select the most recent event if none selected
@@ -172,14 +169,17 @@ export default function RaceDirectorsHub() {
               </button>
             </div>
 
-            {/* Analytics Card */}
+            {/* Analytics Card - NOW ACTIVE! */}
             <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition">
-              <h2 className="text-2xl font-bold text-accent mb-4">Year-over-Year Stats</h2>
+              <h2 className="text-2xl font-bold text-accent mb-4">Year-over-Year Analytics</h2>
               <p className="text-text-muted mb-6">
-                Compare participation, finish rates, and performance across years.
+                Compare participation, finish rates, gender split, and performance trends across years.
               </p>
-              <button className="bg-primary text-text-light px-6 py-3 rounded-full font-bold hover:bg-primary/90 transition opacity-50 cursor-not-allowed">
-                Coming Soon
+              <button
+                onClick={() => navigate('/director-analytics')}
+                className="bg-primary text-text-light px-6 py-3 rounded-full font-bold hover:bg-primary/90 transition"
+              >
+                Open Analytics →
               </button>
             </div>
           </div>
