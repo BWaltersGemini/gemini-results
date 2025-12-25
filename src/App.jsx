@@ -13,7 +13,7 @@ import Products from './pages/Products';
 import ResultsPage from './pages/ResultsPage';
 import Contact from './pages/Contact';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import ParticipantPage from './pages/ParticipantPage';
+import ParticipantPage from './pages/participant/ParticipantPage'; 
 import MasterEvents from './pages/MasterEvents';
 import ResultsKiosk from './pages/ResultsKiosk';
 
