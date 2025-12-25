@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL — Live Photo in Preview + Perfect Download
+// FINAL VERSION — No QR Code, Square Preview Maintained, Downloaded Card Perfect
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -83,68 +83,26 @@ export default function ResultCardPreviewModal({
     }
   };
 
-  if (!show) return null;
+  const shareOnFacebook = () => {
+    const url = encodeURIComponent(participantResultsUrl);
+    const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`, '_blank');
+  };
 
-  // Live Card Component — Used in Preview (updates with userPhoto)
-  const LivePreviewCard = () => (
-    <div className="w-full h-full bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-6 pt-4 pb-8 overflow-hidden relative">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-3 mb-4">
-        {masterLogo ? (
-          <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-20 object-contain mx-auto" />
-        ) : bibLogo ? (
-          <img src={bibLogo} alt="Event Logo" className="max-w-full max-h-18 object-contain mx-auto" />
-        ) : (
-          <h2 className="text-2xl font-black text-brand-dark">{selectedEvent.name}</h2>
-        )}
-      </div>
-      <p className="text-2xl font-black text-accent mb-1">{raceDisplayName}</p>
-      <p className="text-xl text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
-      <div className={`flex items-center justify-center gap-12 mb-6 ${!userPhoto ? 'flex-col gap-8' : ''}`}>
-        {userPhoto && (
-          <div className="w-48 h-48 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
-            <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
-          </div>
-        )}
-        <h1 className={`font-black text-white drop-shadow-2xl leading-none ${userPhoto ? 'text-5xl' : 'text-6xl'}`}>
-          {participant.first_name}<br />{participant.last_name}
-        </h1>
-      </div>
-      <div className="mb-6">
-        <p className="text-2xl text-gray-400 uppercase tracking-widest mb-2">Finish Time</p>
-        <p className="text-7xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
-          {formatChronoTime(participant.chip_time)}
-        </p>
-      </div>
-      <div className="grid grid-cols-3 gap-8 text-white w-full mb-8">
-        <div>
-          <p className="text-lg text-gray-400 uppercase mb-1">Overall</p>
-          <p className="text-5xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
-          <p className="text-base text-gray-400 mt-1">of {overallTotal}</p>
-        </div>
-        <div>
-          <p className="text-lg text-gray-400 uppercase mb-1">Gender</p>
-          <p className="text-5xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
-          <p className="text-base text-gray-400 mt-1">of {genderTotal}</p>
-        </div>
-        <div>
-          <p className="text-lg text-gray-400 uppercase mb-1">Division</p>
-          <p className="text-5xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
-          <p className="text-base text-gray-400 mt-1">of {divisionTotal}</p>
-        </div>
-      </div>
-      <div className="absolute bottom-16 right-6 flex flex-col items-center">
-        <p className="text-white text-base font-bold mb-2">View Full Results</p>
-        <div className="w-32 h-32 bg-white/90 rounded-2xl shadow-2xl border-4 border-white" /> {/* Placeholder QR */}
-      </div>
-      <p className="text-xl text-white italic mt-auto mb-6">
-        Find your next race at www.youkeepmoving.com
-      </p>
-    </div>
-  );
+  const shareOnX = () => {
+    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! Overall: ${participant.place}, Gender: ${participant.gender_place}, Division: ${participant.age_group_place} 🏁\n\n${participantResultsUrl}`);
+    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+  };
+
+  const shareOnInstagram = () => {
+    alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
+  };
+
+  if (!show) return null;
 
   return (
     <>
-      {/* Hidden Full-Size Card — Exact Old Working Version */}
+      {/* Hidden Full-Size Card — No QR Code */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -195,17 +153,14 @@ export default function ResultCardPreviewModal({
               <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
             </div>
           </div>
-          <div className="absolute bottom-24 right-8 flex flex-col items-center">
-            <p className="text-white text-xl font-bold mb-3">View Full Results</p>
-            <img src={participantResultsUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF` : ''} alt="QR Code" className="w-40 h-40 border-6 border-white rounded-2xl shadow-2xl" crossOrigin="anonymous" />
-          </div>
+          {/* QR Code Removed */}
           <p className="text-3xl text-white italic mt-auto mb-8">
             Find your next race at www.youkeepmoving.com
           </p>
         </div>
       </div>
 
-      {/* Modal with Live Preview */}
+      {/* Modal Preview — Square (aspect-square) Maintained */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
           <button
@@ -216,6 +171,7 @@ export default function ResultCardPreviewModal({
           </button>
           <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
           <div className="flex justify-center mb-10">
+            {/* Square Preview Frame */}
             <div className="relative w-full max-w-lg aspect-square rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200 bg-black">
               <div className="absolute inset-0 flex items-center justify-center">
                 <div
@@ -225,12 +181,19 @@ export default function ResultCardPreviewModal({
                     transformOrigin: 'center center',
                   }}
                 >
-                  <LivePreviewCard />
+                  {cardRef.current && (
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: cardRef.current.outerHTML
+                          .replace(/className/g, 'class')
+                          .replace(/crossOrigin="anonymous"/g, '')
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             </div>
           </div>
-          {/* Rest of modal unchanged */}
           <div className="mb-10">
             <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
             <div className="flex justify-center gap-6 mb-6">
