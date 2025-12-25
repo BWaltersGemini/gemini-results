@@ -458,22 +458,7 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Social Share */}
-        <div className="text-center mb-16">
-          <p className="text-2xl font-bold text-brand-dark mb-8">Share Your Achievement!</p>
-          <div className="flex justify-center gap-8 flex-wrap">
-            <button onClick={shareOnFacebook} className="px-8 py-4 bg-[#1877F2] text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3">
-              <span className="text-3xl">f</span> Share on Facebook
-            </button>
-            <button onClick={shareOnX} className="px-8 py-4 bg-black text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3">
-              <span className="text-3xl">𝕏</span> Post on X
-            </button>
-            <button onClick={shareOnInstagram} className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition flex items-center gap-3">
-              <span className="text-3xl">📸</span> Instagram (Download First)
-            </button>
-          </div>
-        </div>
-
+        
         {/* Track Me */}
         <div className="text-center mb-16">
           <button

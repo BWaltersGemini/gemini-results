@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 
 export default function ResultCardPreviewModal({
@@ -101,6 +101,22 @@ export default function ResultCardPreviewModal({
     }
   };
 
+  // === Social Sharing Functions — Moved Here ===
+  const shareOnFacebook = () => {
+    const url = encodeURIComponent(participantResultsUrl);
+    const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`, '_blank');
+  };
+
+  const shareOnX = () => {
+    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! Overall: ${participant.place}, Gender: ${participant.gender_place}, Division: ${participant.age_group_place} 🏁\n\n${participantResultsUrl}`);
+    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+  };
+
+  const shareOnInstagram = () => {
+    alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
+  };
+
   if (!show) return null;
 
   return (
@@ -126,6 +142,7 @@ export default function ResultCardPreviewModal({
                 }}
               >
                 <div ref={cardRef} className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden">
+                  {/* Card content — same as before */}
                   <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
                     {masterLogo ? (
                       <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
@@ -198,14 +215,30 @@ export default function ResultCardPreviewModal({
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-center gap-6">
+        {/* Action Buttons + Social Share */}
+        <div className="flex justify-center gap-6 mb-10">
           <button onClick={generateResultCard} className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl">
             {isMobileDevice ? 'Save to Photos' : 'Download Image'}
           </button>
           <button onClick={shareResultCard} className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition shadow-xl">
             Share Now
           </button>
+        </div>
+
+        {/* Social Buttons */}
+        <div className="text-center mb-10">
+          <p className="text-2xl font-bold text-brand-dark mb-6">Or Share Directly</p>
+          <div className="flex justify-center gap-6">
+            <button onClick={shareOnFacebook} className="px-6 py-3 bg-[#1877F2] text-white font-bold text-lg rounded-full hover:opacity-90 transition flex items-center gap-2">
+              <span className="text-2xl">f</span> Facebook
+            </button>
+            <button onClick={shareOnX} className="px-6 py-3 bg-black text-white font-bold text-lg rounded-full hover:opacity-90 transition flex items-center gap-2">
+              <span className="text-2xl">𝕏</span> X
+            </button>
+            <button onClick={shareOnInstagram} className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg rounded-full hover:opacity-90 transition flex items-center gap-2">
+              <span className="text-2xl">📸</span> Instagram
+            </button>
+          </div>
         </div>
 
         <input type="file" ref={photoInputRef} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
