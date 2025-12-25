@@ -22,6 +22,7 @@ import DirectorLogin from './pages/director/DirectorLogin';
 import RaceDirectorsHub from './pages/director/RaceDirectorsHub';
 import LiveTrackingPage from './pages/director/LiveTrackingPage';
 import AwardsPage from './pages/director/AwardsPage';
+import AnalyticsPage from './pages/director/AnalyticsPage'; // ← NEW IMPORT
 
 // Public Awards Views (no login required)
 import AwardsAnnouncerView from './pages/public/AwardsAnnouncerView';
@@ -106,7 +107,7 @@ export default function App() {
                 {/* Kiosk Mode */}
                 <Route path="/kiosk" element={<ResultsKiosk />} />
 
-                {/* === RACE DIRECTORS HUB (Protected) === */}
+                {/* === RACE DIRECTORS HUB (Protected Routes) === */}
                 <Route path="/director-login" element={<DirectorLogin />} />
 
                 <Route
@@ -132,6 +133,15 @@ export default function App() {
                   element={
                     <DirectorProvider>
                       <AwardsPage />
+                    </DirectorProvider>
+                  }
+                />
+
+                <Route
+                  path="/director-analytics"
+                  element={
+                    <DirectorProvider>
+                      <AnalyticsPage />
                     </DirectorProvider>
                   }
                 />

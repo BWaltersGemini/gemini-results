@@ -7,59 +7,117 @@ const DirectorContext = createContext();
 
 export function DirectorProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(undefined); // undefined = loading, null = logged out, object = logged in
-  const [assignedEvents, setAssignedEvents] = useState([]);
+  const [assignedEvents, setAssignedEvents] = useState([]);   // List of event IDs assigned to this director
   const [selectedEventId, setSelectedEventId] = useState(null);
+  const [selectedEventName, setSelectedEventName] = useState('No Event Selected');
 
   const navigate = useNavigate();
 
+  // Auth setup + session restore
   useEffect(() => {
-    console.log('[DirectorContext] Effect started - setting up auth system');
+    console.log('[DirectorContext] Setting up auth system');
 
     const restoreSession = async () => {
-      console.log('[DirectorContext] Attempting to restore session with supabase.auth.getSession()');
       const { data, error } = await supabase.auth.getSession();
       if (error) {
         console.error('[DirectorContext] getSession error:', error);
-      } else {
-        console.log('[DirectorContext] getSession result:', data.session ? `Found session for user ${data.session.user.id}` : 'No session found');
       }
-      setCurrentUser(data.session?.user ?? null);
+      const user = data.session?.user ?? null;
+      setCurrentUser(user);
+
+      if (user) {
+        // Load assigned events when user logs in
+        loadAssignedEvents(user.id);
+      }
     };
 
     restoreSession();
 
-    console.log('[DirectorContext] Subscribing to onAuthStateChange listener');
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[DirectorContext] onAuthStateChange triggered');
-      console.log('  Event:', event);
-      console.log('  Session user ID:', session?.user?.id || 'none');
-      console.log('  Session expires_at:', session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'none');
-      console.log('  Full session object keys:', session ? Object.keys(session) : 'none');
+      console.log('[DirectorContext] onAuthStateChange:', event);
 
-      setCurrentUser(session?.user ?? null);
+      const user = session?.user ?? null;
+      setCurrentUser(user);
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (user) loadAssignedEvents(user.id);
+      }
 
       if (event === 'SIGNED_OUT') {
-        console.log('[DirectorContext] SIGNED_OUT detected - clearing state and redirecting');
         setAssignedEvents([]);
         setSelectedEventId(null);
+        setSelectedEventName('No Event Selected');
         navigate('/director-login', { replace: true });
       }
     });
 
-    console.log('[DirectorContext] Auth listener successfully subscribed');
-
     return () => {
-      console.log('[DirectorContext] Component unmounting - unsubscribing listener');
       subscription.unsubscribe();
     };
   }, [navigate]);
 
+  // Load events assigned to this director
+  const loadAssignedEvents = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('director_event_assignments')
+        .select('event_id')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      const eventIds = data?.map(row => row.event_id) || [];
+      setAssignedEvents(eventIds);
+    } catch (err) {
+      console.error('[DirectorContext] Failed to load assigned events:', err);
+      setAssignedEvents([]);
+    }
+  };
+
+  // Fetch event name whenever selectedEventId changes
+  useEffect(() => {
+    if (!selectedEventId) {
+      setSelectedEventName('No Event Selected');
+      return;
+    }
+
+    const fetchEventName = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chronotrack_results')
+          .select('event_name')
+          .eq('event_id', selectedEventId)
+          .limit(1)
+          .single();
+
+        if (error || !data) {
+          setSelectedEventName(`Event ${selectedEventId}`);
+        } else {
+          setSelectedEventName(data.event_name || `Event ${selectedEventId}`);
+        }
+      } catch (err) {
+        console.error('[DirectorContext] Failed to fetch event name:', err);
+        setSelectedEventName(`Event ${selectedEventId}`);
+      }
+    };
+
+    fetchEventName();
+  }, [selectedEventId]);
+
+  // Helper to select an event (ID + auto-fetch name)
+  const setSelectedEvent = (eventId) => {
+    setSelectedEventId(eventId);
+    // Name will be fetched automatically by the useEffect above
+  };
+
   // Render logging
-  console.log('[DirectorContext] Render - currentUser state:', 
-    currentUser === undefined ? 'LOADING (undefined)' :
-    currentUser === null ? 'LOGGED OUT (null)' :
-    `LOGGED IN (user ID: ${currentUser.id})`
-  );
+  console.log('[DirectorContext] Current state:', {
+    userStatus: currentUser === undefined ? 'LOADING' : currentUser ? 'LOGGED IN' : 'LOGGED OUT',
+    userId: currentUser?.id || null,
+    selectedEventId,
+    selectedEventName,
+    assignedEventsCount: assignedEvents.length,
+  });
 
   return (
     <DirectorContext.Provider
@@ -70,6 +128,9 @@ export function DirectorProvider({ children }) {
         setAssignedEvents,
         selectedEventId,
         setSelectedEventId,
+        selectedEventName,
+        setSelectedEventName,
+        setSelectedEvent, // ← convenient helper
       }}
     >
       {children}

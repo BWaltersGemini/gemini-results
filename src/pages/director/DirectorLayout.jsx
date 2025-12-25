@@ -1,5 +1,5 @@
 // src/pages/director/DirectorLayout.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDirector } from '../../context/DirectorContext';
 import { supabase } from '../../supabaseClient';
@@ -9,9 +9,38 @@ export default function DirectorLayout({ children }) {
   const navigate = useNavigate();
   const { currentUser, selectedEventId } = useDirector();
 
+  const [eventName, setEventName] = useState('Loading event...');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const eventDisplay = selectedEventId ? `Event: ${selectedEventId}` : 'No Event Selected';
+  // Fetch event name when selectedEventId changes
+  useEffect(() => {
+    if (!selectedEventId) {
+      setEventName('No Event Selected');
+      return;
+    }
+
+    const fetchEventName = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chronotrack_results')
+          .select('event_name')
+          .eq('event_id', selectedEventId)
+          .limit(1)
+          .single();
+
+        if (error || !data) {
+          setEventName(`Event ${selectedEventId}`);
+        } else {
+          setEventName(data.event_name || `Event ${selectedEventId}`);
+        }
+      } catch (err) {
+        console.error('Failed to fetch event name:', err);
+        setEventName(`Event ${selectedEventId}`);
+      }
+    };
+
+    fetchEventName();
+  }, [selectedEventId]);
 
   const navItems = [
     { path: '/race-directors-hub', label: 'Dashboard', icon: '🏠' },
@@ -22,7 +51,7 @@ export default function DirectorLayout({ children }) {
       disabled: !selectedEventId,
     },
     { path: '/director-awards', label: 'Awards', icon: '🏆' },
-    { path: '/director-analytics', label: 'Analytics', icon: '📈' },
+    { path: '/director-analytics', label: 'Analytics', icon: '📈' }, // ← Fully active!
   ];
 
   const handleSignOut = async () => {
@@ -32,8 +61,7 @@ export default function DirectorLayout({ children }) {
 
   const isActive = (path) => location.pathname === path;
 
-  // Only show authenticating if currentUser is explicitly null
-  // (The auth listener will quickly set it on refresh)
+  // Show authenticating only if explicitly logged out
   if (currentUser === null) {
     return (
       <div className="min-h-screen bg-bg-light flex items-center justify-center">
@@ -49,11 +77,11 @@ export default function DirectorLayout({ children }) {
         <div className="p-8 border-b border-white/10">
           <h1 className="text-3xl font-bold">Director Hub</h1>
           <p className="mt-2 text-gray-300">
-            {currentUser?.profile?.full_name || 'Director'}
+            {currentUser?.profile?.full_name || currentUser?.email || 'Director'}
           </p>
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
-            <p className="text-lg font-semibold truncate">{eventDisplay}</p>
+            <p className="text-lg font-semibold truncate">{eventName}</p>
           </div>
         </div>
 
@@ -99,7 +127,7 @@ export default function DirectorLayout({ children }) {
         <header className="md:hidden bg-text-dark text-text-light p-4 flex justify-between items-center shadow-lg">
           <div>
             <h2 className="text-2xl font-bold">Director Hub</h2>
-            <p className="text-sm opacity-80 truncate max-w-xs">{eventDisplay}</p>
+            <p className="text-sm opacity-80 truncate max-w-xs">{eventName}</p>
           </div>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -120,7 +148,7 @@ export default function DirectorLayout({ children }) {
                 <div>
                   <h1 className="text-3xl font-bold">Director Hub</h1>
                   <p className="mt-2 text-gray-300 text-sm">
-                    {currentUser?.profile?.full_name}
+                    {currentUser?.profile?.full_name || currentUser?.email}
                   </p>
                 </div>
                 <button
