@@ -15,6 +15,8 @@ export default function AwardsPage() {
   const [topPlaces, setTopPlaces] = useState(3);
   const [mode, setMode] = useState('announcer');
   const [searchTerm, setSearchTerm] = useState('');
+  const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
+  const [copiedTable, setCopiedTable] = useState(false);
 
   // Load live results
   useEffect(() => {
@@ -113,14 +115,12 @@ export default function AwardsPage() {
 
   // Smart division ordering: youngest to oldest, Male/Female alternating
   const getDivisions = () => {
-    // Extract unique age_group_name values (they already include gender, e.g., "35-39 Male")
     const ageGroupDivisions = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
 
-    // Sort by age (youngest first)
     const sortedAgeGroups = ageGroupDivisions.sort((a, b) => {
       const ageA = parseInt(a.match(/\d+/)?.[0] || 0);
       const ageB = parseInt(b.match(/\d+/)?.[0] || 0);
-      return ageA - ageB;
+      return ageA - ageB; // youngest first
     });
 
     return ['Male Overall', 'Female Overall', ...sortedAgeGroups];
@@ -139,7 +139,6 @@ export default function AwardsPage() {
         .filter((r) => r.gender === 'F')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
     }
-    // Age group divisions already have gender in name
     return finishers
       .filter((r) => r.age_group_name === divName)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity));
@@ -162,9 +161,20 @@ export default function AwardsPage() {
     );
   });
 
-  // Share URLs
+  // Correct share URLs
   const announcerUrl = `${window.location.origin}/awards-announcer/${selectedEventId}`;
   const tableUrl = `${window.location.origin}/awards-table/${selectedEventId}`;
+
+  const handleCopy = (text, type) => {
+    navigator.clipboard.writeText(text);
+    if (type === 'announcer') {
+      setCopiedAnnouncer(true);
+      setTimeout(() => setCopiedAnnouncer(false), 2000);
+    } else {
+      setCopiedTable(true);
+      setTimeout(() => setCopiedTable(false), 2000);
+    }
+  };
 
   if (!selectedEventId) return null;
 
@@ -173,33 +183,62 @@ export default function AwardsPage() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-text-dark mb-8">Awards Management</h1>
 
-        {/* Share Links */}
-        <div className="bg-accent/20 rounded-2xl p-8 mb-8">
-          <h2 className="text-2xl font-bold text-text-dark mb-6">Share with Your Team</h2>
+        {/* Share Links Section */}
+        <div className="bg-accent/20 rounded-2xl p-8 mb-12">
+          <h2 className="text-3xl font-bold text-text-dark mb-8">Share Live Awards Views</h2>
           <div className="grid md:grid-cols-2 gap-8">
-            <div>
-              <p className="font-semibold mb-3">Announcer View (Phone-Friendly)</p>
-              <div className="flex gap-3">
-                <input type="text" value={announcerUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-white" />
+            <div className="bg-white rounded-2xl shadow-xl p-8">
+              <h3 className="text-2xl font-bold text-primary mb-4">Announcer View</h3>
+              <p className="text-text-muted mb-6">Large, phone-friendly cards — perfect for reading names during the ceremony.</p>
+              <div className="flex gap-4">
+                <input
+                  type="text"
+                  value={announcerUrl}
+                  readOnly
+                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50"
+                />
                 <button
-                  onClick={() => navigator.clipboard.writeText(announcerUrl)}
+                  onClick={() => handleCopy(announcerUrl, 'announcer')}
                   className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90 transition"
                 >
-                  Copy
+                  {copiedAnnouncer ? 'Copied!' : 'Copy Link'}
                 </button>
               </div>
+              <a
+                href={announcerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block mt-6 text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700 transition"
+              >
+                Open Announcer View
+              </a>
             </div>
-            <div>
-              <p className="font-semibold mb-3">Awards Table View</p>
-              <div className="flex gap-3">
-                <input type="text" value={tableUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-white" />
+
+            <div className="bg-white rounded-2xl shadow-xl p-8">
+              <h3 className="text-2xl font-bold text-primary mb-4">Awards Table View</h3>
+              <p className="text-text-muted mb-6">Full table for volunteers to check off pickups.</p>
+              <div className="flex gap-4">
+                <input
+                  type="text"
+                  value={tableUrl}
+                  readOnly
+                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50"
+                />
                 <button
-                  onClick={() => navigator.clipboard.writeText(tableUrl)}
+                  onClick={() => handleCopy(tableUrl, 'table')}
                   className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90 transition"
                 >
-                  Copy
+                  {copiedTable ? 'Copied!' : 'Copy Link'}
                 </button>
               </div>
+              <a
+                href={tableUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block mt-6 text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700 transition"
+              >
+                Open Table View
+              </a>
             </div>
           </div>
         </div>
