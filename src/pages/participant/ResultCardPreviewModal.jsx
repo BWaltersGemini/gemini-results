@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL VERSION — No Event Logo Header, Everything Shifted Up, Cleaner Design
+// FINAL VERSION — Downloaded Card EXACTLY Matches Preview (No Logo Header, Shifted Up)
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -19,6 +19,7 @@ export default function ResultCardPreviewModal({
   removePhoto,
 }) {
   const cardRef = useRef(null);
+  const previewRef = useRef(null); // For matching preview exactly
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   const overallTotal = results.finishers.length + results.nonFinishers.length;
@@ -111,52 +112,114 @@ export default function ResultCardPreviewModal({
 
   if (!show) return null;
 
-  return (
-    <>
-      {/* Hidden Full-Size Card — No Logo Header, Content Shifted Up */}
-      <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
-        <div
-          ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-8 pb-8 overflow-hidden"
-          style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
-        >
-          {/* Removed the white logo container entirely */}
+  // Shared Card Layout — Used for BOTH preview and download
+  const SharedCard = () => (
+    <div className="flex flex-col items-center space-y-4 pt-12 px-4 pb-4">
+      <p className="text-2xl font-black text-accent">{raceDisplayName}</p>
+      <p className="text-lg font-semibold text-white">{selectedEvent.name}</p>
+      <p className="text-sm text-gray-300">{formatDate(selectedEvent.start_time)}</p>
 
-          <p className="text-5xl font-black text-accent mb-4">{raceDisplayName}</p>
-          <p className="text-4xl font-semibold text-white mb-6">{selectedEvent.name}</p>
-          <p className="text-3xl text-gray-300 mb-12">{formatDate(selectedEvent.start_time)}</p>
-
-          <div className={`flex items-center justify-center gap-24 mb-12 ${!userPhoto ? 'flex-col gap-12' : ''}`}>
-            {userPhoto && (
-              <div className="w-80 h-80 rounded-full overflow-hidden border-12 border-white shadow-2xl">
-                <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" crossOrigin="anonymous" />
-              </div>
-            )}
-            <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-8xl' : 'text-10xl'}`}>
-              {participant.first_name}<br />{participant.last_name}
-            </h1>
+      <div className={`flex items-center gap-6 ${!userPhoto ? 'flex-col gap-5' : ''}`}>
+        {userPhoto && (
+          <div className="w-28 h-28 rounded-full overflow-hidden border-8 border-white shadow-xl">
+            <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
           </div>
+        )}
+        <h1 className={`font-black text-white drop-shadow-lg text-center leading-tight ${userPhoto ? 'text-4xl' : 'text-5xl'}`}>
+          {participant.first_name}<br />{participant.last_name}
+        </h1>
+      </div>
 
-          <div className="mb-16">
-            <p className="text-5xl text-gray-400 uppercase tracking-widest mb-6">Finish Time</p>
-            <p className="text-12xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
-              {formatChronoTime(participant.chip_time)}
-            </p>
-          </div>
+      <div className="text-center my-5">
+        <p className="text-base text-gray-400 uppercase tracking-wider mb-3">Finish Time</p>
+        <p className="text-6xl font-black text-[#FFD700] drop-shadow-xl leading-none">
+          {formatChronoTime(participant.chip_time)}
+        </p>
+      </div>
 
-          <div className="grid grid-cols-3 gap-20 text-white w-full max-w-6xl mb-20">
-            <div><p className="text-4xl text-gray-400 uppercase mb-4">Overall</p><p className="text-9xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-3xl text-gray-400 mt-4">of {overallTotal}</p></div>
-            <div><p className="text-4xl text-gray-400 uppercase mb-4">Gender</p><p className="text-9xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-3xl text-gray-400 mt-4">of {genderTotal}</p></div>
-            <div><p className="text-4xl text-gray-400 uppercase mb-4">Division</p><p className="text-9xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-3xl text-gray-400 mt-4">of {divisionTotal}</p></div>
-          </div>
-
-          <p className="text-5xl text-white italic mt-auto">
-            www.geminitiming.com
-          </p>
+      <div className="grid grid-cols-3 gap-5 text-center text-sm w-full">
+        <div>
+          <p className="text-gray-400 uppercase mb-1">Overall</p>
+          <p className="text-3xl font-bold text-[#FFD700]">{participant.place || '—'}</p>
+          <p className="text-gray-400">of {overallTotal}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 uppercase mb-1">Gender</p>
+          <p className="text-3xl font-bold text-[#FFD700]">{participant.gender_place || '—'}</p>
+          <p className="text-gray-400">of {genderTotal}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 uppercase mb-1">Division</p>
+          <p className="text-3xl font-bold text-[#FFD700]">{participant.age_group_place || '—'}</p>
+          <p className="text-gray-400">of {divisionTotal}</p>
         </div>
       </div>
 
-      {/* Modal Preview — Updated to Match (No Logo Header) */}
+      <p className="text-base text-white italic mt-auto pt-4">
+        www.geminitiming.com
+      </p>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Hidden Full-Size Card — Same Layout as Preview */}
+      <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
+        <div
+          ref={cardRef}
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center text-center overflow-hidden"
+          style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
+        >
+          {/* Full-size version of the shared layout */}
+          <div className="flex flex-col items-center space-y-12 pt-32 px-20">
+            <p className="text-7xl font-black text-accent">{raceDisplayName}</p>
+            <p className="text-5xl font-semibold text-white">{selectedEvent.name}</p>
+            <p className="text-4xl text-gray-300 mb-16">{formatDate(selectedEvent.start_time)}</p>
+
+            <div className={`flex items-center gap-32 ${!userPhoto ? 'flex-col gap-20' : ''}`}>
+              {userPhoto && (
+                <div className="w-96 h-96 rounded-full overflow-hidden border-20 border-white shadow-2xl">
+                  <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                </div>
+              )}
+              <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-9xl' : 'text-11xl'}`}>
+                {participant.first_name}<br />{participant.last_name}
+              </h1>
+            </div>
+
+            <div className="my-20">
+              <p className="text-6xl text-gray-400 uppercase tracking-widest mb-10">Finish Time</p>
+              <p className="text-14xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
+                {formatChronoTime(participant.chip_time)}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-32 text-white w-full max-w-7xl mb-32">
+              <div>
+                <p className="text-5xl text-gray-400 uppercase mb-6">Overall</p>
+                <p className="text-10xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
+                <p className="text-4xl text-gray-400 mt-6">of {overallTotal}</p>
+              </div>
+              <div>
+                <p className="text-5xl text-gray-400 uppercase mb-6">Gender</p>
+                <p className="text-10xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
+                <p className="text-4xl text-gray-400 mt-6">of {genderTotal}</p>
+              </div>
+              <div>
+                <p className="text-5xl text-gray-400 uppercase mb-6">Division</p>
+                <p className="text-10xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
+                <p className="text-4xl text-gray-400 mt-6">of {divisionTotal}</p>
+              </div>
+            </div>
+
+            <p className="text-6xl text-white italic mt-auto pb-20">
+              www.geminitiming.com
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal Preview */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl font-light hover:bg-gray-100 transition">
@@ -169,54 +232,8 @@ export default function ResultCardPreviewModal({
             <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300 w-96 h-96">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl z-10"></div>
 
-              <div className="absolute inset-0 pt-12 px-4 pb-4 overflow-y-auto">
-                <div className="flex flex-col items-center space-y-4">
-                  {/* No logo container in preview either */}
-
-                  <p className="text-2xl font-black text-accent">{raceDisplayName}</p>
-                  <p className="text-lg font-semibold text-white">{selectedEvent.name}</p>
-                  <p className="text-sm text-gray-300">{formatDate(selectedEvent.start_time)}</p>
-
-                  <div className={`flex items-center gap-6 ${!userPhoto ? 'flex-col gap-5' : ''}`}>
-                    {userPhoto && (
-                      <div className="w-28 h-28 rounded-full overflow-hidden border-8 border-white shadow-xl">
-                        <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
-                      </div>
-                    )}
-                    <h1 className={`font-black text-white drop-shadow-lg text-center leading-tight ${userPhoto ? 'text-4xl' : 'text-5xl'}`}>
-                      {participant.first_name}<br />{participant.last_name}
-                    </h1>
-                  </div>
-
-                  <div className="text-center my-5">
-                    <p className="text-base text-gray-400 uppercase tracking-wider mb-3">Finish Time</p>
-                    <p className="text-6xl font-black text-[#FFD700] drop-shadow-xl leading-none">
-                      {formatChronoTime(participant.chip_time)}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-5 text-center text-sm w-full">
-                    <div>
-                      <p className="text-gray-400 uppercase mb-1">Overall</p>
-                      <p className="text-3xl font-bold text-[#FFD700]">{participant.place || '—'}</p>
-                      <p className="text-gray-400">of {overallTotal}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400 uppercase mb-1">Gender</p>
-                      <p className="text-3xl font-bold text-[#FFD700]">{participant.gender_place || '—'}</p>
-                      <p className="text-gray-400">of {genderTotal}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400 uppercase mb-1">Division</p>
-                      <p className="text-3xl font-bold text-[#FFD700]">{participant.age_group_place || '—'}</p>
-                      <p className="text-gray-400">of {divisionTotal}</p>
-                    </div>
-                  </div>
-
-                  <p className="text-base text-white italic mt-auto pt-4">
-                    www.geminitiming.com
-                  </p>
-                </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark overflow-hidden">
+                <SharedCard />
               </div>
             </div>
           </div>
