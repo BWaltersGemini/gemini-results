@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL FIXED — Perfect Square 1080x1080 Preview (No Stretch!)
+// FINAL PERFECT VERSION — No Distortion, Beautiful Square Preview
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -162,7 +162,7 @@ export default function ResultCardPreviewModal({
         </div>
       </div>
 
-      {/* Modal — Perfect Square Preview */}
+      {/* Modal — Perfect Square Preview Without Scale Distortion */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div
           className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto"
@@ -180,71 +180,60 @@ export default function ResultCardPreviewModal({
           {/* Square Phone Frame */}
           <div className="flex justify-center mb-12">
             <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300 w-96 h-96">
-              {/* Optional notch */}
+              {/* Notch */}
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl z-10"></div>
 
-              {/* Perfectly Scaled Square Card */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div
-                  className="relative w-[1080px] h-[1080px]"
-                  style={{
-                    transform: 'scale(0.355)',
-                    transformOrigin: 'center center',
-                  }}
-                >
-                  {/* Exact duplicate of the hidden card — now perfectly square */}
-                  <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16 overflow-hidden">
-                    <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 mb-8">
-                      {masterLogo ? (
-                        <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-32 object-contain mx-auto" />
-                      ) : bibLogo ? (
-                        <img src={bibLogo} alt="Event Logo" className="max-w-full max-h-28 object-contain mx-auto" />
-                      ) : (
-                        <h2 className="text-5xl font-black text-brand-dark">{selectedEvent.name}</h2>
-                      )}
-                    </div>
-
-                    <p className="text-4xl font-black text-accent mb-3">{raceDisplayName}</p>
-                    <p className="text-3xl text-gray-300 mb-10">{formatDate(selectedEvent.start_time)}</p>
-
-                    <div className={`flex items-center justify-center gap-20 mb-12 ${!userPhoto ? 'flex-col gap-10' : ''}`}>
-                      {userPhoto && (
-                        <div className="w-80 h-80 rounded-full overflow-hidden border-12 border-white shadow-2xl">
-                          <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                      <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-7xl' : 'text-9xl'}`}>
-                        {participant.first_name}<br />{participant.last_name}
-                      </h1>
-                    </div>
-
-                    <div className="mb-12">
-                      <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
-                      <p className="text-10xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
-                        {formatChronoTime(participant.chip_time)}
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-16 text-white w-full max-w-5xl mb-16">
-                      <div><p className="text-3xl text-gray-400 uppercase mb-3">Overall</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p></div>
-                      <div><p className="text-3xl text-gray-400 uppercase mb-3">Gender</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p></div>
-                      <div><p className="text-3xl text-gray-400 uppercase mb-3">Division</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p></div>
-                    </div>
-
-                    <div className="absolute bottom-28 right-12">
-                      <p className="text-white text-2xl font-bold mb-4 text-right">View Full Results</p>
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF`}
-                        alt="QR Code"
-                        className="w-52 h-52 border-8 border-white rounded-3xl shadow-2xl"
-                      />
-                    </div>
-
-                    <p className="text-4xl text-white italic mt-auto">
-                      Find your next race at www.youkeepmoving.com
-                    </p>
-                  </div>
+              {/* Preview Card — Native Size (No Transform Scale!) */}
+              <div className="absolute inset-4 bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark rounded-2xl overflow-hidden shadow-2xl flex flex-col items-center justify-start text-center px-6 pt-6 pb-8">
+                <div className="w-full max-w-xs bg-white rounded-3xl shadow-2xl p-4 mb-6">
+                  {masterLogo ? (
+                    <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-20 object-contain mx-auto" />
+                  ) : bibLogo ? (
+                    <img src={bibLogo} alt="Event Logo" className="max-w-full max-h-20 object-contain mx-auto" />
+                  ) : (
+                    <h2 className="text-2xl font-black text-brand-dark">{selectedEvent.name}</h2>
+                  )}
                 </div>
+
+                <p className="text-xl font-black text-accent mb-2">{raceDisplayName}</p>
+                <p className="text-lg text-gray-300 mb-6">{formatDate(selectedEvent.start_time)}</p>
+
+                <div className={`flex items-center justify-center gap-10 mb-8 ${!userPhoto ? 'flex-col gap-6' : ''}`}>
+                  {userPhoto && (
+                    <div className="w-32 h-32 rounded-full overflow-hidden border-8 border-white shadow-2xl">
+                      <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-4xl' : 'text-5xl'}`}>
+                    {participant.first_name}<br />{participant.last_name}
+                  </h1>
+                </div>
+
+                <div className="mb-8">
+                  <p className="text-lg text-gray-400 uppercase tracking-widest mb-2">Finish Time</p>
+                  <p className="text-5xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
+                    {formatChronoTime(participant.chip_time)}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-8 text-white w-full mb-10 text-sm">
+                  <div><p className="text-gray-400 uppercase mb-1">Overall</p><p className="text-4xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-gray-400 mt-1">of {overallTotal}</p></div>
+                  <div><p className="text-gray-400 uppercase mb-1">Gender</p><p className="text-4xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-gray-400 mt-1">of {genderTotal}</p></div>
+                  <div><p className="text-gray-400 uppercase mb-1">Division</p><p className="text-4xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-gray-400 mt-1">of {divisionTotal}</p></div>
+                </div>
+
+                <div className="absolute bottom-16 right-6">
+                  <p className="text-white text-sm font-bold mb-2 text-right">View Full Results</p>
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(participantResultsUrl)}&margin=5&color=263238&bgcolor=FFFFFF`}
+                    alt="QR Code"
+                    className="w-24 h-24 border-4 border-white rounded-2xl shadow-2xl"
+                  />
+                </div>
+
+                <p className="text-lg text-white italic mt-auto">
+                  www.youkeepmoving.com
+                </p>
               </div>
             </div>
           </div>
