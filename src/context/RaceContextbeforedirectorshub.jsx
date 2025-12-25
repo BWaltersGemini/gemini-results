@@ -22,8 +22,10 @@ export function RaceProvider({ children }) {
   const [error, setError] = useState(null);
   const [uniqueDivisions, setUniqueDivisions] = useState([]);
   const [isLiveRace, setIsLiveRace] = useState(false);
+
   // Admin-triggered forced refresh
   const [resultsVersion, setResultsVersion] = useState(0);
+
   // Global config — loaded fresh from Supabase
   const [masterGroups, setMasterGroups] = useState({});
   const [editedEvents, setEditedEvents] = useState({});
@@ -32,6 +34,7 @@ export function RaceProvider({ children }) {
   const [showAdsPerMaster, setShowAdsPerMaster] = useState({});
   const [ads, setAds] = useState([]);
   const [hiddenRaces, setHiddenRaces] = useState({});
+
   // Per-event live auto-fetch toggle (default ON during live window)
   const [liveAutoFetchPerEvent, setLiveAutoFetchPerEvent] = useState({});
 
@@ -155,13 +158,16 @@ export function RaceProvider({ children }) {
     const isRaceDayFallback = !endTime && startDateStr === todayStr;
     const isLive = isActiveWindow || isRaceDayFallback;
     const isAutoFetchEnabled = liveAutoFetchPerEvent[selectedEvent.id] !== false;
+
     console.log(`[RaceContext] Live detection for event ${selectedEvent.id} (${selectedEvent.name || 'Unknown'}):`,
       `\n Active window: ${isActiveWindow}`,
       `\n Race day fallback: ${isRaceDayFallback}`,
       `\n → isLive: ${isLive}`,
       `\n Auto-fetch enabled: ${isAutoFetchEnabled}`
     );
+
     if (!aborted) setIsLiveRace(isLive);
+
     const loadResults = async (forceFresh = false) => {
       if (aborted) return;
       try {
@@ -184,6 +190,7 @@ export function RaceProvider({ children }) {
           setResults({ finishers: cachedFinishers, nonFinishers: [] });
           console.log(`[RaceContext] Displaying cached finishers (${cachedFinishers.length} rows)`);
         }
+
         if (forceFresh) {
           console.log('[RaceContext] Starting background live fetch from ChronoTrack...');
           const fresh = await fetchResultsForEvent(selectedEvent.id);
@@ -191,7 +198,7 @@ export function RaceProvider({ children }) {
             // Prepare upsert payload with correct string event_id
             const toUpsert = [
               ...fresh.finishers.map(r => ({
-                event_id: selectedEvent.id, // ← Number directly,
+                event_id: selectedEvent.id,                 // ← Number directly,
                 entry_id: r.entry_id ?? null,
                 race_id: r.race_id || null,
                 bib: r.bib || null,
@@ -237,6 +244,7 @@ export function RaceProvider({ children }) {
                 _status: 'DNF',
               })),
             ];
+
             if (toUpsert.length > 0) {
               const uniqueMap = new Map();
               toUpsert.forEach(record => {
@@ -244,15 +252,18 @@ export function RaceProvider({ children }) {
                 uniqueMap.set(key, record);
               });
               const finalToUpsert = Array.from(uniqueMap.values());
+
               const { error: upsertError } = await supabase
                 .from('chronotrack_results')
                 .upsert(finalToUpsert, { onConflict: 'event_id,entry_id' });
+
               if (upsertError) {
                 console.error('[RaceContext] Upsert failed:', upsertError);
               } else {
                 console.log('[RaceContext] Upsert successful');
               }
             }
+
             if (!aborted) {
               setResults(fresh);
               console.log('[RaceContext] Live update complete');
@@ -261,6 +272,7 @@ export function RaceProvider({ children }) {
             console.warn('[RaceContext] Fresh fetch returned no results');
           }
         }
+
         const divisions = [...new Set(cachedFinishers.map(r => r.age_group_name).filter(Boolean))].sort();
         if (!aborted) setUniqueDivisions(divisions);
       } catch (err) {
@@ -271,8 +283,10 @@ export function RaceProvider({ children }) {
         if (!forceFresh && !aborted) setLoadingResults(false);
       }
     };
+
     // Initial load
     loadResults(resultsVersion > 0);
+
     // Continuous auto-looping live polling
     const continuousLiveFetch = async () => {
       if (!isLive || !isAutoFetchEnabled || aborted) return;
@@ -284,12 +298,14 @@ export function RaceProvider({ children }) {
       }
       setTimeout(continuousLiveFetch, 5000); // 5-second interval (tested safe)
     };
+
     if (isLive && isAutoFetchEnabled) {
       continuousLiveFetch();
       console.log('[RaceContext] Continuous live polling started (5s interval)');
     } else {
       console.log(`[RaceContext] Live polling disabled (isLive: ${isLive}, auto-fetch: ${isAutoFetchEnabled})`);
     }
+
     return () => {
       aborted = true;
     };
@@ -327,12 +343,3 @@ export function RaceProvider({ children }) {
     </RaceContext.Provider>
   );
 }
-
-// ← ADDED: Export hook for use in DirectorContext
-export const useRace = () => {
-  const context = useContext(RaceContext);
-  if (!context) {
-    throw new Error('useRace must be used within a RaceProvider');
-  }
-  return context;
-};
