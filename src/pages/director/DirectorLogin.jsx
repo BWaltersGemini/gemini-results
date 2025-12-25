@@ -1,8 +1,7 @@
 // src/pages/director/DirectorLogin.jsx
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { signInDirector, signUpDirector } from '../../utils/auth';
-import { supabase } from '../../supabaseClient'; // ← Added import
+import { supabase } from '../../supabaseClient'; // Import for potential future use
 
 export default function DirectorLogin() {
   const [email, setEmail] = useState('');
@@ -11,8 +10,6 @@ export default function DirectorLogin() {
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,17 +29,8 @@ export default function DirectorLogin() {
       return;
     }
 
-    // Success: Force Supabase to establish/refresh the session
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-    if (sessionError || !sessionData?.session) {
-      setError('Login succeeded but session could not be established. Please try logging in again.');
-      setLoading(false);
-      return;
-    }
-
-    // Full page redirect ensures DirectorContext picks up the session on fresh load
-    // This is the most reliable way to avoid the "stuck loading" issue
+    // Success! Force full page reload to ensure session is properly restored
+    // This bypasses the known Supabase quirk where the session isn't immediately detectable
     window.location.href = '/race-directors-hub';
   };
 
