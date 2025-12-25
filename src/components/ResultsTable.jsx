@@ -1,6 +1,6 @@
 // src/components/ResultsTable.jsx
 import { useNavigate } from 'react-router-dom';
-import { formatChronoTime } from '../utils/timeUtils'; // ← NEW IMPORT
+import { formatChronoTime } from '../utils/timeUtils'; // ← Already imported for chip_time, now used for pace too
 
 export default function ResultsTable({
   data = [],
@@ -97,7 +97,7 @@ export default function ResultsTable({
                     <div className="text-sm text-gray-700">Chip Time</div>
                   </div>
                   <div className="bg-brand-light rounded-xl py-4">
-                    <div className="text-2xl font-bold text-brand-dark">{r.pace || '—'}</div>
+                    <div className="text-2xl font-bold text-brand-dark">{formatChronoTime(r.pace)}</div> {/* ← Pace formatted */}
                     <div className="text-sm text-gray-700">Pace</div>
                   </div>
                   <div className="bg-gray-100 rounded-xl py-4">
@@ -224,9 +224,11 @@ export default function ResultsTable({
                     </>
                   )}
                   <td className="px-6 py-5 font-semibold text-brand-dark">
-                    {formatChronoTime(r.chip_time)} {/* ← Formatted time */}
+                    {formatChronoTime(r.chip_time)}
                   </td>
-                  <td className="px-6 py-5 text-brand-dark">{r.pace || '—'}</td>
+                  <td className="px-6 py-5 text-brand-dark">
+                    {formatChronoTime(r.pace)} {/* ← Pace now formatted */}
+                  </td>
                   <td className="px-6 py-5 text-brand-dark">{r.age || '—'}</td>
                   <td className="px-6 py-5 text-gray-600">
                     {r.city && `${r.city}, `}{r.state} {r.country}
