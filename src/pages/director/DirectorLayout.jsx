@@ -10,7 +10,6 @@ export default function DirectorLayout({ children }) {
   const {
     currentUser,
     selectedEventId,
-    selectedEventName,
     assignedEvents,
     setSelectedEvent,
   } = useDirector();
@@ -18,8 +17,38 @@ export default function DirectorLayout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [eventOptions, setEventOptions] = useState([]); // { id, name }
   const [loadingEvents, setLoadingEvents] = useState(true);
+  const [currentEventDisplay, setCurrentEventDisplay] = useState('No Event Selected');
 
-  // Fetch real event names from chronotrack_events table
+  // Fetch current event name from chronotrack_events
+  useEffect(() => {
+    if (!selectedEventId) {
+      setCurrentEventDisplay('No Event Selected');
+      return;
+    }
+
+    const fetchCurrentEventName = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chronotrack_events')
+          .select('name')
+          .eq('id', selectedEventId)
+          .single();
+
+        if (error || !data) {
+          setCurrentEventDisplay(`Event ${selectedEventId}`);
+        } else {
+          setCurrentEventDisplay(data.name.trim() || `Event ${selectedEventId}`);
+        }
+      } catch (err) {
+        console.error('Failed to fetch current event name:', err);
+        setCurrentEventDisplay(`Event ${selectedEventId}`);
+      }
+    };
+
+    fetchCurrentEventName();
+  }, [selectedEventId]);
+
+  // Fetch all assigned event names for dropdown
   useEffect(() => {
     if (assignedEvents.length === 0) {
       setEventOptions([]);
@@ -39,25 +68,20 @@ export default function DirectorLayout({ children }) {
 
         const options = data
           .map(row => ({
-            id: row.id.toString(), // Ensure string for consistency
+            id: row.id.toString(),
             name: row.name.trim() || `Event ${row.id}`,
           }))
           .sort((a, b) => a.name.localeCompare(b.name));
 
-        // Fallback for any missing events
+        // Add any missing (fallback)
         const fetchedIds = options.map(o => o.id);
-        const missingIds = assignedEvents.filter(id => !fetchedIds.includes(id.toString()));
-        missingIds.forEach(id => {
-          options.push({ id, name: `Event ${id}` });
-        });
+        const missing = assignedEvents.filter(id => !fetchedIds.includes(id.toString()));
+        missing.forEach(id => options.push({ id, name: `Event ${id}` }));
 
         setEventOptions(options);
       } catch (err) {
-        console.error('Failed to fetch events from chronotrack_events:', err);
-        // Ultimate fallback
-        setEventOptions(
-          assignedEvents.map(id => ({ id, name: `Event ${id}` }))
-        );
+        console.error('Failed to fetch event options:', err);
+        setEventOptions(assignedEvents.map(id => ({ id, name: `Event ${id}` })));
       } finally {
         setLoadingEvents(false);
       }
@@ -105,7 +129,7 @@ export default function DirectorLayout({ children }) {
 
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
-            <p className="text-lg font-semibold truncate">{selectedEventName}</p>
+            <p className="text-lg font-semibold truncate">{currentEventDisplay}</p>
           </div>
 
           {/* Event Selector Dropdown - Desktop */}
@@ -177,7 +201,7 @@ export default function DirectorLayout({ children }) {
         <header className="md:hidden bg-text-dark text-text-light p-4 flex justify-between items-center shadow-lg">
           <div>
             <h2 className="text-2xl font-bold">Director Hub</h2>
-            <p className="text-sm opacity-80 truncate max-w-xs">{selectedEventName}</p>
+            <p className="text-sm opacity-80 truncate max-w-xs">{currentEventDisplay}</p>
           </div>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -212,7 +236,7 @@ export default function DirectorLayout({ children }) {
               <div className="p-6">
                 <div className="bg-primary/20 px-4 py-3 rounded-xl mb-6">
                   <p className="text-sm opacity-80">Current Event</p>
-                  <p className="text-lg font-semibold truncate">{selectedEventName}</p>
+                  <p className="text-lg font-semibold truncate">{currentEventDisplay}</p>
                 </div>
 
                 {/* Mobile Event Selector */}
