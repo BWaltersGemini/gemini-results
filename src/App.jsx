@@ -22,7 +22,7 @@ import DirectorLogin from './pages/director/DirectorLogin';
 import RaceDirectorsHub from './pages/director/RaceDirectorsHub';
 import LiveTrackingPage from './pages/director/LiveTrackingPage';
 import AwardsPage from './pages/director/AwardsPage';
-import AnalyticsPage from './pages/director/AnalyticsPage'; // ← NEW IMPORT
+import AnalyticsPage from './pages/director/AnalyticsPage';
 
 // Public Awards Views (no login required)
 import AwardsAnnouncerView from './pages/public/AwardsAnnouncerView';
@@ -58,9 +58,7 @@ function AnalyticsTracker() {
 function Layout({ children }) {
   const location = useLocation();
   const isKiosk = location.pathname.startsWith('/kiosk');
-  const isDirectorArea =
-    location.pathname.startsWith('/director') ||
-    location.pathname.startsWith('/race-directors-hub');
+  const isDirectorArea = location.pathname.startsWith('/race-directors-hub');
   const isPublicAwards =
     location.pathname.startsWith('/awards-announcer') ||
     location.pathname.startsWith('/awards-table');
@@ -107,41 +105,21 @@ export default function App() {
                 {/* Kiosk Mode */}
                 <Route path="/kiosk" element={<ResultsKiosk />} />
 
-                {/* === RACE DIRECTORS HUB (Protected Routes) === */}
+                {/* Director Login (public) */}
                 <Route path="/director-login" element={<DirectorLogin />} />
 
+                {/* === PROTECTED DIRECTOR HUB === */}
                 <Route
-                  path="/race-directors-hub"
+                  path="/race-directors-hub/*"
                   element={
                     <DirectorProvider>
-                      <RaceDirectorsHub />
-                    </DirectorProvider>
-                  }
-                />
-
-                <Route
-                  path="/director-live-tracking"
-                  element={
-                    <DirectorProvider>
-                      <LiveTrackingPage />
-                    </DirectorProvider>
-                  }
-                />
-
-                <Route
-                  path="/director-awards"
-                  element={
-                    <DirectorProvider>
-                      <AwardsPage />
-                    </DirectorProvider>
-                  }
-                />
-
-                <Route
-                  path="/director-analytics"
-                  element={
-                    <DirectorProvider>
-                      <AnalyticsPage />
+                      <Routes>
+                        <Route index element={<RaceDirectorsHub />} />
+                        <Route path="live-tracking" element={<LiveTrackingPage />} />
+                        <Route path="awards" element={<AwardsPage />} />
+                        <Route path="analytics" element={<AnalyticsPage />} />
+                        {/* Add more director sub-routes here in the future */}
+                      </Routes>
                     </DirectorProvider>
                   }
                 />

@@ -25,7 +25,6 @@ export default function DirectorLayout({ children }) {
       setCurrentEventDisplay('No Event Selected');
       return;
     }
-
     const fetchCurrentEventName = async () => {
       try {
         const { data, error } = await supabase
@@ -33,7 +32,6 @@ export default function DirectorLayout({ children }) {
           .select('name')
           .eq('id', selectedEventId)
           .single();
-
         if (error || !data) {
           setCurrentEventDisplay(`Event ${selectedEventId}`);
         } else {
@@ -44,7 +42,6 @@ export default function DirectorLayout({ children }) {
         setCurrentEventDisplay(`Event ${selectedEventId}`);
       }
     };
-
     fetchCurrentEventName();
   }, [selectedEventId]);
 
@@ -55,7 +52,6 @@ export default function DirectorLayout({ children }) {
       setLoadingEvents(false);
       return;
     }
-
     const fetchEventNames = async () => {
       setLoadingEvents(true);
       try {
@@ -63,21 +59,17 @@ export default function DirectorLayout({ children }) {
           .from('chronotrack_events')
           .select('id, name')
           .in('id', assignedEvents);
-
         if (error) throw error;
-
         const options = data
           .map(row => ({
             id: row.id.toString(),
             name: row.name.trim() || `Event ${row.id}`,
           }))
           .sort((a, b) => a.name.localeCompare(b.name));
-
         // Add any missing (fallback)
         const fetchedIds = options.map(o => o.id);
         const missing = assignedEvents.filter(id => !fetchedIds.includes(id.toString()));
         missing.forEach(id => options.push({ id, name: `Event ${id}` }));
-
         setEventOptions(options);
       } catch (err) {
         console.error('Failed to fetch event options:', err);
@@ -86,20 +78,20 @@ export default function DirectorLayout({ children }) {
         setLoadingEvents(false);
       }
     };
-
     fetchEventNames();
   }, [assignedEvents]);
 
+  // Relative paths — works with /race-directors-hub/* nesting
   const navItems = [
-    { path: '/race-directors-hub', label: 'Dashboard', icon: '🏠' },
+    { path: '.', label: 'Dashboard', icon: '🏠' }, // '.' = current base (hub)
     {
-      path: '/director-live-tracking',
+      path: 'live-tracking',
       label: 'Live Tracking',
       icon: '📊',
       disabled: !selectedEventId,
     },
-    { path: '/director-awards', label: 'Awards', icon: '🏆' },
-    { path: '/director-analytics', label: 'Analytics', icon: '📈' },
+    { path: 'awards', label: 'Awards', icon: '🏆' },
+    { path: 'analytics', label: 'Analytics', icon: '📈' },
   ];
 
   const handleSignOut = async () => {
@@ -107,7 +99,11 @@ export default function DirectorLayout({ children }) {
     navigate('/director-login');
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    // For relative paths, compare against current pathname
+    if (path === '.') return location.pathname.endsWith('/race-directors-hub') || location.pathname === '/race-directors-hub';
+    return location.pathname.includes(path);
+  };
 
   if (currentUser === null) {
     return (
@@ -126,12 +122,10 @@ export default function DirectorLayout({ children }) {
           <p className="mt-2 text-gray-300">
             {currentUser?.profile?.full_name || currentUser?.email || 'Director'}
           </p>
-
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
             <p className="text-lg font-semibold truncate">{currentEventDisplay}</p>
           </div>
-
           {/* Event Selector Dropdown - Desktop */}
           <div className="mt-6">
             <label className="text-sm opacity-80 block mb-2">Switch Event</label>
@@ -158,7 +152,6 @@ export default function DirectorLayout({ children }) {
             )}
           </div>
         </div>
-
         <nav className="flex-1 p-6">
           <ul className="space-y-3">
             {navItems.map((item) => (
@@ -185,7 +178,6 @@ export default function DirectorLayout({ children }) {
             ))}
           </ul>
         </nav>
-
         <div className="p-6 border-t border-white/10">
           <button
             onClick={handleSignOut}
@@ -210,7 +202,6 @@ export default function DirectorLayout({ children }) {
             ☰
           </button>
         </header>
-
         {mobileMenuOpen && (
           <>
             <div
@@ -232,13 +223,11 @@ export default function DirectorLayout({ children }) {
                   ✕
                 </button>
               </div>
-
               <div className="p-6">
                 <div className="bg-primary/20 px-4 py-3 rounded-xl mb-6">
                   <p className="text-sm opacity-80">Current Event</p>
                   <p className="text-lg font-semibold truncate">{currentEventDisplay}</p>
                 </div>
-
                 {/* Mobile Event Selector */}
                 <div className="mb-6">
                   <label className="text-sm opacity-80 block mb-2">Switch Event</label>
@@ -265,7 +254,6 @@ export default function DirectorLayout({ children }) {
                   )}
                 </div>
               </div>
-
               <nav className="flex-1 px-6">
                 <ul className="space-y-3">
                   {navItems.map((item) => (
@@ -293,7 +281,6 @@ export default function DirectorLayout({ children }) {
                   ))}
                 </ul>
               </nav>
-
               <div className="p-6 border-t border-white/10">
                 <button
                   onClick={handleSignOut}
@@ -305,7 +292,6 @@ export default function DirectorLayout({ children }) {
             </aside>
           </>
         )}
-
         <main className="flex-1 p-6 md:p-12 overflow-y-auto bg-bg-light">
           {children}
         </main>
