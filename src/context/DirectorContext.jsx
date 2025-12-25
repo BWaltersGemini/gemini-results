@@ -2,31 +2,32 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
+import { useRace } from './RaceContext'; // ← Import RaceContext to get masterGroups
 
 const DirectorContext = createContext();
 
 export function DirectorProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(undefined); // undefined = loading, null = logged out, object = logged in
-  const [assignedEvents, setAssignedEvents] = useState([]);   // List of event IDs assigned to this director
+  const [assignedEvents, setAssignedEvents] = useState([]); // Directly assigned event IDs
+  const [expandedAssignedEvents, setExpandedAssignedEvents] = useState([]); // All accessible (via master groups)
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedEventName, setSelectedEventName] = useState('No Event Selected');
 
+  const { masterGroups = {} } = useRace(); // Get masterGroups from global RaceContext
   const navigate = useNavigate();
 
-  // Auth setup + session restore
+  // Auth setup
   useEffect(() => {
     console.log('[DirectorContext] Setting up auth system');
 
     const restoreSession = async () => {
       const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('[DirectorContext] getSession error:', error);
-      }
+      if (error) console.error('[DirectorContext] getSession error:', error);
+
       const user = data.session?.user ?? null;
       setCurrentUser(user);
 
       if (user) {
-        // Load assigned events when user logs in
         loadAssignedEvents(user.id);
       }
     };
@@ -34,8 +35,6 @@ export function DirectorProvider({ children }) {
     restoreSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[DirectorContext] onAuthStateChange:', event);
-
       const user = session?.user ?? null;
       setCurrentUser(user);
 
@@ -45,18 +44,17 @@ export function DirectorProvider({ children }) {
 
       if (event === 'SIGNED_OUT') {
         setAssignedEvents([]);
+        setExpandedAssignedEvents([]);
         setSelectedEventId(null);
         setSelectedEventName('No Event Selected');
         navigate('/director-login', { replace: true });
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Load events assigned to this director
+  // Load directly assigned events
   const loadAssignedEvents = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -66,7 +64,7 @@ export function DirectorProvider({ children }) {
 
       if (error) throw error;
 
-      const eventIds = data?.map(row => row.event_id) || [];
+      const eventIds = data?.map(row => row.event_id.toString()) || [];
       setAssignedEvents(eventIds);
     } catch (err) {
       console.error('[DirectorContext] Failed to load assigned events:', err);
@@ -74,26 +72,45 @@ export function DirectorProvider({ children }) {
     }
   };
 
-  // Fetch event name whenever selectedEventId changes
+  // Expand access using masterGroups
+  useEffect(() => {
+    if (assignedEvents.length === 0 || Object.keys(masterGroups).length === 0) {
+      setExpandedAssignedEvents(assignedEvents);
+      return;
+    }
+
+    const expanded = new Set(assignedEvents);
+
+    Object.values(masterGroups).forEach((eventIdList) => {
+      const stringList = eventIdList.map(String);
+      const hasAccessToOne = assignedEvents.some(id => stringList.includes(id));
+      if (hasAccessToOne) {
+        stringList.forEach(id => expanded.add(id));
+      }
+    });
+
+    setExpandedAssignedEvents(Array.from(expanded));
+  }, [assignedEvents, masterGroups]);
+
+  // Fetch selected event name from chronotrack_events
   useEffect(() => {
     if (!selectedEventId) {
       setSelectedEventName('No Event Selected');
       return;
     }
 
-    const fetchEventName = async () => {
+    const fetchName = async () => {
       try {
         const { data, error } = await supabase
-          .from('chronotrack_results')
-          .select('event_name')
-          .eq('event_id', selectedEventId)
-          .limit(1)
+          .from('chronotrack_events')
+          .select('name')
+          .eq('id', selectedEventId)
           .single();
 
         if (error || !data) {
           setSelectedEventName(`Event ${selectedEventId}`);
         } else {
-          setSelectedEventName(data.event_name || `Event ${selectedEventId}`);
+          setSelectedEventName(data.name.trim() || `Event ${selectedEventId}`);
         }
       } catch (err) {
         console.error('[DirectorContext] Failed to fetch event name:', err);
@@ -101,22 +118,21 @@ export function DirectorProvider({ children }) {
       }
     };
 
-    fetchEventName();
+    fetchName();
   }, [selectedEventId]);
 
-  // Helper to select an event (ID + auto-fetch name)
+  // Helper: Select event by ID
   const setSelectedEvent = (eventId) => {
     setSelectedEventId(eventId);
-    // Name will be fetched automatically by the useEffect above
   };
 
-  // Render logging
-  console.log('[DirectorContext] Current state:', {
-    userStatus: currentUser === undefined ? 'LOADING' : currentUser ? 'LOGGED IN' : 'LOGGED OUT',
-    userId: currentUser?.id || null,
+  // Logging
+  console.log('[DirectorContext] State:', {
+    user: currentUser ? 'LOGGED IN' : currentUser === null ? 'LOGGED OUT' : 'LOADING',
+    assignedCount: assignedEvents.length,
+    expandedCount: expandedAssignedEvents.length,
     selectedEventId,
     selectedEventName,
-    assignedEventsCount: assignedEvents.length,
   });
 
   return (
@@ -125,12 +141,11 @@ export function DirectorProvider({ children }) {
         currentUser,
         setCurrentUser,
         assignedEvents,
-        setAssignedEvents,
+        expandedAssignedEvents, // ← Use this in dropdowns/analytics
         selectedEventId,
         setSelectedEventId,
         selectedEventName,
-        setSelectedEventName,
-        setSelectedEvent, // ← convenient helper
+        setSelectedEvent,
       }}
     >
       {children}
