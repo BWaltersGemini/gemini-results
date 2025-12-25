@@ -7,10 +7,12 @@ import { supabase } from '../../supabaseClient';
 export default function DirectorLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { 
-    currentUser, 
-    selectedEventId, 
-    selectedEventName 
+  const {
+    currentUser,
+    selectedEventId,
+    selectedEventName,
+    assignedEvents,
+    setSelectedEvent,
   } = useDirector();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -34,7 +36,7 @@ export default function DirectorLayout({ children }) {
 
   const isActive = (path) => location.pathname === path;
 
-  // Show authenticating only if explicitly logged out
+  // Auth guard
   if (currentUser === null) {
     return (
       <div className="min-h-screen bg-bg-light flex items-center justify-center">
@@ -52,9 +54,35 @@ export default function DirectorLayout({ children }) {
           <p className="mt-2 text-gray-300">
             {currentUser?.profile?.full_name || currentUser?.email || 'Director'}
           </p>
+
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
             <p className="text-lg font-semibold truncate">{selectedEventName}</p>
+          </div>
+
+          {/* Event Selector Dropdown */}
+          <div className="mt-6">
+            <label className="text-sm opacity-80 block mb-2">Switch Event</label>
+            <select
+              value={selectedEventId || ''}
+              onChange={(e) => setSelectedEvent(e.target.value || null)}
+              className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={assignedEvents.length === 0}
+            >
+              <option value="">Select an event...</option>
+              {assignedEvents.length > 0 ? (
+                assignedEvents.map((eventId) => (
+                  <option key={eventId} value={eventId}>
+                    Event {eventId}
+                  </option>
+                ))
+              ) : (
+                <option disabled>No events assigned</option>
+              )}
+            </select>
+            {assignedEvents.length === 0 && (
+              <p className="text-xs text-gray-400 mt-2">Contact admin to assign events</p>
+            )}
           </div>
         </div>
 
@@ -116,7 +144,7 @@ export default function DirectorLayout({ children }) {
               className="fixed inset-0 bg-black/50 z-40 md:hidden"
               onClick={() => setMobileMenuOpen(false)}
             />
-            <aside className="fixed left-0 top-0 h-full w-72 bg-text-dark text-text-light z-50 shadow-2xl flex flex-col">
+            <aside className="fixed left-0 top-0 h-full w-72 bg-text-dark text-text-light z-50 shadow-2xl flex flex-col overflow-y-auto">
               <div className="p-8 border-b border-white/10 flex justify-between items-center">
                 <div>
                   <h1 className="text-3xl font-bold">Director Hub</h1>
@@ -132,7 +160,38 @@ export default function DirectorLayout({ children }) {
                 </button>
               </div>
 
-              <nav className="flex-1 p-6">
+              <div className="p-6">
+                <div className="bg-primary/20 px-4 py-3 rounded-xl mb-6">
+                  <p className="text-sm opacity-80">Current Event</p>
+                  <p className="text-lg font-semibold truncate">{selectedEventName}</p>
+                </div>
+
+                {/* Mobile Event Selector */}
+                <div className="mb-6">
+                  <label className="text-sm opacity-80 block mb-2">Switch Event</label>
+                  <select
+                    value={selectedEventId || ''}
+                    onChange={(e) => {
+                      setSelectedEvent(e.target.value || null);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">Select an event...</option>
+                    {assignedEvents.length > 0 ? (
+                      assignedEvents.map((eventId) => (
+                        <option key={eventId} value={eventId}>
+                          Event {eventId}
+                        </option>
+                      ))
+                    ) : (
+                      <option disabled>No events assigned</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <nav className="flex-1 px-6">
                 <ul className="space-y-3">
                   {navItems.map((item) => (
                     <li key={item.path}>
