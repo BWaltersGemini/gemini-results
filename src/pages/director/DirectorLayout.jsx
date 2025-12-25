@@ -11,7 +11,6 @@ export default function DirectorLayout({ children }) {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Simple event display — just show ID or "No Event Selected"
   const eventDisplay = selectedEventId ? `Event: ${selectedEventId}` : 'No Event Selected';
 
   const navItems = [
@@ -23,7 +22,7 @@ export default function DirectorLayout({ children }) {
       disabled: !selectedEventId,
     },
     { path: '/director-awards', label: 'Awards', icon: '🏆' },
-    { path: '/director-analytics', label: 'Analytics', icon: '📈', disabled: true },
+    { path: '/director-analytics', label: 'Analytics', icon: '📈' },
   ];
 
   const handleSignOut = async () => {
@@ -31,12 +30,11 @@ export default function DirectorLayout({ children }) {
     navigate('/director-login');
   };
 
-  const isActive = (path) => {
-    return location.pathname === path;
-  };
+  const isActive = (path) => location.pathname === path;
 
-  // Auth guard — wait for user
-  if (!currentUser) {
+  // Only show authenticating if currentUser is explicitly null
+  // (The auth listener will quickly set it on refresh)
+  if (currentUser === null) {
     return (
       <div className="min-h-screen bg-bg-light flex items-center justify-center">
         <p className="text-2xl text-text-muted">Authenticating...</p>
@@ -51,7 +49,7 @@ export default function DirectorLayout({ children }) {
         <div className="p-8 border-b border-white/10">
           <h1 className="text-3xl font-bold">Director Hub</h1>
           <p className="mt-2 text-gray-300">
-            {currentUser.profile?.full_name || 'Director'}
+            {currentUser?.profile?.full_name || 'Director'}
           </p>
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
@@ -67,9 +65,6 @@ export default function DirectorLayout({ children }) {
                   <span className="flex items-center gap-4 px-6 py-4 rounded-xl text-gray-500 cursor-not-allowed opacity-60">
                     <span className="text-2xl">{item.icon}</span>
                     <span className="text-lg">{item.label}</span>
-                    {item.disabled && item.label !== 'Live Tracking' && (
-                      <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>
-                    )}
                   </span>
                 ) : (
                   <Link
@@ -125,7 +120,7 @@ export default function DirectorLayout({ children }) {
                 <div>
                   <h1 className="text-3xl font-bold">Director Hub</h1>
                   <p className="mt-2 text-gray-300 text-sm">
-                    {currentUser.profile?.full_name}
+                    {currentUser?.profile?.full_name}
                   </p>
                 </div>
                 <button
@@ -144,9 +139,6 @@ export default function DirectorLayout({ children }) {
                         <span className="flex items-center gap-4 px-6 py-4 rounded-xl text-gray-500 opacity-60">
                           <span className="text-2xl">{item.icon}</span>
                           <span className="text-lg">{item.label}</span>
-                          {item.disabled && item.label !== 'Live Tracking' && (
-                            <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>
-                          )}
                         </span>
                       ) : (
                         <Link
