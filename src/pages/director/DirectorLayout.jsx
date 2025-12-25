@@ -7,14 +7,23 @@ import { supabase } from '../../supabaseClient';
 export default function DirectorLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, selectedEventId } = useDirector();
+  const { currentUser, selectedEventId, allEvents = [] } = useDirector(); // Assume allEvents passed or fetched if needed
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Find current event name for display
+  const currentEvent = allEvents.find(e => e.id === selectedEventId);
+  const eventDisplay = currentEvent ? `${currentEvent.name} (${new Date(currentEvent.start_time * 1000).getFullYear()})` : 'No Event Selected';
+
   const navItems = [
     { path: '/race-directors-hub', label: 'Dashboard', icon: '🏠' },
-    { path: `/director-live-tracking/${selectedEventId || ''}`, label: 'Live Tracking', icon: '📊', disabled: !selectedEventId },
-    { path: '/director-awards', label: 'Awards', icon: '🏆', disabled: true },
+    { 
+      path: selectedEventId ? `/director-live-tracking/${selectedEventId}` : '#', 
+      label: 'Live Tracking', 
+      icon: '📊',
+      disabled: !selectedEventId 
+    },
+    { path: '/director-awards', label: 'Awards', icon: '🏆' },
     { path: '/director-analytics', label: 'Analytics', icon: '📈', disabled: true },
   ];
 
@@ -27,23 +36,25 @@ export default function DirectorLayout({ children }) {
     if (path.includes('/director-live-tracking/')) {
       return location.pathname.startsWith('/director-live-tracking/');
     }
+    if (path === '/director-awards') {
+      return location.pathname === '/director-awards';
+    }
     return location.pathname === path;
   };
 
   return (
-    <div className="min-h-screen bg-gemini-light-gray flex">
+    <div className="min-h-screen bg-bg-light flex">
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-72 bg-gemini-dark-gray text-white shadow-2xl">
+      <aside className="hidden md:flex flex-col w-72 bg-text-dark text-text-light shadow-2xl">
         <div className="p-8 border-b border-white/10">
           <h1 className="text-3xl font-bold">Director Hub</h1>
           <p className="mt-2 text-gray-300">
             {currentUser?.profile?.full_name || 'Director'}
           </p>
-          {selectedEventId && (
-            <p className="mt-4 text-sm bg-gemini-blue/20 px-4 py-2 rounded-lg">
-              Active Event: {selectedEventId}
-            </p>
-          )}
+          <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
+            <p className="text-sm opacity-80">Current Event</p>
+            <p className="text-lg font-semibold truncate">{eventDisplay}</p>
+          </div>
         </div>
 
         <nav className="flex-1 p-6">
@@ -54,14 +65,14 @@ export default function DirectorLayout({ children }) {
                   <span className="flex items-center gap-4 px-6 py-4 rounded-xl text-gray-500 cursor-not-allowed opacity-60">
                     <span className="text-2xl">{item.icon}</span>
                     <span className="text-lg">{item.label}</span>
-                    <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>
+                    {item.disabled && !item.path.includes('live') && <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>}
                   </span>
                 ) : (
                   <Link
                     to={item.path}
                     className={`flex items-center gap-4 px-6 py-4 rounded-xl transition ${
                       isActive(item.path)
-                        ? 'bg-gemini-blue text-white shadow-lg'
+                        ? 'bg-primary text-text-light shadow-lg'
                         : 'hover:bg-white/10'
                     }`}
                   >
@@ -77,17 +88,20 @@ export default function DirectorLayout({ children }) {
         <div className="p-6 border-t border-white/10">
           <button
             onClick={handleSignOut}
-            className="w-full bg-white text-gemini-dark-gray px-6 py-3 rounded-full font-bold hover:bg-gray-100 transition"
+            className="w-full bg-primary text-text-light px-6 py-3 rounded-full font-bold hover:bg-primary/90 transition"
           >
             Sign Out
           </button>
         </div>
       </aside>
 
-      {/* Mobile Header */}
+      {/* Mobile Header & Menu */}
       <div className="flex-1 flex flex-col">
-        <header className="md:hidden bg-gemini-dark-gray text-white p-4 flex justify-between items-center shadow-lg">
-          <h2 className="text-2xl font-bold">Director Hub</h2>
+        <header className="md:hidden bg-text-dark text-text-light p-4 flex justify-between items-center shadow-lg">
+          <div>
+            <h2 className="text-2xl font-bold">Director Hub</h2>
+            <p className="text-sm opacity-80 truncate max-w-xs">{eventDisplay}</p>
+          </div>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="text-3xl"
@@ -96,14 +110,13 @@ export default function DirectorLayout({ children }) {
           </button>
         </header>
 
-        {/* Mobile Menu Overlay */}
         {mobileMenuOpen && (
           <>
             <div
               className="fixed inset-0 bg-black/50 z-40 md:hidden"
               onClick={() => setMobileMenuOpen(false)}
             />
-            <aside className="fixed left-0 top-0 h-full w-72 bg-gemini-dark-gray text-white z-50 shadow-2xl flex flex-col">
+            <aside className="fixed left-0 top-0 h-full w-72 bg-text-dark text-text-light z-50 shadow-2xl flex flex-col">
               <div className="p-8 border-b border-white/10 flex justify-between items-center">
                 <div>
                   <h1 className="text-3xl font-bold">Director Hub</h1>
@@ -127,7 +140,7 @@ export default function DirectorLayout({ children }) {
                         <span className="flex items-center gap-4 px-6 py-4 rounded-xl text-gray-500 opacity-60">
                           <span className="text-2xl">{item.icon}</span>
                           <span className="text-lg">{item.label}</span>
-                          <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>
+                          {item.disabled && !item.path.includes('live') && <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>}
                         </span>
                       ) : (
                         <Link
@@ -135,7 +148,7 @@ export default function DirectorLayout({ children }) {
                           onClick={() => setMobileMenuOpen(false)}
                           className={`flex items-center gap-4 px-6 py-4 rounded-xl transition ${
                             isActive(item.path)
-                              ? 'bg-gemini-blue text-white shadow-lg'
+                              ? 'bg-primary text-text-light shadow-lg'
                               : 'hover:bg-white/10'
                           }`}
                         >
@@ -151,7 +164,7 @@ export default function DirectorLayout({ children }) {
               <div className="p-6 border-t border-white/10">
                 <button
                   onClick={handleSignOut}
-                  className="w-full bg-white text-gemini-dark-gray px-6 py-3 rounded-full font-bold hover:bg-gray-100 transition"
+                  className="w-full bg-primary text-text-light px-6 py-3 rounded-full font-bold hover:bg-primary/90 transition"
                 >
                   Sign Out
                 </button>
@@ -160,8 +173,8 @@ export default function DirectorLayout({ children }) {
           </>
         )}
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 md:p-12 overflow-y-auto">
+        {/* Main Content Area */}
+        <main className="flex-1 p-6 md:p-12 overflow-y-auto bg-bg-light">
           {children}
         </main>
       </div>
