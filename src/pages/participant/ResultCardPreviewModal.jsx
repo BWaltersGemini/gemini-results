@@ -16,13 +16,13 @@ export default function ResultCardPreviewModal({
 }) {
   const cardRef = useRef(null);
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
   const [userPhoto, setUserPhoto] = useState(null);
   const photoInputRef = useRef(null);
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
@@ -124,7 +124,6 @@ export default function ResultCardPreviewModal({
   const genderTotal = results.finishers.filter(r => r.gender === participant.gender).length;
   const divisionTotal = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
 
-  // formatDate helper — moved here
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
     const date = new Date(epoch * 1000);
@@ -133,76 +132,100 @@ export default function ResultCardPreviewModal({
 
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div
+        className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-brand-dark text-3xl font-light hover:bg-gray-100 transition z-50"
+          className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl font-light hover:bg-gray-100 transition z-10"
         >
           ×
         </button>
+
         <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
 
-        {/* Responsive preview */}
-        <div className="flex justify-center mb-10">
-          <div className="relative w-full max-w-md aspect-square rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200 bg-black">
-            <div className="absolute inset-0 flex items-center justify-center p-4">
+        {/* Instagram-style Preview Frame */}
+        <div className="flex justify-center mb-12">
+          <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300 w-96 h-[600px] max-w-full">
+            {/* Inner scrollable preview area */}
+            <div className="absolute inset-0 overflow-hidden flex items-center justify-center">
               <div
-                className="w-full h-full"
+                className="w-[1080px] h-[1080px] origin-center"
                 style={{
-                  transform: 'scale(0.85)',
-                  transformOrigin: 'center center',
+                  transform: 'scale(0.35)', // Perfect fit: 1080px → ~378px visible
+                  transformOrigin: 'top center',
                 }}
+                ref={cardRef}
               >
-                <div ref={cardRef} className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden">
-                  <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
+                <div className="w-full h-full bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16 overflow-hidden">
+                  {/* Event Logo */}
+                  <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 mb-8">
                     {masterLogo ? (
-                      <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
+                      <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-32 object-contain mx-auto" crossOrigin="anonymous" />
                     ) : bibLogo ? (
-                      <img src={bibLogo} alt="Event Logo" className="max-w-full max-h-24 object-contain mx-auto" crossOrigin="anonymous" />
+                      <img src={bibLogo} alt="Event Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
                     ) : (
-                      <h2 className="text-4xl font-black text-brand-dark">{selectedEvent.name}</h2>
+                      <h2 className="text-5xl font-black text-brand-dark">{selectedEvent.name}</h2>
                     )}
                   </div>
-                  <p className="text-3xl font-black text-accent mb-2">{raceDisplayName}</p>
-                  <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-                  <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
+
+                  {/* Race Name & Date */}
+                  <p className="text-4xl font-black text-accent mb-3">{raceDisplayName}</p>
+                  <p className="text-3xl text-gray-300 mb-10">{formatDate(selectedEvent.start_time)}</p>
+
+                  {/* Name + Photo */}
+                  <div className={`flex items-center justify-center gap-20 mb-12 ${!userPhoto ? 'flex-col gap-10' : ''}`}>
                     {userPhoto && (
-                      <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
-                        <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
+                      <div className="w-80 h-80 rounded-full overflow-hidden border-12 border-white shadow-2xl flex-shrink-0">
+                        <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" crossOrigin="anonymous" />
                       </div>
                     )}
-                    <h1 className={`font-black text-white drop-shadow-2xl leading-none ${userPhoto ? 'text-6xl' : 'text-7xl'}`}>
+                    <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-7xl' : 'text-9xl'}`}>
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
                   </div>
-                  <div className="mb-10">
-                    <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
-                    <p className="text-9xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
+
+                  {/* Finish Time */}
+                  <div className="mb-12">
+                    <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
+                    <p className="text-10xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
                       {formatChronoTime(participant.chip_time)}
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-12">
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-3 gap-16 text-white w-full max-w-5xl mb-16">
                     <div>
-                      <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
-                      <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
-                      <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
+                      <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
+                      <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
+                      <p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p>
                     </div>
                     <div>
-                      <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
-                      <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
-                      <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
+                      <p className="text-3xl text-gray-400 uppercase mb-3">Gender</p>
+                      <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
+                      <p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p>
                     </div>
                     <div>
-                      <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
-                      <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
-                      <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
+                      <p className="text-3xl text-gray-400 uppercase mb-3">Division</p>
+                      <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
+                      <p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p>
                     </div>
                   </div>
-                  <div className="absolute bottom-24 right-8 flex flex-col items-center">
-                    <p className="text-white text-xl font-bold mb-3">View Full Results</p>
-                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF`} alt="QR Code" className="w-40 h-40 border-6 border-white rounded-2xl shadow-2xl" crossOrigin="anonymous" />
+
+                  {/* QR Code */}
+                  <div className="absolute bottom-28 right-12">
+                    <p className="text-white text-2xl font-bold mb-4 text-right">View Full Results</p>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF`}
+                      alt="QR Code"
+                      className="w-52 h-52 border-8 border-white rounded-3xl shadow-2xl"
+                      crossOrigin="anonymous"
+                    />
                   </div>
-                  <p className="text-3xl text-white italic mt-auto mb-8">
+
+                  {/* Footer */}
+                  <p className="text-4xl text-white italic mt-auto">
                     Find your next race at www.youkeepmoving.com
                   </p>
                 </div>
@@ -212,47 +235,65 @@ export default function ResultCardPreviewModal({
         </div>
 
         {/* Photo Upload Section */}
-        <div className="mb-10">
-          <p className="text-2xl font-bold text-center mb-6">📸 Add Your Finish Line Photo!</p>
-          <div className="flex justify-center gap-6 mb-6">
-            <button onClick={triggerCamera} className="px-8 py-4 bg-primary text-white font-bold rounded-full hover:bg-primary/90 transition">📷 Take Photo</button>
-            <button onClick={triggerGallery} className="px-8 py-4 bg-brand-dark text-white font-bold rounded-full hover:bg-brand-dark/90 transition">🖼️ Choose from Gallery</button>
+        <div className="mb-12 text-center">
+          <p className="text-3xl font-bold mb-8">📸 Add Your Finish Line Photo!</p>
+          <div className="flex justify-center gap-8 mb-8">
+            <button onClick={triggerCamera} className="px-10 py-5 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-lg">
+              📷 Take Photo
+            </button>
+            <button onClick={triggerGallery} className="px-10 py-5 bg-brand-dark text-white font-bold text-xl rounded-full hover:bg-brand-dark/90 transition shadow-lg">
+              🖼️ Choose from Gallery
+            </button>
           </div>
           {userPhoto && (
-            <div className="text-center">
-              <img src={userPhoto} alt="Your photo" className="w-32 h-32 object-cover rounded-full mx-auto shadow-xl mb-4" />
-              <button onClick={removePhoto} className="text-primary underline">Remove Photo</button>
+            <div className="inline-block">
+              <img src={userPhoto} alt="Your photo" className="w-40 h-40 object-cover rounded-full shadow-2xl border-4 border-white" />
+              <button onClick={removePhoto} className="block mt-4 text-primary font-semibold underline">
+                Remove Photo
+              </button>
             </div>
           )}
         </div>
 
-        {/* Action Buttons + Social Share */}
-        <div className="flex justify-center gap-6 mb-10">
-          <button onClick={generateResultCard} className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl">
+        {/* Action Buttons */}
+        <div className="flex justify-center gap-8 mb-12">
+          <button
+            onClick={generateResultCard}
+            className="px-12 py-6 bg-primary text-white font-bold text-2xl rounded-full hover:bg-primary/90 transition shadow-2xl"
+          >
             {isMobileDevice ? 'Save to Photos' : 'Download Image'}
           </button>
-          <button onClick={shareResultCard} className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition shadow-xl">
+          <button
+            onClick={shareResultCard}
+            className="px-12 py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-2xl rounded-full hover:opacity-90 transition shadow-2xl"
+          >
             Share Now
           </button>
         </div>
 
-        {/* Social Buttons */}
-        <div className="text-center mb-10">
+        {/* Social Share Buttons */}
+        <div className="text-center">
           <p className="text-2xl font-bold text-brand-dark mb-6">Or Share Directly</p>
           <div className="flex justify-center gap-6">
-            <button onClick={shareOnFacebook} className="px-6 py-3 bg-[#1877F2] text-white font-bold text-lg rounded-full hover:opacity-90 transition flex items-center gap-2">
-              <span className="text-2xl">f</span> Facebook
+            <button onClick={shareOnFacebook} className="px-8 py-4 bg-[#1877F2] text-white font-bold text-lg rounded-full hover:opacity-90 flex items-center gap-3 shadow-lg">
+              <span className="text-3xl">f</span> Facebook
             </button>
-            <button onClick={shareOnX} className="px-6 py-3 bg-black text-white font-bold text-lg rounded-full hover:opacity-90 transition flex items-center gap-2">
-              <span className="text-2xl">𝕏</span> X
+            <button onClick={shareOnX} className="px-8 py-4 bg-black text-white font-bold text-lg rounded-full hover:opacity-90 flex items-center gap-3 shadow-lg">
+              <span className="text-3xl">𝕏</span> X (Twitter)
             </button>
-            <button onClick={shareOnInstagram} className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg rounded-full hover:opacity-90 transition flex items-center gap-2">
-              <span className="text-2xl">📸</span> Instagram
+            <button onClick={shareOnInstagram} className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg rounded-full hover:opacity-90 flex items-center gap-3 shadow-lg">
+              <span className="text-3xl">📸</span> Instagram
             </button>
           </div>
         </div>
 
-        <input type="file" ref={photoInputRef} accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+        <input
+          type="file"
+          ref={photoInputRef}
+          accept="image/*"
+          onChange={handlePhotoUpload}
+          className="hidden"
+        />
       </div>
     </div>
   );
