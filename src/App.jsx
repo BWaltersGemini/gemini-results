@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { RaceProvider } from './context/RaceContext';
-import { DirectorProvider } from './context/DirectorContext'; // ← Added
+import { DirectorProvider } from './context/DirectorContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ScrollToTop from './components/ScrollToTop';
@@ -17,11 +17,15 @@ import ParticipantPage from './pages/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
 import ResultsKiosk from './pages/ResultsKiosk';
 
-// Director Pages
+// Director Pages (protected)
 import DirectorLogin from './pages/director/DirectorLogin';
 import RaceDirectorsHub from './pages/director/RaceDirectorsHub';
 import LiveTrackingPage from './pages/director/LiveTrackingPage';
-import AwardsPage from './pages/director/AwardsPage'; // ← Added
+import AwardsPage from './pages/director/AwardsPage';
+
+// Public Awards Views (no login required)
+import AwardsAnnouncerView from './pages/public/AwardsAnnouncerView';
+import AwardsTableView from './pages/public/AwardsTableView';
 
 import ReactGA from 'react-ga4';
 
@@ -49,21 +53,26 @@ function AnalyticsTracker() {
   return null;
 }
 
-// Layout wrapper to hide Navbar & Footer on kiosk and director routes
+// Layout wrapper to hide Navbar & Footer on kiosk, director, and public awards routes
 function Layout({ children }) {
   const location = useLocation();
   const isKiosk = location.pathname.startsWith('/kiosk');
   const isDirectorArea =
     location.pathname.startsWith('/director') ||
     location.pathname.startsWith('/race-directors-hub');
+  const isPublicAwards =
+    location.pathname.startsWith('/awards-announcer') ||
+    location.pathname.startsWith('/awards-table');
+
+  const hideNavFooter = isKiosk || isDirectorArea || isPublicAwards;
 
   return (
     <>
-      {!isKiosk && !isDirectorArea && <Navbar />}
+      {!hideNavFooter && <Navbar />}
       <ScrollToTop />
       <AnalyticsTracker />
       <main className="flex-grow">{children}</main>
-      {!isKiosk && !isDirectorArea && <Footer />}
+      {!hideNavFooter && <Footer />}
     </>
   );
 }
@@ -94,14 +103,12 @@ export default function App() {
                 />
                 <Route path="/participant" element={<ParticipantPage />} />
 
-                {/* Kiosk Mode - full screen, no navbar/footer */}
+                {/* Kiosk Mode */}
                 <Route path="/kiosk" element={<ResultsKiosk />} />
 
-                {/* === RACE DIRECTORS HUB === */}
-                {/* Public login page */}
+                {/* === RACE DIRECTORS HUB (Protected) === */}
                 <Route path="/director-login" element={<DirectorLogin />} />
 
-                {/* Protected director area – wrapped in DirectorProvider */}
                 <Route
                   path="/race-directors-hub"
                   element={
@@ -111,7 +118,6 @@ export default function App() {
                   }
                 />
 
-                {/* Live Tracking – uses selectedEventId from context */}
                 <Route
                   path="/director-live-tracking"
                   element={
@@ -121,7 +127,6 @@ export default function App() {
                   }
                 />
 
-                {/* Awards Page */}
                 <Route
                   path="/director-awards"
                   element={
@@ -130,6 +135,10 @@ export default function App() {
                     </DirectorProvider>
                   }
                 />
+
+                {/* === PUBLIC AWARDS VIEWS (No Login Required) === */}
+                <Route path="/awards-announcer/:eventId" element={<AwardsAnnouncerView />} />
+                <Route path="/awards-table/:eventId" element={<AwardsTableView />} />
               </Routes>
             </Layout>
           </div>
