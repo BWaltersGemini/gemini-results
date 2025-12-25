@@ -14,7 +14,6 @@ export default function Footer() {
               Serving Southern California since 2011.
             </p>
           </div>
-
           {/* Navigation Links */}
           <div className="space-y-4">
             <Link
@@ -36,10 +35,9 @@ export default function Footer() {
               onClick={() => window.scrollTo(0, 0)}
               className="block text-gray-300 hover:text-accent font-medium transition"
             >
-              Race Directors Hub (Coming Soon)
+              Race Directors Hub
             </Link>
           </div>
-
           {/* External & Copyright */}
           <div>
             <a

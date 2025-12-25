@@ -4,7 +4,8 @@
 // • One tile per master, using the most recent linked event
 // • Sorted by latest event date
 // • Standalone events and hidden masters are excluded
-
+// • Upcoming events limited to 3
+// • CTA buttons updated
 import { useContext, useState, useEffect } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -20,7 +21,6 @@ export default function Home() {
     eventLogos = {},
     hiddenMasters = [],
   } = useContext(RaceContext);
-
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
 
@@ -61,11 +61,9 @@ export default function Home() {
     let currentRaces = 0;
     const athletesStep = finalAthletes / steps;
     const racesStep = totalRacesTimed / steps;
-
     const timer = setInterval(() => {
       currentAthletes += athletesStep;
       currentRaces += racesStep;
-
       if (currentAthletes >= finalAthletes && currentRaces >= totalRacesTimed) {
         setDisplayAthletes(finalAthletes);
         setDisplayRaces(totalRacesTimed);
@@ -75,11 +73,10 @@ export default function Home() {
         setDisplayRaces(Math.floor(currentRaces));
       }
     }, interval);
-
     return () => clearInterval(timer);
   }, [finalAthletes, totalRacesTimed, loading]);
 
-  // Upcoming events from You Keep Moving
+  // Upcoming events from You Keep Moving — limited to 3
   useEffect(() => {
     const fetchUpcomingEvents = async () => {
       try {
@@ -89,7 +86,7 @@ export default function Home() {
         const futureEvents = (data.events || [])
           .filter(event => new Date(event.start_date) > new Date())
           .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
-        setUpcomingEvents(futureEvents);
+        setUpcomingEvents(futureEvents.slice(0, 3)); // ← Only top 3
       } catch (err) {
         console.error('Failed to fetch upcoming events:', err);
         setUpcomingEvents([]);
@@ -124,19 +121,16 @@ export default function Home() {
 
   // === ONLY VISIBLE MASTER SERIES, SORTED BY MOST RECENT EVENT ===
   const masterSeriesTiles = Object.keys(masterGroups)
-    .filter(masterKey => !hiddenMasters.includes(masterKey)) // Only visible masters
+    .filter(masterKey => !hiddenMasters.includes(masterKey))
     .map(masterKey => {
       const eventIds = masterGroups[masterKey] || [];
       const linkedEvents = events
         .filter(e => eventIds.includes(String(e.id)))
         .sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
-
       if (linkedEvents.length === 0) return null;
-
-      const latestEvent = linkedEvents[0]; // Most recent
+      const latestEvent = linkedEvents[0];
       const displayName = editedEvents[masterKey]?.name || masterKey;
       const logo = eventLogos[masterKey] || null;
-
       return {
         masterKey,
         displayName,
@@ -147,7 +141,7 @@ export default function Home() {
     })
     .filter(Boolean)
     .sort((a, b) => (b.latestDate || 0) - (a.latestDate || 0))
-    .slice(0, 3); // Top 3 most recent masters
+    .slice(0, 3);
 
   const handleMasterClick = (masterTile) => {
     setSelectedEvent(masterTile.latestEvent);
@@ -222,7 +216,6 @@ export default function Home() {
           </h2>
           <div className="w-24 h-1 bg-primary mx-auto"></div>
         </div>
-
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-4 border-primary"></div>
@@ -260,7 +253,6 @@ export default function Home() {
             ))}
           </div>
         )}
-
         <div className="text-center mt-16">
           <Link
             to="/results"
@@ -271,19 +263,18 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Upcoming Events */}
+      {/* Upcoming Events — Now only 3 */}
       <section className="py-20 md:py-32 bg-gray-50 px-6">
         <div className="max-w-7xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl font-bold text-brand-dark mb-4">
             Upcoming Events
           </h2>
           <div className="w-24 h-1 bg-primary mx-auto mb-12"></div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
             {upcomingEvents.length === 0 ? (
               <p className="col-span-3 text-gray-600">Loading upcoming events...</p>
             ) : (
-              upcomingEvents.slice(0, 6).map((event) => (
+              upcomingEvents.map((event) => ( // ← Removed .slice(0, 6) → now shows only the 3 fetched
                 <a
                   key={event.id}
                   href={event.url}
@@ -315,7 +306,6 @@ export default function Home() {
               ))
             )}
           </div>
-
           <a
             href="https://youkeepmoving.com/events"
             target="_blank"
@@ -334,16 +324,10 @@ export default function Home() {
         </h2>
         <div className="flex flex-col sm:flex-row gap-8 justify-center items-center max-w-3xl mx-auto">
           <Link
-            to="/services"
+            to="/contact"
             className="px-12 py-5 bg-white text-brand-dark font-bold text-xl rounded-full hover:bg-gray-100 transition shadow-xl"
           >
-            Request Timing Services
-          </Link>
-          <Link
-            to="/products"
-            className="px-12 py-5 border-2 border-white text-white font-bold text-xl rounded-full hover:bg-white/20 transition backdrop-blur-sm"
-          >
-            Shop Race Gear
+            Get Timing & Results Services
           </Link>
         </div>
       </section>
