@@ -18,13 +18,25 @@ export default function AwardsPage() {
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
   const [copiedTable, setCopiedTable] = useState(false);
 
-  // Load live results
-  useEffect(() => {
-    if (!selectedEventId) {
-      navigate('/race-directors-hub');
-      return;
-    }
+  // If user is not authenticated yet (after refresh), show authenticating state
+  if (!currentUser) {
+    return (
+      <DirectorLayout>
+        <div className="flex items-center justify-center min-h-[70vh]">
+          <p className="text-2xl text-text-muted">Authenticating...</p>
+        </div>
+      </DirectorLayout>
+    );
+  }
 
+  // If no event selected, redirect to hub
+  if (!selectedEventId) {
+    navigate('/race-directors-hub');
+    return null;
+  }
+
+  // Load live results from chronotrack_results
+  useEffect(() => {
     const fetchInitial = async () => {
       setLoading(true);
       const { data } = await supabase
@@ -59,11 +71,11 @@ export default function AwardsPage() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [selectedEventId, navigate]);
+  }, [selectedEventId]);
 
-  // Load awards state
+  // Load director-specific awards state
   useEffect(() => {
-    if (!selectedEventId || !currentUser) return;
+    if (!currentUser) return;
 
     const loadState = async () => {
       const { data } = await supabase
@@ -113,7 +125,7 @@ export default function AwardsPage() {
     });
   };
 
-  // Smart division ordering: youngest to oldest, Male/Female alternating
+  // Division ordering: Male Overall → Female Overall → youngest to oldest age groups
   const getDivisions = () => {
     const ageGroupDivisions = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
 
@@ -161,7 +173,7 @@ export default function AwardsPage() {
     );
   });
 
-  // Correct share URLs
+  // Share URLs
   const announcerUrl = `${window.location.origin}/awards-announcer/${selectedEventId}`;
   const tableUrl = `${window.location.origin}/awards-table/${selectedEventId}`;
 
@@ -175,8 +187,6 @@ export default function AwardsPage() {
       setTimeout(() => setCopiedTable(false), 2000);
     }
   };
-
-  if (!selectedEventId) return null;
 
   return (
     <DirectorLayout>

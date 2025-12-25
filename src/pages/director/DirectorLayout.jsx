@@ -7,21 +7,20 @@ import { supabase } from '../../supabaseClient';
 export default function DirectorLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, selectedEventId, allEvents = [] } = useDirector(); // Assume allEvents passed or fetched if needed
+  const { currentUser, selectedEventId } = useDirector();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Find current event name for display
-  const currentEvent = allEvents.find(e => e.id === selectedEventId);
-  const eventDisplay = currentEvent ? `${currentEvent.name} (${new Date(currentEvent.start_time * 1000).getFullYear()})` : 'No Event Selected';
+  // Simple event display — just show ID or "No Event Selected"
+  const eventDisplay = selectedEventId ? `Event: ${selectedEventId}` : 'No Event Selected';
 
   const navItems = [
     { path: '/race-directors-hub', label: 'Dashboard', icon: '🏠' },
-    { 
-      path: selectedEventId ? `/director-live-tracking/${selectedEventId}` : '#', 
-      label: 'Live Tracking', 
+    {
+      path: '/director-live-tracking',
+      label: 'Live Tracking',
       icon: '📊',
-      disabled: !selectedEventId 
+      disabled: !selectedEventId,
     },
     { path: '/director-awards', label: 'Awards', icon: '🏆' },
     { path: '/director-analytics', label: 'Analytics', icon: '📈', disabled: true },
@@ -33,23 +32,26 @@ export default function DirectorLayout({ children }) {
   };
 
   const isActive = (path) => {
-    if (path.includes('/director-live-tracking/')) {
-      return location.pathname.startsWith('/director-live-tracking/');
-    }
-    if (path === '/director-awards') {
-      return location.pathname === '/director-awards';
-    }
     return location.pathname === path;
   };
 
+  // Auth guard — wait for user
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-bg-light flex items-center justify-center">
+        <p className="text-2xl text-text-muted">Authenticating...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-bg-light flex">
-      {/* Sidebar - Desktop */}
+      {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-72 bg-text-dark text-text-light shadow-2xl">
         <div className="p-8 border-b border-white/10">
           <h1 className="text-3xl font-bold">Director Hub</h1>
           <p className="mt-2 text-gray-300">
-            {currentUser?.profile?.full_name || 'Director'}
+            {currentUser.profile?.full_name || 'Director'}
           </p>
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
@@ -65,7 +67,9 @@ export default function DirectorLayout({ children }) {
                   <span className="flex items-center gap-4 px-6 py-4 rounded-xl text-gray-500 cursor-not-allowed opacity-60">
                     <span className="text-2xl">{item.icon}</span>
                     <span className="text-lg">{item.label}</span>
-                    {item.disabled && !item.path.includes('live') && <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>}
+                    {item.disabled && item.label !== 'Live Tracking' && (
+                      <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>
+                    )}
                   </span>
                 ) : (
                   <Link
@@ -121,7 +125,7 @@ export default function DirectorLayout({ children }) {
                 <div>
                   <h1 className="text-3xl font-bold">Director Hub</h1>
                   <p className="mt-2 text-gray-300 text-sm">
-                    {currentUser?.profile?.full_name}
+                    {currentUser.profile?.full_name}
                   </p>
                 </div>
                 <button
@@ -140,7 +144,9 @@ export default function DirectorLayout({ children }) {
                         <span className="flex items-center gap-4 px-6 py-4 rounded-xl text-gray-500 opacity-60">
                           <span className="text-2xl">{item.icon}</span>
                           <span className="text-lg">{item.label}</span>
-                          {item.disabled && !item.path.includes('live') && <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>}
+                          {item.disabled && item.label !== 'Live Tracking' && (
+                            <span className="ml-auto text-xs bg-gray-600 px-2 py-1 rounded">Soon</span>
+                          )}
                         </span>
                       ) : (
                         <Link
@@ -173,7 +179,7 @@ export default function DirectorLayout({ children }) {
           </>
         )}
 
-        {/* Main Content Area */}
+        {/* Main Content */}
         <main className="flex-1 p-6 md:p-12 overflow-y-auto bg-bg-light">
           {children}
         </main>
