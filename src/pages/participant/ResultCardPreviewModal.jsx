@@ -1,4 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
+// FIXED — Uses props for logos, no ReferenceError
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -15,6 +16,8 @@ export default function ResultCardPreviewModal({
   triggerCamera,
   triggerGallery,
   removePhoto,
+  masterLogo,   // ← Added
+  bibLogo,      // ← Added
 }) {
   const cardRef = useRef(null);
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -99,7 +102,7 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden Full-Size Card — EXACT CODE FROM OLD WORKING VERSION */}
+      {/* Hidden Full-Size Card — EXACT OLD CODE, using passed props */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -109,8 +112,8 @@ export default function ResultCardPreviewModal({
           <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
             {masterLogo ? (
               <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
-            ) : eventLogos[selectedEvent.id] ? (
-              <img src={eventLogos[selectedEvent.id]} alt="Event Logo" className="max-w-full max-h-24 object-contain mx-auto" crossOrigin="anonymous" />
+            ) : bibLogo ? (
+              <img src={bibLogo} alt="Event Logo" className="max-w-full max-h-24 object-contain mx-auto" crossOrigin="anonymous" />
             ) : (
               <h2 className="text-4xl font-black text-brand-dark">{selectedEvent.name}</h2>
             )}
@@ -152,7 +155,7 @@ export default function ResultCardPreviewModal({
           </div>
           <div className="absolute bottom-24 right-8 flex flex-col items-center">
             <p className="text-white text-xl font-bold mb-3">View Full Results</p>
-            <img src={qrCodeUrl} alt="QR Code" className="w-40 h-40 border-6 border-white rounded-2xl shadow-2xl" crossOrigin="anonymous" />
+            <img src={participantResultsUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF` : ''} alt="QR Code" className="w-40 h-40 border-6 border-white rounded-2xl shadow-2xl" crossOrigin="anonymous" />
           </div>
           <p className="text-3xl text-white italic mt-auto mb-8">
             Find your next race at www.youkeepmoving.com
@@ -160,12 +163,9 @@ export default function ResultCardPreviewModal({
         </div>
       </div>
 
-      {/* Modal Preview — Using scaled version of the same card */}
+      {/* Preview Modal — Scaled version of the same card */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
-        <div
-          className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
           <button
             onClick={onClose}
             className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-brand-dark text-3xl font-light hover:bg-gray-100 transition z-50"

@@ -583,6 +583,8 @@ export default function ParticipantPage() {
           triggerCamera={triggerCamera}
           triggerGallery={triggerGallery}
           removePhoto={removePhoto}
+          masterLogo={masterLogo}   // ← Add this
+          bibLogo={bibLogo}         // ← Add this
         />
 
         {/* Email Results Form */}
