@@ -2,28 +2,24 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
-import { useRace } from './RaceContext'; // ← Get masterGroups
-import { fetchEvents } from '../api/chronotrackapi'; // ← Import to fetch all events for SuperAdmin
+import { useRace } from './RaceContext';
+import { fetchEvents } from '../api/chronotrackapi'; // ← Make sure this is imported
 
 const DirectorContext = createContext();
 
 export function DirectorProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(undefined); // undefined = loading, null = logged out, object = logged in
-  const [assignedEvents, setAssignedEvents] = useState([]); // Directly assigned event IDs
-  const [expandedAssignedEvents, setExpandedAssignedEvents] = useState([]); // All accessible (via master groups or superadmin)
+  const [currentUser, setCurrentUser] = useState(undefined);
+  const [assignedEvents, setAssignedEvents] = useState([]); // Array of event ID strings
+  const [expandedAssignedEvents, setExpandedAssignedEvents] = useState([]); // Array of event ID strings
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedEventName, setSelectedEventName] = useState('No Event Selected');
 
-  const { masterGroups = {} } = useRace(); // Get masterGroups from global RaceContext
+  const { masterGroups = {} } = useRace();
   const navigate = useNavigate();
 
-  // === SUPERADMIN CONFIGURATION ===
-  // Replace with your actual email (or add your UUID for extra safety)
-  const SUPERADMIN_EMAIL = 'brandon1@geminitiming.com'; // ← Change if different
-  // Optional: const SUPERADMIN_UUID = 'a047c35a-355b-4971-8695-7303c7f3cf1c';
-
+  // === SUPERADMIN CONFIG ===
+  const SUPERADMIN_EMAIL = 'brandon1@geminitiming.com'; // ← Your email
   const isSuperAdmin = currentUser?.email === SUPERADMIN_EMAIL;
-  // || currentUser?.id === SUPERADMIN_UUID;
 
   // Auth setup
   useEffect(() => {
@@ -63,22 +59,22 @@ export function DirectorProvider({ children }) {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Unified event loading: SuperAdmin vs Regular Director
+  // Unified event loading
   const loadEventsForUser = async (user) => {
     if (isSuperAdmin) {
-      console.log('[DirectorContext] SUPERADMIN MODE ACTIVATED — Loading ALL events');
+      console.log('[DirectorContext] SUPERADMIN MODE — Loading ALL events');
       try {
-        const allEvents = await fetchEvents(); // Direct from ChronoTrack
+        const allEvents = await fetchEvents();
         const allEventIds = allEvents.map(e => e.id.toString());
-        setAssignedEvents(allEventIds); // Treat as "assigned"
+        setAssignedEvents(allEventIds);
         setExpandedAssignedEvents(allEventIds);
       } catch (err) {
-        console.error('[DirectorContext] SuperAdmin failed to load all events:', err);
+        console.error('[DirectorContext] SuperAdmin failed to load events:', err);
         setAssignedEvents([]);
         setExpandedAssignedEvents([]);
       }
     } else {
-      // Regular director logic
+      // Regular director
       try {
         const { data, error } = await supabase
           .from('director_event_assignments')
@@ -90,7 +86,6 @@ export function DirectorProvider({ children }) {
         const directIds = data?.map(row => row.event_id.toString()) || [];
         setAssignedEvents(directIds);
 
-        // Expand via masterGroups
         const expanded = new Set(directIds);
         Object.values(masterGroups).forEach((eventIdList) => {
           const stringList = eventIdList.map(String);
@@ -109,7 +104,7 @@ export function DirectorProvider({ children }) {
     }
   };
 
-  // Fetch selected event name from chronotrack_events
+  // Fetch selected event name
   useEffect(() => {
     if (!selectedEventId) {
       setSelectedEventName('No Event Selected');
@@ -138,12 +133,10 @@ export function DirectorProvider({ children }) {
     fetchName();
   }, [selectedEventId]);
 
-  // Helper: Select event by ID
   const setSelectedEvent = (eventId) => {
     setSelectedEventId(eventId);
   };
 
-  // Logging
   console.log('[DirectorContext] State:', {
     mode: isSuperAdmin ? 'SUPERADMIN' : 'DIRECTOR',
     user: currentUser ? 'LOGGED IN' : currentUser === null ? 'LOGGED OUT' : 'LOADING',
@@ -164,7 +157,7 @@ export function DirectorProvider({ children }) {
         setSelectedEventId,
         selectedEventName,
         setSelectedEvent,
-        isSuperAdmin, // ← Optional: expose if you want UI indicators
+        isSuperAdmin,
       }}
     >
       {children}
