@@ -16,7 +16,7 @@ export default function AwardsPage() {
   const [mode, setMode] = useState('announcer');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Load live results from chronotrack_results table
+  // Load live results
   useEffect(() => {
     if (!selectedEventId) {
       navigate('/race-directors-hub');
@@ -29,7 +29,6 @@ export default function AwardsPage() {
         .from('chronotrack_results')
         .select('*')
         .eq('event_id', selectedEventId)
-        .neq('_status', 'DNF') // Exclude DNFs
         .order('place', { ascending: true });
 
       setFinishers(data || []);
@@ -38,23 +37,17 @@ export default function AwardsPage() {
 
     fetchInitial();
 
-    // Realtime subscription for live updates during the event
     const channel = supabase
       .channel(`awards-${selectedEventId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'chronotrack_results',
-          filter: `event_id=eq.${selectedEventId}`,
-        },
+        { event: '*', schema: 'public', table: 'chronotrack_results', filter: `event_id=eq.${selectedEventId}` },
         (payload) => {
           setFinishers((prev) => {
-            const existingIndex = prev.findIndex((r) => r.entry_id === payload.new.entry_id);
-            if (existingIndex !== -1) {
+            const index = prev.findIndex((r) => r.entry_id === payload.new.entry_id);
+            if (index >= 0) {
               const updated = [...prev];
-              updated[existingIndex] = payload.new;
+              updated[index] = payload.new;
               return updated;
             }
             return [...prev, payload.new];
@@ -63,12 +56,10 @@ export default function AwardsPage() {
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [selectedEventId, navigate]);
 
-  // Load director-specific awards state (announced / picked up)
+  // Load awards state
   useEffect(() => {
     if (!selectedEventId || !currentUser) return;
 
@@ -92,7 +83,6 @@ export default function AwardsPage() {
     loadState();
   }, [selectedEventId, currentUser]);
 
-  // Save announced / picked up state
   const saveState = async (division, entryId, type) => {
     const field = type === 'announced' ? 'announced' : 'picked_up';
     const current = type === 'announced'
@@ -121,43 +111,38 @@ export default function AwardsPage() {
     });
   };
 
-  // Smart division ordering: Male Overall → Female Overall → youngest to oldest, alternating gender
+  // Smart division ordering: youngest to oldest, Male/Female alternating
   const getDivisions = () => {
-    const maleOverall = finishers.filter((r) => r.gender === 'M');
-    const femaleOverall = finishers.filter((r) => r.gender === 'F');
+    // Extract unique age_group_name values (they already include gender, e.g., "35-39 Male")
+    const ageGroupDivisions = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
 
-    const ageGroups = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
-    const sortedAgeGroups = ageGroups
-      .filter((g) => g !== 'Overall')
-      .sort((a, b) => {
-        const ageA = parseInt(a.match(/\d+/)?.[0] || 0);
-        const ageB = parseInt(b.match(/\d+/)?.[0] || 0);
-        return ageA - ageB; // youngest first
-      });
+    // Sort by age (youngest first)
+    const sortedAgeGroups = ageGroupDivisions.sort((a, b) => {
+      const ageA = parseInt(a.match(/\d+/)?.[0] || 0);
+      const ageB = parseInt(b.match(/\d+/)?.[0] || 0);
+      return ageA - ageB;
+    });
 
-    const ordered = [
-      'Male Overall',
-      'Female Overall',
-      ...sortedAgeGroups.flatMap((group) => {
-        const male = finishers.filter((r) => r.age_group_name === group && r.gender === 'M');
-        const female = finishers.filter((r) => r.age_group_name === group && r.gender === 'F');
-        return [
-          male.length ? `${group} Male` : null,
-          female.length ? `${group} Female` : null,
-        ].filter(Boolean);
-      }),
-    ].filter(Boolean);
-
-    return ordered;
+    return ['Male Overall', 'Female Overall', ...sortedAgeGroups];
   };
 
   const divisions = getDivisions();
 
   const getRunnersInDivision = (divName) => {
-    if (divName === 'Male Overall') return finishers.filter((r) => r.gender === 'M');
-    if (divName === 'Female Overall') return finishers.filter((r) => r.gender === 'F');
-    const [ageGroup, gender] = divName.split(' ');
-    return finishers.filter((r) => r.age_group_name === ageGroup && (gender === 'Male' ? r.gender === 'M' : r.gender === 'F'));
+    if (divName === 'Male Overall') {
+      return finishers
+        .filter((r) => r.gender === 'M')
+        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+    }
+    if (divName === 'Female Overall') {
+      return finishers
+        .filter((r) => r.gender === 'F')
+        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+    }
+    // Age group divisions already have gender in name
+    return finishers
+      .filter((r) => r.age_group_name === divName)
+      .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity));
   };
 
   const onCourseInDivision = (divName) => {
@@ -165,7 +150,6 @@ export default function AwardsPage() {
     return runners.filter((r) => !r.chip_time).length;
   };
 
-  // Search filter
   const visibleDivisions = divisions.filter((div) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -189,19 +173,14 @@ export default function AwardsPage() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-text-dark mb-8">Awards Management</h1>
 
-        {/* Share Links Section */}
+        {/* Share Links */}
         <div className="bg-accent/20 rounded-2xl p-8 mb-8">
           <h2 className="text-2xl font-bold text-text-dark mb-6">Share with Your Team</h2>
           <div className="grid md:grid-cols-2 gap-8">
             <div>
               <p className="font-semibold mb-3">Announcer View (Phone-Friendly)</p>
               <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={announcerUrl}
-                  readOnly
-                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-white"
-                />
+                <input type="text" value={announcerUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-white" />
                 <button
                   onClick={() => navigator.clipboard.writeText(announcerUrl)}
                   className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90 transition"
@@ -213,12 +192,7 @@ export default function AwardsPage() {
             <div>
               <p className="font-semibold mb-3">Awards Table View</p>
               <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={tableUrl}
-                  readOnly
-                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-white"
-                />
+                <input type="text" value={tableUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-white" />
                 <button
                   onClick={() => navigator.clipboard.writeText(tableUrl)}
                   className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90 transition"
@@ -331,13 +305,13 @@ export default function AwardsPage() {
                     top.map((r, i) => (
                       <div
                         key={r.entry_id}
-                        className={`bg-white rounded-2xl shadow-xl p-8 transition ${
-                          announcedSet.has(r.entry_id) ? 'opacity-60' : ''
-                        }`}
+                        className={`bg-white rounded-2xl shadow-xl p-8 ${announcedSet.has(r.entry_id) ? 'opacity-60' : ''}`}
                       >
                         <div className="flex justify-between items-center">
                           <div>
-                            <p className="text-5xl font-black text-primary">#{i + 1}</p>
+                            <p className="text-5xl font-black text-primary">
+                              #{div.includes('Overall') ? r.place : r.age_group_place || i + 1}
+                            </p>
                             <p className="text-3xl font-bold text-text-dark mt-4">
                               {r.first_name} {r.last_name}
                             </p>
@@ -348,7 +322,7 @@ export default function AwardsPage() {
                           </div>
                           <button
                             onClick={() => saveState(div, r.entry_id, 'announced')}
-                            className={`px-12 py-6 rounded-full text-2xl font-bold transition ${
+                            className={`px-12 py-6 rounded-full text-2xl font-bold ${
                               announcedSet.has(r.entry_id)
                                 ? 'bg-gray-500 text-white'
                                 : 'bg-primary text-text-light hover:bg-primary/90'
@@ -369,12 +343,12 @@ export default function AwardsPage() {
         {mode === 'table' && (
           <div>
             <h2 className="text-3xl font-bold text-text-dark mb-6">Awards Pickup Table</h2>
-            <div className="overflow-x-auto bg-white rounded-2xl shadow-xl">
+            <div className="overflow-x-auto bg-white rounded-2xl shadow-2xl">
               <table className="w-full">
                 <thead className="bg-text-dark text-text-light">
                   <tr>
                     <th className="px-8 py-6 text-left">Division</th>
-                    <th className="px-8 py-6 text-left">Place</th>
+                    <th className="px-8 py-6 text-left">Division Place</th>
                     <th className="px-8 py-6 text-left">Name</th>
                     <th className="px-8 py-6 text-left">Time</th>
                     <th className="px-8 py-6 text-left">City, State</th>
@@ -382,25 +356,31 @@ export default function AwardsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {visibleDivisions.flatMap((div) =>
-                    getRunnersInDivision(div).map((r) => (
-                      <tr key={r.entry_id} className="hover:bg-bg-light transition">
-                        <td className="px-8 py-6 font-medium">{div}</td>
-                        <td className="px-8 py-6 font-bold text-xl text-primary">{r.place || '-'}</td>
-                        <td className="px-8 py-6 font-semibold">{r.first_name} {r.last_name}</td>
-                        <td className="px-8 py-6">{r.chip_time || '-'}</td>
-                        <td className="px-8 py-6">{r.city && `${r.city}, `}{r.state}</td>
-                        <td className="px-8 py-6 text-center">
-                          <input
-                            type="checkbox"
-                            checked={awardsState[div]?.pickedUp?.has(r.entry_id) || false}
-                            onChange={() => saveState(div, r.entry_id, 'pickedUp')}
-                            className="h-8 w-8 text-primary rounded focus:ring-primary"
-                          />
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  {visibleDivisions.map((div) => {
+                    const runners = getRunnersInDivision(div);
+
+                    return runners.length > 0
+                      ? runners.map((r) => (
+                          <tr key={r.entry_id} className="hover:bg-bg-light transition">
+                            <td className="px-8 py-6 font-medium">{div}</td>
+                            <td className="px-8 py-6 font-bold text-xl text-primary">
+                              {div.includes('Overall') ? r.place || '-' : r.age_group_place || '-'}
+                            </td>
+                            <td className="px-8 py-6 font-semibold">{r.first_name} {r.last_name}</td>
+                            <td className="px-8 py-6">{r.chip_time || '-'}</td>
+                            <td className="px-8 py-6">{r.city && `${r.city}, `}{r.state}</td>
+                            <td className="px-8 py-6 text-center">
+                              <input
+                                type="checkbox"
+                                checked={awardsState[div]?.pickedUp?.has(r.entry_id) || false}
+                                onChange={() => saveState(div, r.entry_id, 'pickedUp')}
+                                className="h-8 w-8 text-primary rounded focus:ring-primary"
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      : null;
+                  })}
                 </tbody>
               </table>
             </div>
