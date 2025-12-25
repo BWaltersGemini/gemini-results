@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL FIXED — No Cropping, Full Content Captured
+// FINAL VERSION — No Event Logo Header, Everything Shifted Up, Cleaner Design
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -34,10 +34,6 @@ export default function ResultCardPreviewModal({
   const generateResultCard = async () => {
     if (!cardRef.current) return;
 
-    console.log('[ResultCard] Starting html2canvas capture...');
-    console.log('[ResultCard] Element size:', cardRef.current.offsetWidth, 'x', cardRef.current.offsetHeight);
-    console.log('[ResultCard] Scroll height:', cardRef.current.scrollHeight);
-
     try {
       const canvas = await html2canvas(cardRef.current, {
         scale: 3,
@@ -45,30 +41,19 @@ export default function ResultCardPreviewModal({
         allowTaint: true,
         backgroundColor: null,
         logging: false,
-        width: cardRef.current.scrollWidth,
-        height: cardRef.current.scrollHeight, // ← KEY FIX: Use full scroll height
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: cardRef.current.scrollWidth,
-        windowHeight: cardRef.current.scrollHeight,
+        width: 1080,
+        height: 1080,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: document.documentElement.offsetHeight,
       });
 
-      console.log('[ResultCard] Canvas created:', canvas.width, 'x', canvas.height);
-
-      // Now crop to 1080x1080 square from top
-      const croppedCanvas = document.createElement('canvas');
-      croppedCanvas.width = 1080 * 3; // maintain high res
-      croppedCanvas.height = 1080 * 3;
-      const ctx = croppedCanvas.getContext('2d');
-      ctx.drawImage(canvas, 0, 0, croppedCanvas.width, croppedCanvas.height);
-
-      const image = croppedCanvas.toDataURL('image/png');
+      const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.download = `${participant.first_name}_${participant.last_name}_result.png`;
       link.href = image;
       link.click();
-
-      console.log('[ResultCard] Full card downloaded (1080x1080)');
     } catch (err) {
       console.error('[ResultCard] Failed:', err);
       alert('Failed to generate card — check console');
@@ -76,7 +61,6 @@ export default function ResultCardPreviewModal({
   };
 
   const shareResultCard = async () => {
-    // Same fix applied
     if (!cardRef.current) return;
 
     try {
@@ -85,21 +69,15 @@ export default function ResultCardPreviewModal({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        width: cardRef.current.scrollWidth,
-        height: cardRef.current.scrollHeight,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: cardRef.current.scrollWidth,
-        windowHeight: cardRef.current.scrollHeight,
+        width: 1080,
+        height: 1080,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: document.documentElement.offsetHeight,
       });
 
-      const croppedCanvas = document.createElement('canvas');
-      croppedCanvas.width = 1080 * 3;
-      croppedCanvas.height = 1080 * 3;
-      const ctx = croppedCanvas.getContext('2d');
-      ctx.drawImage(canvas, 0, 0, croppedCanvas.width, croppedCanvas.height);
-
-      croppedCanvas.toBlob(async (blob) => {
+      canvas.toBlob(async (blob) => {
         if (!blob) return generateResultCard();
         const file = new File([blob], 'result-card.png', { type: 'image/png' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -117,7 +95,6 @@ export default function ResultCardPreviewModal({
     }
   };
 
-  // Social shares unchanged
   const shareOnFacebook = () => {
     const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
     window.open(`https://www.facebook.com/sharer/sharer.php?quote=${text}`, '_blank');
@@ -136,58 +113,50 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden Card — Original Beautiful Layout */}
+      {/* Hidden Full-Size Card — No Logo Header, Content Shifted Up */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16 overflow-hidden"
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-8 pb-8 overflow-hidden"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
-          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 mb-8">
-            {masterLogo ? (
-              <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-32 object-contain mx-auto" crossOrigin="anonymous" />
-            ) : bibLogo ? (
-              <img src={bibLogo} alt="Event Logo" className="max-w-full max-h-28 object-contain mx-auto" crossOrigin="anonymous" />
-            ) : (
-              <h2 className="text-5xl font-black text-brand-dark">{selectedEvent.name}</h2>
-            )}
-          </div>
+          {/* Removed the white logo container entirely */}
 
-          <p className="text-4xl font-black text-accent mb-3">{raceDisplayName}</p>
-          <p className="text-3xl font-semibold text-white mb-4">{selectedEvent.name}</p>
-          <p className="text-2xl text-gray-300 mb-10">{formatDate(selectedEvent.start_time)}</p>
+          <p className="text-5xl font-black text-accent mb-4">{raceDisplayName}</p>
+          <p className="text-4xl font-semibold text-white mb-6">{selectedEvent.name}</p>
+          <p className="text-3xl text-gray-300 mb-12">{formatDate(selectedEvent.start_time)}</p>
 
-          <div className={`flex items-center justify-center gap-20 mb-12 ${!userPhoto ? 'flex-col gap-10' : ''}`}>
+          <div className={`flex items-center justify-center gap-24 mb-12 ${!userPhoto ? 'flex-col gap-12' : ''}`}>
             {userPhoto && (
               <div className="w-80 h-80 rounded-full overflow-hidden border-12 border-white shadow-2xl">
                 <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" crossOrigin="anonymous" />
               </div>
             )}
-            <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-7xl' : 'text-9xl'}`}>
+            <h1 className={`font-black text-white drop-shadow-2xl leading-tight ${userPhoto ? 'text-8xl' : 'text-10xl'}`}>
               {participant.first_name}<br />{participant.last_name}
             </h1>
           </div>
 
-          <div className="mb-12">
-            <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
-            <p className="text-10xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
+          <div className="mb-16">
+            <p className="text-5xl text-gray-400 uppercase tracking-widest mb-6">Finish Time</p>
+            <p className="text-12xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
               {formatChronoTime(participant.chip_time)}
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-16 text-white w-full max-w-5xl mb-16">
-            <div><p className="text-3xl text-gray-400 uppercase mb-3">Overall</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p></div>
-            <div><p className="text-3xl text-gray-400 uppercase mb-3">Gender</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p></div>
-            <div><p className="text-3xl text-gray-400 uppercase mb-3">Division</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p></div>
+          <div className="grid grid-cols-3 gap-20 text-white w-full max-w-6xl mb-20">
+            <div><p className="text-4xl text-gray-400 uppercase mb-4">Overall</p><p className="text-9xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-3xl text-gray-400 mt-4">of {overallTotal}</p></div>
+            <div><p className="text-4xl text-gray-400 uppercase mb-4">Gender</p><p className="text-9xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-3xl text-gray-400 mt-4">of {genderTotal}</p></div>
+            <div><p className="text-4xl text-gray-400 uppercase mb-4">Division</p><p className="text-9xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-3xl text-gray-400 mt-4">of {divisionTotal}</p></div>
           </div>
 
-          <p className="text-4xl text-white italic mt-auto">
+          <p className="text-5xl text-white italic mt-auto">
             www.geminitiming.com
           </p>
         </div>
       </div>
 
-      {/* Preview Modal — Your beautiful small version */}
+      {/* Modal Preview — Updated to Match (No Logo Header) */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl font-light hover:bg-gray-100 transition">
@@ -200,59 +169,51 @@ export default function ResultCardPreviewModal({
             <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300 w-96 h-96">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl z-10"></div>
 
-              <div className="absolute inset-0 pt-10 px-4 pb-4 overflow-y-auto">
+              <div className="absolute inset-0 pt-12 px-4 pb-4 overflow-y-auto">
                 <div className="flex flex-col items-center space-y-4">
-                  <div className="bg-white rounded-2xl shadow-lg p-3">
-                    {masterLogo ? (
-                      <img src={masterLogo} alt="Series Logo" className="w-16 h-16 object-contain" />
-                    ) : bibLogo ? (
-                      <img src={bibLogo} alt="Event Logo" className="w-16 h-16 object-contain" />
-                    ) : (
-                      <p className="text-xs font-bold text-brand-dark text-center">{selectedEvent.name}</p>
-                    )}
-                  </div>
+                  {/* No logo container in preview either */}
 
-                  <p className="text-xl font-black text-accent">{raceDisplayName}</p>
-                  <p className="text-base font-semibold text-white">{selectedEvent.name}</p>
-                  <p className="text-xs text-gray-300">{formatDate(selectedEvent.start_time)}</p>
+                  <p className="text-2xl font-black text-accent">{raceDisplayName}</p>
+                  <p className="text-lg font-semibold text-white">{selectedEvent.name}</p>
+                  <p className="text-sm text-gray-300">{formatDate(selectedEvent.start_time)}</p>
 
-                  <div className={`flex items-center gap-5 ${!userPhoto ? 'flex-col gap-4' : ''}`}>
+                  <div className={`flex items-center gap-6 ${!userPhoto ? 'flex-col gap-5' : ''}`}>
                     {userPhoto && (
-                      <div className="w-24 h-24 rounded-full overflow-hidden border-6 border-white shadow-xl">
+                      <div className="w-28 h-28 rounded-full overflow-hidden border-8 border-white shadow-xl">
                         <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
                       </div>
                     )}
-                    <h1 className={`font-black text-white drop-shadow-lg text-center leading-tight ${userPhoto ? 'text-3xl' : 'text-4xl'}`}>
+                    <h1 className={`font-black text-white drop-shadow-lg text-center leading-tight ${userPhoto ? 'text-4xl' : 'text-5xl'}`}>
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
                   </div>
 
-                  <div className="text-center my-4">
-                    <p className="text-sm text-gray-400 uppercase tracking-wider mb-2">Finish Time</p>
-                    <p className="text-5xl font-black text-[#FFD700] drop-shadow-xl leading-none">
+                  <div className="text-center my-5">
+                    <p className="text-base text-gray-400 uppercase tracking-wider mb-3">Finish Time</p>
+                    <p className="text-6xl font-black text-[#FFD700] drop-shadow-xl leading-none">
                       {formatChronoTime(participant.chip_time)}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 text-center text-xs w-full">
+                  <div className="grid grid-cols-3 gap-5 text-center text-sm w-full">
                     <div>
                       <p className="text-gray-400 uppercase mb-1">Overall</p>
-                      <p className="text-2xl font-bold text-[#FFD700]">{participant.place || '—'}</p>
+                      <p className="text-3xl font-bold text-[#FFD700]">{participant.place || '—'}</p>
                       <p className="text-gray-400">of {overallTotal}</p>
                     </div>
                     <div>
                       <p className="text-gray-400 uppercase mb-1">Gender</p>
-                      <p className="text-2xl font-bold text-[#FFD700]">{participant.gender_place || '—'}</p>
+                      <p className="text-3xl font-bold text-[#FFD700]">{participant.gender_place || '—'}</p>
                       <p className="text-gray-400">of {genderTotal}</p>
                     </div>
                     <div>
                       <p className="text-gray-400 uppercase mb-1">Division</p>
-                      <p className="text-2xl font-bold text-[#FFD700]">{participant.age_group_place || '—'}</p>
+                      <p className="text-3xl font-bold text-[#FFD700]">{participant.age_group_place || '—'}</p>
                       <p className="text-gray-400">of {divisionTotal}</p>
                     </div>
                   </div>
 
-                  <p className="text-sm text-white italic mt-auto pt-4">
+                  <p className="text-base text-white italic mt-auto pt-4">
                     www.geminitiming.com
                   </p>
                 </div>
@@ -260,7 +221,7 @@ export default function ResultCardPreviewModal({
             </div>
           </div>
 
-          {/* Photo Upload & Buttons — unchanged */}
+          {/* Photo Upload Section */}
           <div className="mb-12 text-center">
             <p className="text-3xl font-bold mb-8">📸 Add Your Finish Line Photo!</p>
             <div className="flex justify-center gap-8 mb-8">
@@ -281,6 +242,7 @@ export default function ResultCardPreviewModal({
             )}
           </div>
 
+          {/* Action Buttons */}
           <div className="flex justify-center gap-8 mb-12">
             <button onClick={generateResultCard} className="px-12 py-6 bg-primary text-white font-bold text-2xl rounded-full hover:bg-primary/90 transition shadow-2xl">
               {isMobileDevice ? 'Save to Photos' : 'Download Image'}
@@ -290,6 +252,7 @@ export default function ResultCardPreviewModal({
             </button>
           </div>
 
+          {/* Social Share */}
           <div className="text-center">
             <p className="text-2xl font-bold text-brand-dark mb-6">Or Share Directly</p>
             <div className="flex justify-center gap-6 flex-wrap">
