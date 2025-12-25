@@ -12,45 +12,43 @@ export function DirectorProvider({ children }) {
 
   const navigate = useNavigate();
 
+  // Critical: Listen to Supabase auth state changes
   useEffect(() => {
-    // Get initial session
+    // Get the current session on mount (including after refresh)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setCurrentUser(session?.user ?? null);
     });
 
-    // Listen for auth changes (critical for refresh/logout)
+    // Listen for all auth events (login, logout, token refresh, page load)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-        setCurrentUser(session?.user ?? null);
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user ?? null);
+
+      // If signed out, redirect to login
+      if (!session) {
         setAssignedEvents([]);
         setSelectedEventId(null);
         navigate('/director-login', { replace: true });
       }
     });
 
+    // Cleanup subscription on unmount
     return () => {
       subscription.unsubscribe();
     };
   }, [navigate]);
 
-  return (
-    <DirectorContext.Provider
-      value={{
-        currentUser,
-        setCurrentUser,
-        assignedEvents,
-        setAssignedEvents,
-        selectedEventId,
-        setSelectedEventId,
-      }}
-    >
-      {children}
-    </DirectorContext.Provider>
-  );
+  const value = {
+    currentUser,
+    setCurrentUser,
+    assignedEvents,
+    setAssignedEvents,
+    selectedEventId,
+    setSelectedEventId,
+  };
+
+  return <DirectorContext.Provider value={value}>{children}</DirectorContext.Provider>;
 }
 
 export const useDirector = () => {
