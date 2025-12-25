@@ -14,7 +14,6 @@ export default function LiveTrackingPage() {
   const [error, setError] = useState('');
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  // If no user (including after refresh), show authenticating state
   if (!currentUser) {
     return (
       <DirectorLayout>
@@ -25,7 +24,6 @@ export default function LiveTrackingPage() {
     );
   }
 
-  // If no event selected, redirect to hub
   if (!selectedEventId) {
     navigate('/race-directors-hub');
     return null;
@@ -48,13 +46,13 @@ export default function LiveTrackingPage() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 60000); // Refresh every 60 seconds
+    const interval = setInterval(loadData, 60000); // Every minute
     return () => clearInterval(interval);
   }, [selectedEventId]);
 
   return (
     <DirectorLayout>
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-text-dark">Live Athlete Tracking</h1>
           <button
@@ -68,60 +66,90 @@ export default function LiveTrackingPage() {
         {loading && !trackingData && (
           <p className="text-center text-xl text-text-muted">Loading live data...</p>
         )}
-
         {error && <p className="text-red-600 text-center mb-6">{error}</p>}
 
         {trackingData && (
           <>
-            <p className="text-right text-text-muted mb-6">
+            <p className="text-right text-text-muted mb-8">
               Last updated: {lastRefresh?.toLocaleTimeString()}
             </p>
 
-            {/* Main Counters */}
+            {/* === OVERALL EVENT STATS === */}
+            <h2 className="text-3xl font-bold text-text-dark mb-8">Overall Event Progress</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
               <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-                <p className="text-5xl font-black text-accent">{trackingData.started}</p>
+                <p className="text-5xl font-black text-accent">{trackingData.overall.started}</p>
                 <p className="text-xl text-text-muted mt-2">Started</p>
               </div>
               <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-                <p className="text-5xl font-black text-green-600">{trackingData.finished}</p>
+                <p className="text-5xl font-black text-green-600">{trackingData.overall.finished}</p>
                 <p className="text-xl text-text-muted mt-2">Finished</p>
               </div>
               <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-                <p className="text-5xl font-black text-orange-600">{trackingData.stillOnCourse}</p>
+                <p className="text-5xl font-black text-orange-600">{trackingData.overall.stillOnCourse}</p>
                 <p className="text-xl text-text-muted mt-2">Still on Course</p>
               </div>
               <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-                <p className="text-5xl font-black text-text-muted">{trackingData.yetToStart}</p>
+                <p className="text-5xl font-black text-text-muted">{trackingData.overall.yetToStart}</p>
                 <p className="text-xl text-text-muted mt-2">Yet to Start</p>
               </div>
             </div>
 
-            {/* Split Progress */}
-            <h2 className="text-3xl font-bold text-text-dark mb-6">Split Progress</h2>
-            <div className="space-y-6">
-              {trackingData.splitProgress.map((split) => (
-                <div key={split.name} className="bg-white rounded-xl shadow-lg p-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-xl font-semibold">{split.name}</h3>
-                    <span className="text-lg text-text-muted">
-                      {split.passed} / {trackingData.totalParticipants} ({Math.round(split.percentage)}%)
-                    </span>
+            {/* === PER-RACE BREAKDOWN === */}
+            <h2 className="text-3xl font-bold text-text-dark mb-8">Progress by Race</h2>
+            <div className="space-y-12">
+              {trackingData.races.map((race) => (
+                <div key={race.raceId} className="bg-white rounded-2xl shadow-xl p-8">
+                  <h3 className="text-2xl font-bold text-primary mb-6">{race.raceName}</h3>
+                  
+                  {/* Race Counters */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div className="text-center">
+                      <p className="text-3xl font-bold text-accent">{race.started}</p>
+                      <p className="text-text-muted">Started</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-3xl font-bold text-green-600">{race.finished}</p>
+                      <p className="text-text-muted">Finished</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-3xl font-bold text-orange-600">{race.stillOnCourse}</p>
+                      <p className="text-text-muted">On Course</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-3xl font-bold text-text-muted">{race.total - race.started}</p>
+                      <p className="text-text-muted">Yet to Start</p>
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-8">
-                    <div
-                      className="bg-primary h-8 rounded-full transition-all duration-1000"
-                      style={{ width: `${split.percentage}%` }}
-                    />
+
+                  {/* Race-Specific Splits */}
+                  <div className="space-y-6">
+                    {race.splitProgress.map((split) => (
+                      <div key={split.name}>
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-lg font-semibold">{split.name}</h4>
+                          <span className="text-text-muted">
+                            {split.passed} / {race.total} ({Math.round(split.percentage)}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-8">
+                          <div
+                            className="bg-primary h-8 rounded-full transition-all duration-1000"
+                            style={{ width: `${split.percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
 
-            {trackingData.stillOnCourse < 50 && trackingData.stillOnCourse > 0 && (
+            {/* Final Push Alert */}
+            {trackingData.overall.stillOnCourse < 50 && trackingData.overall.stillOnCourse > 0 && (
               <div className="mt-12 bg-yellow-100 border-2 border-yellow-400 rounded-2xl p-8 text-center">
                 <p className="text-3xl font-bold text-yellow-800">
-                  Only {trackingData.stillOnCourse} runners left on course!
+                  Only {trackingData.overall.stillOnCourse} runners left across all races!
                 </p>
               </div>
             )}

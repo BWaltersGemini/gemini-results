@@ -1,16 +1,11 @@
 // src/api/director/rd_chronotrackapi.js
-// Enhanced version for Race Directors — gets raw timestamps for live tracking
-
 import axios from 'axios';
-import { supabase } from '../../supabaseClient';
 
 const PROXY_BASE = '/chrono-api';
-const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
 
 let accessToken = null;
 let tokenExpiration = 0;
 
-// Reuse same token logic as public API
 const fetchAccessToken = async () => {
   try {
     const clientId = import.meta.env.VITE_CHRONOTRACK_CLIENT_ID;
@@ -46,22 +41,12 @@ const getAuthHeader = async () => {
   return `Bearer ${accessToken}`;
 };
 
-// Fetch raw entry results (includes begin_chip_time, end_chip_time, etc.)
-const fetchEntryResults = async (entryId) => {
-  const authHeader = await getAuthHeader();
-  const response = await axios.get(`${PROXY_BASE}/api/entry/${entryId}/results`, {
-    headers: { Authorization: authHeader },
-    params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
-    timeout: 15000,
-  });
-  return response.data.entry_results?.[0] || null;
-};
-
-// Enhanced results fetch for live tracking
+/**
+ * Enhanced live tracking with per-race breakdown
+ */
 export const fetchLiveTrackingData = async (eventId) => {
   const authHeader = await getAuthHeader();
 
-  // 1. Get all interval results (includes splits and full course)
   let rawResults = [];
   let page = 1;
   const pageSize = 500;
@@ -77,101 +62,123 @@ export const fetchLiveTrackingData = async (eventId) => {
           size: pageSize,
           interval: 'ALL',
         },
+        timeout: 20000,
       });
+
       const results = res.data.event_results || [];
       if (results.length === 0) break;
       rawResults.push(...results);
       if (results.length < pageSize) break;
       page++;
     }
+    console.log(`[RD Live] Fetched ${rawResults.length} interval results`);
   } catch (err) {
-    console.error('[RD] Failed to fetch interval results:', err);
-    throw err;
+    console.error('[RD Live] Failed to fetch results:', err);
+    throw new Error('Failed to load live tracking data');
   }
 
-  // Group by entry_id and collect timestamps
-  const participants = new Map(); // entry_id → data
-  const entryIdsNeedingRaw = [];
+  // Group by entry_id AND race_id for accurate per-race stats
+  const participantsByEntry = new Map(); // entry_id → participant state
+  const races = new Map(); // race_id → { name, total, started, finished, onCourse, splits: Map<name, count> }
 
   rawResults.forEach((row) => {
     const entryId = row.results_entry_id;
-    if (!entryId) return;
+    const raceId = row.results_race_id || 'unknown';
+    const raceName = row.results_race_name || `Race ${raceId}`;
+    const isFullInterval = row.results_interval_full === '1';
+    const hasStart = !!row.results_begin_chip_time;
+    const hasFinish = isFullInterval && !!row.results_end_chip_time;
 
-    if (!participants.has(entryId)) {
-      participants.set(entryId, {
-        entryId,
-        hasStarted: false,
-        hasFinished: false,
-        splitsPassed: new Set(),
-        lastSplitTime: null,
+    // Initialize race if new
+    if (!races.has(raceId)) {
+      races.set(raceId, {
+        raceId,
+        raceName,
+        total: 0,
+        started: 0,
+        finished: 0,
+        stillOnCourse: 0,
+        splits: new Map(),
       });
     }
+    const race = races.get(raceId);
 
-    const p = participants.get(entryId);
-
-    if (row.results_interval_full === '1') {
-      p.hasFinished = true;
-      p.finishTime = row.results_end_chip_time || row.results_time;
+    // Initialize participant if new
+    if (!participantsByEntry.has(entryId)) {
+      participantsByEntry.set(entryId, {
+        raceId,
+        hasStarted: false,
+        hasFinished: false,
+      });
+      race.total++;
     }
 
-    if (row.results_begin_chip_time) {
-      p.hasStarted = true;
-      p.startTime = row.results_begin_chip_time;
+    const participant = participantsByEntry.get(entryId);
+
+    // Update participant status
+    if (hasStart && !participant.hasStarted) {
+      participant.hasStarted = true;
+      race.started++;
+      race.stillOnCourse++; // will decrement if finished later
     }
 
+    if (hasFinish && !participant.hasFinished) {
+      participant.hasFinished = true;
+      race.finished++;
+      race.stillOnCourse--; // correct on-course count
+    }
+
+    // Track split passage
     if (row.results_interval_name && row.results_end_chip_time) {
-      p.splitsPassed.add(row.results_interval_name);
-      p.lastSplitTime = row.results_end_chip_time;
-    }
-
-    // Collect for raw fetch if needed (fallback or extra precision)
-    if (row.results_interval_full === '1' && !p.rawFetched) {
-      entryIdsNeedingRaw.push(entryId);
-      p.rawFetched = true;
+      const splitName = row.results_interval_name;
+      race.splits.set(splitName, (race.splits.get(splitName) || 0) + 1);
     }
   });
 
-  // Optional: Batch fetch raw entry results for precise timestamps (uncomment when needed)
-  // for (const entryId of entryIdsNeedingRaw.slice(0, 50)) { // limit for speed
-  //   const raw = await fetchEntryResults(entryId);
-  //   if (raw) {
-  //     const p = participants.get(entryId);
-  //     p.startTime = raw.results_begin_chip_time || p.startTime;
-  //     p.finishTime = raw.results_end_chip_time || p.finishTime;
-  //   }
-  // }
+  // Build final race objects with split progress
+  const raceList = Array.from(races.values()).map((race) => {
+    const total = race.total;
+    const splitProgress = Array.from(race.splits.entries())
+      .map(([name, passed]) => ({
+        name,
+        passed,
+        percentage: total ? Math.round((passed / total) * 100) : 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)); // or custom order later
 
-  // Compute counts
-  let started = 0;
-  let finished = 0;
-  let onCourse = 0;
+    return {
+      raceId: race.raceId,
+      raceName: race.raceName,
+      total,
+      started: race.started,
+      finished: race.finished,
+      stillOnCourse: race.stillOnCourse,
+      yetToStart: total - race.started,
+      splitProgress,
+    };
+  });
 
-  const splitCounts = {};
-
-  for (const p of participants.values()) {
-    if (p.hasStarted) started++;
-    if (p.hasFinished) finished++;
-    if (p.hasStarted && !p.hasFinished) onCourse++;
-
-    p.splitsPassed.forEach((splitName) => {
-      splitCounts[splitName] = (splitCounts[splitName] || 0) + 1;
-    });
-  }
-
-  // Get split names sorted (you can customize order later)
-  const sortedSplits = Object.keys(splitCounts).sort();
+  // Overall totals
+  const overall = raceList.reduce(
+    (acc, race) => ({
+      totalParticipants: acc.totalParticipants + race.total,
+      started: acc.started + race.started,
+      finished: acc.finished + race.finished,
+      stillOnCourse: acc.stillOnCourse + race.stillOnCourse,
+      yetToStart: acc.yetToStart + race.yetToStart,
+    }),
+    {
+      totalParticipants: 0,
+      started: 0,
+      finished: 0,
+      stillOnCourse: 0,
+      yetToStart: 0,
+    }
+  );
 
   return {
-    totalParticipants: participants.size,
-    started,
-    finished,
-    stillOnCourse: onCourse,
-    yetToStart: participants.size - started,
-    splitProgress: sortedSplits.map((name) => ({
-      name,
-      passed: splitCounts[name],
-      percentage: participants.size ? (splitCounts[name] / participants.size) * 100 : 0,
-    })),
+    overall,
+    races: raceList.sort((a, b) => a.raceName.localeCompare(b.raceName)),
     lastUpdated: new Date().toISOString(),
   };
 };
