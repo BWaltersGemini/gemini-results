@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL PERFECT VERSION — Everything Fits Beautifully!
+// FINAL VERSION — No QR, Bigger Time, Gemini Footer + Event Name
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -12,7 +12,6 @@ export default function ResultCardPreviewModal({
   masterLogo,
   bibLogo,
   raceDisplayName,
-  participantResultsUrl,
   results,
   userPhoto,
   triggerCamera,
@@ -72,7 +71,7 @@ export default function ResultCardPreviewModal({
           await navigator.share({
             files: [file],
             title: 'My Race Result!',
-            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏁\n\nFull results: ${participantResultsUrl}`,
+            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`,
           });
         } else {
           generateResultCard();
@@ -84,13 +83,12 @@ export default function ResultCardPreviewModal({
   };
 
   const shareOnFacebook = () => {
-    const url = encodeURIComponent(participantResultsUrl);
     const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`, '_blank');
+    window.open(`https://www.facebook.com/sharer/sharer.php?quote=${text}`, '_blank');
   };
 
   const shareOnX = () => {
-    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! Overall: ${participant.place}, Gender: ${participant.gender_place}, Division: ${participant.age_group_place} 🏁\n\n${participantResultsUrl}`);
+    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
     window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
   };
 
@@ -102,10 +100,13 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden Full-Size Card (unchanged - for high-res download) */}
+      {/* Hidden Full-Size 1080x1080 Card for Download/Share */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
-        <div ref={cardRef} className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16 overflow-hidden">
-          {/* Full-size content exactly as before */}
+        <div
+          ref={cardRef}
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16 overflow-hidden"
+          style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
+        >
           <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 mb-8">
             {masterLogo ? (
               <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-32 object-contain mx-auto" crossOrigin="anonymous" />
@@ -115,8 +116,11 @@ export default function ResultCardPreviewModal({
               <h2 className="text-5xl font-black text-brand-dark">{selectedEvent.name}</h2>
             )}
           </div>
+
           <p className="text-4xl font-black text-accent mb-3">{raceDisplayName}</p>
-          <p className="text-3xl text-gray-300 mb-10">{formatDate(selectedEvent.start_time)}</p>
+          <p className="text-3xl text-gray-300 mb-4">{selectedEvent.name}</p>
+          <p className="text-2xl text-gray-400 mb-10">{formatDate(selectedEvent.start_time)}</p>
+
           <div className={`flex items-center justify-center gap-20 mb-12 ${!userPhoto ? 'flex-col gap-10' : ''}`}>
             {userPhoto && (
               <div className="w-80 h-80 rounded-full overflow-hidden border-12 border-white shadow-2xl">
@@ -127,26 +131,27 @@ export default function ResultCardPreviewModal({
               {participant.first_name}<br />{participant.last_name}
             </h1>
           </div>
-          <div className="mb-12">
-            <p className="text-4xl text-gray-400 uppercase tracking-widest mb-4">Finish Time</p>
+
+          <div className="mb-16">
+            <p className="text-4xl text-gray-400 uppercase tracking-widest mb-6">Finish Time</p>
             <p className="text-10xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
               {formatChronoTime(participant.chip_time)}
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-16 text-white w-full max-w-5xl mb-16">
+
+          <div className="grid grid-cols-3 gap-16 text-white w-full max-w-5xl mb-20">
             <div><p className="text-3xl text-gray-400 uppercase mb-3">Overall</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p></div>
             <div><p className="text-3xl text-gray-400 uppercase mb-3">Gender</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p></div>
             <div><p className="text-3xl text-gray-400 uppercase mb-3">Division</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p></div>
           </div>
-          <div className="absolute bottom-28 right-12">
-            <p className="text-white text-2xl font-bold mb-4 text-right">View Full Results</p>
-            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(participantResultsUrl)}&margin=10&color=263238&bgcolor=FFFFFF`} alt="QR Code" className="w-52 h-52 border-8 border-white rounded-3xl shadow-2xl" crossOrigin="anonymous" />
-          </div>
-          <p className="text-4xl text-white italic mt-auto">Find your next race at www.youkeepmoving.com</p>
+
+          <p className="text-4xl text-white italic mt-auto">
+            www.geminitiming.com
+          </p>
         </div>
       </div>
 
-      {/* Modal — Perfect Fit Preview */}
+      {/* Modal — Clean, Prominent Time, Gemini Footer */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl font-light hover:bg-gray-100 transition">
@@ -157,14 +162,12 @@ export default function ResultCardPreviewModal({
 
           <div className="flex justify-center mb-12">
             <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300 w-96 h-96">
-              {/* Notch */}
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl z-10"></div>
 
-              {/* Scrollable Preview Card - Ensures Everything Fits */}
               <div className="absolute inset-0 pt-10 px-4 pb-4 overflow-y-auto">
-                <div className="flex flex-col items-center space-y-3">
+                <div className="flex flex-col items-center space-y-4">
                   {/* Logo */}
-                  <div className="bg-white rounded-2xl shadow-lg p-3 mb-2">
+                  <div className="bg-white rounded-2xl shadow-lg p-3">
                     {masterLogo ? (
                       <img src={masterLogo} alt="Series Logo" className="w-16 h-16 object-contain" />
                     ) : bibLogo ? (
@@ -174,61 +177,58 @@ export default function ResultCardPreviewModal({
                     )}
                   </div>
 
-                  {/* Race & Date */}
-                  <p className="text-lg font-black text-accent">{raceDisplayName}</p>
+                  {/* Race Name */}
+                  <p className="text-xl font-black text-accent">{raceDisplayName}</p>
+                  
+                  {/* Event Name */}
+                  <p className="text-base font-semibold text-white">{selectedEvent.name}</p>
+
+                  {/* Date */}
                   <p className="text-xs text-gray-300">{formatDate(selectedEvent.start_time)}</p>
 
                   {/* Photo + Name */}
-                  <div className={`flex items-center gap-4 ${!userPhoto ? 'flex-col' : ''}`}>
+                  <div className={`flex items-center gap-5 ${!userPhoto ? 'flex-col gap-4' : ''}`}>
                     {userPhoto && (
-                      <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-white shadow-lg">
+                      <div className="w-24 h-24 rounded-full overflow-hidden border-6 border-white shadow-xl">
                         <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
                       </div>
                     )}
-                    <h1 className={`font-black text-white drop-shadow-md text-center leading-tight ${userPhoto ? 'text-2xl' : 'text-3xl'}`}>
+                    <h1 className={`font-black text-white drop-shadow-lg text-center leading-tight ${userPhoto ? 'text-3xl' : 'text-4xl'}`}>
                       {participant.first_name}<br />{participant.last_name}
                     </h1>
                   </div>
 
-                  {/* Finish Time */}
-                  <div className="text-center my-2">
-                    <p className="text-xs text-gray-400 uppercase tracking-wider">Finish Time</p>
-                    <p className="text-3xl font-black text-[#FFD700] drop-shadow-md leading-none">
+                  {/* BIG Finish Time */}
+                  <div className="text-center my-4">
+                    <p className="text-sm text-gray-400 uppercase tracking-wider mb-2">Finish Time</p>
+                    <p className="text-5xl font-black text-[#FFD700] drop-shadow-xl leading-none">
                       {formatChronoTime(participant.chip_time)}
                     </p>
                   </div>
 
                   {/* Stats */}
-                  <div className="grid grid-cols-3 gap-3 text-center text-xs w-full">
+                  <div className="grid grid-cols-3 gap-4 text-center text-xs w-full">
                     <div>
-                      <p className="text-gray-400 uppercase">Overall</p>
-                      <p className="text-xl font-bold text-[#FFD700]">{participant.place || '—'}</p>
+                      <p className="text-gray-400 uppercase mb-1">Overall</p>
+                      <p className="text-2xl font-bold text-[#FFD700]">{participant.place || '—'}</p>
                       <p className="text-gray-400">of {overallTotal}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 uppercase">Gender</p>
-                      <p className="text-xl font-bold text-[#FFD700]">{participant.gender_place || '—'}</p>
+                      <p className="text-gray-400 uppercase mb-1">Gender</p>
+                      <p className="text-2xl font-bold text-[#FFD700]">{participant.gender_place || '—'}</p>
                       <p className="text-gray-400">of {genderTotal}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 uppercase">Division</p>
-                      <p className="text-xl font-bold text-[#FFD700]">{participant.age_group_place || '—'}</p>
+                      <p className="text-gray-400 uppercase mb-1">Division</p>
+                      <p className="text-2xl font-bold text-[#FFD700]">{participant.age_group_place || '—'}</p>
                       <p className="text-gray-400">of {divisionTotal}</p>
                     </div>
                   </div>
 
-                  {/* QR Code */}
-                  <div className="mt-3 flex flex-col items-end w-full">
-                    <p className="text-white text-xs font-bold mb-1">View Full Results</p>
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(participantResultsUrl)}&margin=5&color=263238&bgcolor=FFFFFF`}
-                      alt="QR Code"
-                      className="w-20 h-20 border-4 border-white rounded-xl shadow-xl"
-                    />
-                  </div>
-
                   {/* Footer */}
-                  <p className="text-xs text-white italic mt-3">www.youkeepmoving.com</p>
+                  <p className="text-sm text-white italic mt-auto pt-4">
+                    www.geminitiming.com
+                  </p>
                 </div>
               </div>
             </div>
