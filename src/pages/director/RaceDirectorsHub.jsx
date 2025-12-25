@@ -10,7 +10,6 @@ export default function RaceDirectorsHub() {
   const navigate = useNavigate();
   const {
     currentUser,
-    setCurrentUser,
     assignedEvents,
     setAssignedEvents,
     selectedEventId,
@@ -21,42 +20,19 @@ export default function RaceDirectorsHub() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Check auth + load profile
+  // Load assigned events + ChronoTrack events
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/director-login');
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profileError || profile?.role !== 'director') {
-        await supabase.auth.signOut();
-        navigate('/director-login');
-        return;
-      }
-
-      setCurrentUser({ ...session.user, profile });
-    };
-
-    checkAuth();
-  }, [navigate, setCurrentUser]);
-
-  // Load assigned events + all ChronoTrack events for display
-  useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      // Wait for auth listener to restore user — do NOT redirect here
+      return;
+    }
 
     const loadData = async () => {
       setLoading(true);
       setError('');
 
       try {
+        // Fetch assigned event IDs
         const { data: assignments, error: assignError } = await supabase
           .from('director_event_assignments')
           .select('event_id')
@@ -64,7 +40,7 @@ export default function RaceDirectorsHub() {
 
         if (assignError) throw assignError;
 
-        const assignedIds = assignments?.map(a => a.event_id) || [];
+        const assignedIds = assignments?.map((a) => a.event_id) || [];
 
         if (assignedIds.length === 0) {
           setAssignedEvents([]);
@@ -75,18 +51,21 @@ export default function RaceDirectorsHub() {
 
         setAssignedEvents(assignedIds);
 
+        // Fetch full event details from ChronoTrack
         const events = await fetchEvents();
-        const filtered = events.filter(e => assignedIds.includes(e.id));
+        const filtered = events.filter((e) => assignedIds.includes(e.id));
 
+        // Sort by most recent first
         const sorted = filtered.sort((a, b) => (b.start_time || 0) - (a.start_time || 0));
 
         setAllEvents(sorted);
 
+        // Auto-select the most recent event if none selected
         if (!selectedEventId && sorted.length > 0) {
           setSelectedEventId(sorted[0].id);
         }
       } catch (err) {
-        console.error(err);
+        console.error('[RaceDirectorsHub] Error loading events:', err);
         setError('Failed to load your events. Please try again.');
       } finally {
         setLoading(false);
@@ -96,7 +75,7 @@ export default function RaceDirectorsHub() {
     loadData();
   }, [currentUser, selectedEventId, setSelectedEventId, setAssignedEvents]);
 
-  const selectedEvent = allEvents.find(e => e.id === selectedEventId);
+  const selectedEvent = allEvents.find((e) => e.id === selectedEventId);
 
   const formatDate = (epoch) => {
     if (!epoch) return 'Date TBD';
@@ -107,12 +86,22 @@ export default function RaceDirectorsHub() {
     });
   };
 
-  // Loading state — now correctly wrapped
+  // Show loading until currentUser is confirmed
+  if (!currentUser) {
+    return (
+      <DirectorLayout>
+        <div className="flex items-center justify-center min-h-[70vh]">
+          <p className="text-2xl text-text-muted">Authenticating...</p>
+        </div>
+      </DirectorLayout>
+    );
+  }
+
   if (loading) {
     return (
       <DirectorLayout>
         <div className="flex items-center justify-center min-h-[70vh]">
-          <p className="text-2xl text-gray-600">Loading your dashboard...</p>
+          <p className="text-2xl text-text-muted">Loading your dashboard...</p>
         </div>
       </DirectorLayout>
     );
@@ -126,13 +115,13 @@ export default function RaceDirectorsHub() {
         {/* Event Selector */}
         {allEvents.length > 0 ? (
           <div className="mb-12">
-            <label className="text-xl font-semibold text-gemini-dark-gray mb-4 block">
+            <label className="text-xl font-semibold text-text-dark mb-4 block">
               Select Event
             </label>
             <select
               value={selectedEventId || ''}
               onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full md:w-96 p-4 border border-gray-300 rounded-xl text-lg focus:outline-none focus:ring-4 focus:ring-gemini-blue/30"
+              className="w-full md:w-96 p-4 border border-gray-300 rounded-xl text-lg focus:outline-none focus:ring-4 focus:ring-accent/30"
             >
               {allEvents.map((event) => (
                 <option key={event.id} value={event.id}>
@@ -146,7 +135,7 @@ export default function RaceDirectorsHub() {
             <p className="text-xl text-yellow-800">
               No events assigned to your account yet.
             </p>
-            <p className="mt-4 text-gray-600">
+            <p className="mt-4 text-text-muted">
               Contact support to get your races linked.
             </p>
           </div>
@@ -157,13 +146,13 @@ export default function RaceDirectorsHub() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Live Tracking Card */}
             <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition">
-              <h2 className="text-2xl font-bold text-gemini-blue mb-4">Live Athlete Tracking</h2>
-              <p className="text-gray-600 mb-6">
+              <h2 className="text-2xl font-bold text-accent mb-4">Live Athlete Tracking</h2>
+              <p className="text-text-muted mb-6">
                 Monitor runners on course in real time: started, finished, between splits, and more.
               </p>
               <button
-                onClick={() => navigate(`/director-live-tracking/${selectedEventId}`)}
-                className="bg-gemini-blue text-white px-6 py-3 rounded-full font-bold hover:bg-gemini-blue/90 transition"
+                onClick={() => navigate('/director-live-tracking')}
+                className="bg-primary text-text-light px-6 py-3 rounded-full font-bold hover:bg-primary/90 transition"
               >
                 Open Live Dashboard →
               </button>
@@ -171,22 +160,25 @@ export default function RaceDirectorsHub() {
 
             {/* Awards Card */}
             <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition">
-              <h2 className="text-2xl font-bold text-gemini-blue mb-4">Awards Management</h2>
-              <p className="text-gray-600 mb-6">
+              <h2 className="text-2xl font-bold text-accent mb-4">Awards Management</h2>
+              <p className="text-text-muted mb-6">
                 Generate, customize, and distribute awards and certificates.
               </p>
-              <button className="bg-gemini-blue text-white px-6 py-3 rounded-full font-bold hover:bg-gemini-blue/90 transition opacity-50 cursor-not-allowed">
-                Coming Soon
+              <button
+                onClick={() => navigate('/director-awards')}
+                className="bg-primary text-text-light px-6 py-3 rounded-full font-bold hover:bg-primary/90 transition"
+              >
+                Open Awards →
               </button>
             </div>
 
             {/* Analytics Card */}
             <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition">
-              <h2 className="text-2xl font-bold text-gemini-blue mb-4">Year-over-Year Stats</h2>
-              <p className="text-gray-600 mb-6">
+              <h2 className="text-2xl font-bold text-accent mb-4">Year-over-Year Stats</h2>
+              <p className="text-text-muted mb-6">
                 Compare participation, finish rates, and performance across years.
               </p>
-              <button className="bg-gemini-blue text-white px-6 py-3 rounded-full font-bold hover:bg-gemini-blue/90 transition opacity-50 cursor-not-allowed">
+              <button className="bg-primary text-text-light px-6 py-3 rounded-full font-bold hover:bg-primary/90 transition opacity-50 cursor-not-allowed">
                 Coming Soon
               </button>
             </div>
