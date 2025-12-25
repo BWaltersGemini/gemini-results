@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL VERSION — Exact Layout as Requested, Perfect Match Between Preview & Download
+// FINAL VERSION — Much Larger Yellow Text (Chip Time & Rankings)
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -38,7 +38,6 @@ export default function ResultCardPreviewModal({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        logging: false,
         width: 1080,
         height: 1080,
         scrollX: -window.scrollX,
@@ -109,90 +108,95 @@ export default function ResultCardPreviewModal({
 
   if (!show) return null;
 
-  // Shared Card Component — Used for both preview and full-size download
+  // Shared Card Component — Larger Yellow Text
   const ResultCard = ({ isFullSize = false }) => {
-    const textSize = isFullSize ? {
+    const sizes = isFullSize ? {
       eventName: 'text-6xl',
-      raceName: 'text-5xl',
+      raceName: 'text-7xl',
       date: 'text-4xl',
-      athleteName: 'text-9xl',
+      athleteName: 'text-10xl',
       finishLabel: 'text-5xl',
-      finishTime: 'text-12xl',
+      finishTime: 'text-14xl', // MUCH LARGER
       rankLabel: 'text-4xl',
-      rankNumber: 'text-10xl',
-      rankOf: 'text-3xl',
+      rankNumber: 'text-12xl', // MUCH LARGER
+      rankOfLabel: 'text-3xl',
+      rankOfNumber: 'text-3xl',
       footer: 'text-5xl'
     } : {
       eventName: 'text-2xl',
-      raceName: 'text-xl',
+      raceName: 'text-3xl',
       date: 'text-base',
       athleteName: 'text-5xl',
       finishLabel: 'text-lg',
-      finishTime: 'text-6xl',
+      finishTime: 'text-7xl', // MUCH LARGER in preview
       rankLabel: 'text-base',
-      rankNumber: 'text-4xl',
-      rankOf: 'text-sm',
+      rankNumber: 'text-5xl', // MUCH LARGER in preview
+      rankOfLabel: 'text-sm',
+      rankOfNumber: 'text-sm',
       footer: 'text-base'
     };
 
     return (
-      <div className={`flex flex-col items-center justify-between h-full pt-12 pb-8 px-8 ${isFullSize ? 'space-y-12' : 'space-y-6'}`}>
+      <div className={`flex flex-col items-center justify-between h-full pt-${isFullSize ? '16' : '12'} pb-8 px-8`}>
         {/* Event Name */}
-        <p className={`font-bold text-white ${textSize.eventName}`}>{selectedEvent.name}</p>
+        <p className={`font-bold text-white ${sizes.eventName}`}>{selectedEvent.name}</p>
 
         {/* Race Name */}
-        <p className={`font-black text-accent ${textSize.raceName}`}>{raceDisplayName}</p>
+        <p className={`font-black text-accent ${sizes.raceName}`}>{raceDisplayName}</p>
 
-        {/* Race Date */}
-        <p className={`text-gray-300 ${textSize.date}`}>{formatDate(selectedEvent.start_time)}</p>
+        {/* Date */}
+        <p className={`text-gray-300 ${sizes.date}`}>{formatDate(selectedEvent.start_time)}</p>
 
         {/* Athlete Photo + Name */}
-        <div className={`flex items-center ${isFullSize ? 'gap-32' : 'gap-8'} ${!userPhoto ? 'flex-col gap-8' : ''}`}>
+        <div className={`flex items-center ${isFullSize ? 'gap-32 mb-16' : 'gap-8 mb-8'} ${!userPhoto ? 'flex-col gap-12' : ''}`}>
           {userPhoto && (
             <div className={`rounded-full overflow-hidden border-white shadow-2xl ${isFullSize ? 'w-96 h-96 border-20' : 'w-32 h-32 border-8'}`}>
               <img src={userPhoto} alt="Athlete" className="w-full h-full object-cover" crossOrigin="anonymous" />
             </div>
           )}
-          <h1 className={`font-black text-white drop-shadow-2xl text-center leading-tight ${textSize.athleteName}`}>
+          <h1 className={`font-black text-white drop-shadow-2xl text-center leading-tight ${sizes.athleteName}`}>
             {participant.first_name}<br />{participant.last_name}
           </h1>
         </div>
 
-        {/* Finish Time */}
+        {/* Finish Time — MUCH LARGER */}
         <div className="text-center">
-          <p className={`text-gray-400 uppercase tracking-widest ${textSize.finishLabel}`}>Finish Time</p>
-          <p className={`font-black text-[#FFD700] drop-shadow-2xl leading-none ${textSize.finishTime}`}>
+          <p className={`text-gray-400 uppercase tracking-widest ${sizes.finishLabel}`}>Finish Time</p>
+          <p className={`font-black text-[#FFD700] drop-shadow-2xl leading-none ${sizes.finishTime}`}>
             {formatChronoTime(participant.chip_time)}
           </p>
         </div>
 
-        {/* Rankings Row */}
-        <div className={`grid grid-cols-3 gap-${isFullSize ? '20' : '8'} text-center w-full`}>
+        {/* Rankings */}
+        <div className={`grid grid-cols-3 gap-${isFullSize ? '20' : '8'} text-center w-full mt-auto`}>
           <div>
-            <p className={`text-gray-400 uppercase ${textSize.rankLabel}`}>Overall</p>
-            <p className={`font-bold text-[#FFD700] leading-none ${textSize.rankNumber}`}>
+            <p className={`text-gray-400 uppercase ${sizes.rankLabel}`}>Overall</p>
+            <p className={`font-bold text-[#FFD700] leading-none ${sizes.rankNumber}`}>
               {participant.place || '—'}
             </p>
-            <p className={`text-gray-400 ${textSize.rankOf}`}>of {overallTotal}</p>
+            <p className={`text-gray-400 ${sizes.rankOfLabel}`}>of</p>
+            <p className={`text-gray-400 ${sizes.rankOfNumber}`}>{overallTotal}</p>
           </div>
           <div>
-            <p className={`text-gray-400 uppercase ${textSize.rankLabel}`}>Gender</p>
-            <p className={`font-bold text-[#FFD700] leading-none ${textSize.rankNumber}`}>
+            <p className={`text-gray-400 uppercase ${sizes.rankLabel}`}>Gender</p>
+            <p className={`font-bold text-[#FFD700] leading-none ${sizes.rankNumber}`}>
               {participant.gender_place || '—'}
             </p>
-            <p className={`text-gray-400 ${textSize.rankOf}`}>of {genderTotal}</p>
+            <p className={`text-gray-400 ${sizes.rankOfLabel}`}>of</p>
+            <p className={`text-gray-400 ${sizes.rankOfNumber}`}>{genderTotal}</p>
           </div>
           <div>
-            <p className={`text-gray-400 uppercase ${textSize.rankLabel}`}>Division</p>
-            <p className={`font-bold text-[#FFD700] leading-none ${textSize.rankNumber}`}>
+            <p className={`text-gray-400 uppercase ${sizes.rankLabel}`}>Division</p>
+            <p className={`font-bold text-[#FFD700] leading-none ${sizes.rankNumber}`}>
               {participant.age_group_place || '—'}
             </p>
-            <p className={`text-gray-400 ${textSize.rankOf}`}>of {divisionTotal}</p>
+            <p className={`text-gray-400 ${sizes.rankOfLabel}`}>of</p>
+            <p className={`text-gray-400 ${sizes.rankOfNumber}`}>{divisionTotal}</p>
           </div>
         </div>
 
         {/* Footer */}
-        <p className={`text-white italic ${textSize.footer}`}>
+        <p className={`text-white italic ${sizes.footer}`}>
           www.geminitiming.com
         </p>
       </div>
@@ -201,7 +205,7 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden Full-Size Card for Download */}
+      {/* Hidden Full-Size Card */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -211,7 +215,7 @@ export default function ResultCardPreviewModal({
         </div>
       </div>
 
-      {/* Modal with Preview */}
+      {/* Modal Preview */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl font-light hover:bg-gray-100 transition">
@@ -229,7 +233,7 @@ export default function ResultCardPreviewModal({
             </div>
           </div>
 
-          {/* Photo Upload */}
+          {/* Photo Upload Section */}
           <div className="mb-12 text-center">
             <p className="text-3xl font-bold mb-8">📸 Add Your Finish Line Photo!</p>
             <div className="flex justify-center gap-8 mb-8">
