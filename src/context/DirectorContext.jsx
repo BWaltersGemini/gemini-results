@@ -6,29 +6,23 @@ import { useNavigate } from 'react-router-dom';
 const DirectorContext = createContext();
 
 export function DirectorProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(undefined); // undefined = loading, null = logged out
   const [assignedEvents, setAssignedEvents] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState(null);
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    console.log('[DirectorContext] Starting auth setup...');
-
-    // Force get current session first
-    const restoreSession = async () => {
+    // Force session restore
+    const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('[DirectorContext] Restored session:', session ? `User ${session.user.id}` : 'No session');
-      if (session) {
-        setCurrentUser(session.user);
-      }
+      setCurrentUser(session?.user ?? null);
     };
 
-    restoreSession();
+    getInitialSession();
 
-    // Then listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[DirectorContext] Auth event:', event, 'User:', session?.user?.id || 'none');
+    // Listen for auth changes
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setCurrentUser(session?.user ?? null);
 
       if (event === 'SIGNED_OUT') {
@@ -39,8 +33,7 @@ export function DirectorProvider({ children }) {
     });
 
     return () => {
-      console.log('[DirectorContext] Cleaning up');
-      subscription.unsubscribe();
+      listener.subscription.unsubscribe();
     };
   }, [navigate]);
 
