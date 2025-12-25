@@ -13,21 +13,25 @@ export function DirectorProvider({ children }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    console.log('[DirectorContext] Setting up auth listener...');
+    console.log('[DirectorContext] Starting auth setup...');
 
-    // Do NOT call getSession() and redirect here
-    // Trust the onAuthStateChange to restore session
+    // Force get current session first
+    const restoreSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[DirectorContext] Restored session:', session ? `User ${session.user.id}` : 'No session');
+      if (session) {
+        setCurrentUser(session.user);
+      }
+    };
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    restoreSession();
+
+    // Then listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[DirectorContext] Auth event:', event, 'User:', session?.user?.id || 'none');
+      setCurrentUser(session?.user ?? null);
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-        setCurrentUser(session?.user ?? null);
-      } else if (event === 'SIGNED_OUT') {
-        console.log('[DirectorContext] Explicit sign out detected');
-        setCurrentUser(null);
+      if (event === 'SIGNED_OUT') {
         setAssignedEvents([]);
         setSelectedEventId(null);
         navigate('/director-login', { replace: true });
@@ -35,21 +39,25 @@ export function DirectorProvider({ children }) {
     });
 
     return () => {
-      console.log('[DirectorContext] Cleaning up auth listener');
+      console.log('[DirectorContext] Cleaning up');
       subscription.unsubscribe();
     };
   }, [navigate]);
 
-  const value = {
-    currentUser,
-    setCurrentUser,
-    assignedEvents,
-    setAssignedEvents,
-    selectedEventId,
-    setSelectedEventId,
-  };
-
-  return <DirectorContext.Provider value={value}>{children}</DirectorContext.Provider>;
+  return (
+    <DirectorContext.Provider
+      value={{
+        currentUser,
+        setCurrentUser,
+        assignedEvents,
+        setAssignedEvents,
+        selectedEventId,
+        setSelectedEventId,
+      }}
+    >
+      {children}
+    </DirectorContext.Provider>
+  );
 }
 
 export const useDirector = () => {
