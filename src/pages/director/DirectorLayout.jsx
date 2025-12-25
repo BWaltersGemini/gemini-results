@@ -1,5 +1,5 @@
 // src/pages/director/DirectorLayout.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDirector } from '../../context/DirectorContext';
 import { supabase } from '../../supabaseClient';
@@ -16,6 +16,50 @@ export default function DirectorLayout({ children }) {
   } = useDirector();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [eventOptions, setEventOptions] = useState([]); // { id, name }
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
+  // Fetch names for all assigned events
+  useEffect(() => {
+    if (assignedEvents.length === 0) {
+      setEventOptions([]);
+      setLoadingEvents(false);
+      return;
+    }
+
+    const fetchEventNames = async () => {
+      setLoadingEvents(true);
+      try {
+        const { data, error } = await supabase
+          .from('chronotrack_results')
+          .select('event_id, event_name')
+          .in('event_id', assignedEvents);
+
+        if (error) throw error;
+
+        // Create unique list with best available name
+        const uniqueMap = new Map();
+        data.forEach(row => {
+          if (!uniqueMap.has(row.event_id)) {
+            uniqueMap.set(row.event_id, row.event_name || `Event ${row.event_id}`);
+          }
+        });
+
+        const options = Array.from(uniqueMap, ([id, name]) => ({ id, name }));
+        setEventOptions(options.sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (err) {
+        console.error('Failed to fetch event names for dropdown:', err);
+        // Fallback to ID-only
+        setEventOptions(
+          assignedEvents.map(id => ({ id, name: `Event ${id}` }))
+        );
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+
+    fetchEventNames();
+  }, [assignedEvents]);
 
   const navItems = [
     { path: '/race-directors-hub', label: 'Dashboard', icon: '🏠' },
@@ -36,7 +80,6 @@ export default function DirectorLayout({ children }) {
 
   const isActive = (path) => location.pathname === path;
 
-  // Auth guard
   if (currentUser === null) {
     return (
       <div className="min-h-screen bg-bg-light flex items-center justify-center">
@@ -60,27 +103,29 @@ export default function DirectorLayout({ children }) {
             <p className="text-lg font-semibold truncate">{selectedEventName}</p>
           </div>
 
-          {/* Event Selector Dropdown */}
+          {/* Event Selector Dropdown - Desktop */}
           <div className="mt-6">
             <label className="text-sm opacity-80 block mb-2">Switch Event</label>
-            <select
-              value={selectedEventId || ''}
-              onChange={(e) => setSelectedEvent(e.target.value || null)}
-              className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={assignedEvents.length === 0}
-            >
-              <option value="">Select an event...</option>
-              {assignedEvents.length > 0 ? (
-                assignedEvents.map((eventId) => (
-                  <option key={eventId} value={eventId}>
-                    Event {eventId}
+            {loadingEvents ? (
+              <p className="text-sm text-gray-400">Loading events...</p>
+            ) : (
+              <select
+                value={selectedEventId || ''}
+                onChange={(e) => setSelectedEvent(e.target.value || null)}
+                className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={eventOptions.length === 0}
+              >
+                <option value="">
+                  {eventOptions.length === 0 ? 'No events assigned' : 'Select an event...'}
+                </option>
+                {eventOptions.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.name}
                   </option>
-                ))
-              ) : (
-                <option disabled>No events assigned</option>
-              )}
-            </select>
-            {assignedEvents.length === 0 && (
+                ))}
+              </select>
+            )}
+            {eventOptions.length === 0 && !loadingEvents && (
               <p className="text-xs text-gray-400 mt-2">Contact admin to assign events</p>
             )}
           </div>
@@ -123,7 +168,7 @@ export default function DirectorLayout({ children }) {
         </div>
       </aside>
 
-      {/* Mobile Header & Menu */}
+      {/* Mobile Version */}
       <div className="flex-1 flex flex-col">
         <header className="md:hidden bg-text-dark text-text-light p-4 flex justify-between items-center shadow-lg">
           <div>
@@ -169,25 +214,27 @@ export default function DirectorLayout({ children }) {
                 {/* Mobile Event Selector */}
                 <div className="mb-6">
                   <label className="text-sm opacity-80 block mb-2">Switch Event</label>
-                  <select
-                    value={selectedEventId || ''}
-                    onChange={(e) => {
-                      setSelectedEvent(e.target.value || null);
-                      setMobileMenuOpen(false);
-                    }}
-                    className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Select an event...</option>
-                    {assignedEvents.length > 0 ? (
-                      assignedEvents.map((eventId) => (
-                        <option key={eventId} value={eventId}>
-                          Event {eventId}
+                  {loadingEvents ? (
+                    <p className="text-sm text-gray-400">Loading events...</p>
+                  ) : (
+                    <select
+                      value={selectedEventId || ''}
+                      onChange={(e) => {
+                        setSelectedEvent(e.target.value || null);
+                        setMobileMenuOpen(false);
+                      }}
+                      className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">
+                        {eventOptions.length === 0 ? 'No events assigned' : 'Select an event...'}
+                      </option>
+                      {eventOptions.map((event) => (
+                        <option key={event.id} value={event.id}>
+                          {event.name}
                         </option>
-                      ))
-                    ) : (
-                      <option disabled>No events assigned</option>
-                    )}
-                  </select>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -231,7 +278,6 @@ export default function DirectorLayout({ children }) {
           </>
         )}
 
-        {/* Main Content */}
         <main className="flex-1 p-6 md:p-12 overflow-y-auto bg-bg-light">
           {children}
         </main>
