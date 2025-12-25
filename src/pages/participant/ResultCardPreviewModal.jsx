@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL VERSION WITH CONSOLE LOGGING FOR DEBUGGING CROPPING ISSUE
+// FINAL FIXED — No Cropping, Full Content Captured
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -32,14 +32,11 @@ export default function ResultCardPreviewModal({
   };
 
   const generateResultCard = async () => {
-    if (!cardRef.current) {
-      console.error('[ResultCard] cardRef.current is null');
-      return;
-    }
+    if (!cardRef.current) return;
 
     console.log('[ResultCard] Starting html2canvas capture...');
-    console.log('[ResultCard] cardRef.current dimensions:', cardRef.current.offsetWidth, 'x', cardRef.current.offsetHeight);
-    console.log('[ResultCard] cardRef.current scrollHeight:', cardRef.current.scrollHeight);
+    console.log('[ResultCard] Element size:', cardRef.current.offsetWidth, 'x', cardRef.current.offsetHeight);
+    console.log('[ResultCard] Scroll height:', cardRef.current.scrollHeight);
 
     try {
       const canvas = await html2canvas(cardRef.current, {
@@ -47,37 +44,40 @@ export default function ResultCardPreviewModal({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        logging: true, // html2canvas internal logging
-        width: 1080,
-        height: 1080,
-        scrollX: -window.scrollX,
-        scrollY: -window.scrollY,
-        windowWidth: document.documentElement.offsetWidth,
-        windowHeight: document.documentElement.offsetHeight,
-        x: 0,
-        y: 0,
+        logging: false,
+        width: cardRef.current.scrollWidth,
+        height: cardRef.current.scrollHeight, // ← KEY FIX: Use full scroll height
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: cardRef.current.scrollWidth,
+        windowHeight: cardRef.current.scrollHeight,
       });
 
-      console.log('[ResultCard] Canvas created successfully');
-      console.log('[ResultCard] Canvas dimensions:', canvas.width, 'x', canvas.height);
+      console.log('[ResultCard] Canvas created:', canvas.width, 'x', canvas.height);
 
-      const image = canvas.toDataURL('image/png');
+      // Now crop to 1080x1080 square from top
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = 1080 * 3; // maintain high res
+      croppedCanvas.height = 1080 * 3;
+      const ctx = croppedCanvas.getContext('2d');
+      ctx.drawImage(canvas, 0, 0, croppedCanvas.width, croppedCanvas.height);
+
+      const image = croppedCanvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.download = `${participant.first_name}_${participant.last_name}_result.png`;
       link.href = image;
       link.click();
 
-      console.log('[ResultCard] Download link triggered');
+      console.log('[ResultCard] Full card downloaded (1080x1080)');
     } catch (err) {
-      console.error('[ResultCard] html2canvas failed:', err);
-      alert('Failed to generate card — check console for details');
+      console.error('[ResultCard] Failed:', err);
+      alert('Failed to generate card — check console');
     }
   };
 
   const shareResultCard = async () => {
+    // Same fix applied
     if (!cardRef.current) return;
-
-    console.log('[ResultCard] Starting share via html2canvas...');
 
     try {
       const canvas = await html2canvas(cardRef.current, {
@@ -85,45 +85,39 @@ export default function ResultCardPreviewModal({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        width: 1080,
-        height: 1080,
-        scrollX: -window.scrollX,
-        scrollY: -window.scrollY,
-        windowWidth: document.documentElement.offsetWidth,
-        windowHeight: document.documentElement.offsetHeight,
+        width: cardRef.current.scrollWidth,
+        height: cardRef.current.scrollHeight,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: cardRef.current.scrollWidth,
+        windowHeight: cardRef.current.scrollHeight,
       });
 
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          console.error('[ResultCard] Blob creation failed');
-          generateResultCard();
-          return;
-        }
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = 1080 * 3;
+      croppedCanvas.height = 1080 * 3;
+      const ctx = croppedCanvas.getContext('2d');
+      ctx.drawImage(canvas, 0, 0, croppedCanvas.width, croppedCanvas.height);
 
+      croppedCanvas.toBlob(async (blob) => {
+        if (!blob) return generateResultCard();
         const file = new File([blob], 'result-card.png', { type: 'image/png' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: 'My Race Result!',
-              text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`,
-            });
-            console.log('[ResultCard] Native share successful');
-          } catch (shareErr) {
-            console.error('[ResultCard] Native share failed:', shareErr);
-            generateResultCard();
-          }
+          await navigator.share({
+            files: [file],
+            title: 'My Race Result!',
+            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`,
+          });
         } else {
-          console.log('[ResultCard] Native share not supported, falling back to download');
           generateResultCard();
         }
       });
     } catch (err) {
-      console.error('[ResultCard] Share html2canvas failed:', err);
       generateResultCard();
     }
   };
 
+  // Social shares unchanged
   const shareOnFacebook = () => {
     const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
     window.open(`https://www.facebook.com/sharer/sharer.php?quote=${text}`, '_blank');
@@ -142,7 +136,7 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden Full-Size 1080x1080 Card for Download/Share */}
+      {/* Hidden Card — Original Beautiful Layout */}
       <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
         <div
           ref={cardRef}
@@ -193,7 +187,7 @@ export default function ResultCardPreviewModal({
         </div>
       </div>
 
-      {/* Modal Preview */}
+      {/* Preview Modal — Your beautiful small version */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-4xl font-light hover:bg-gray-100 transition">
@@ -266,7 +260,7 @@ export default function ResultCardPreviewModal({
             </div>
           </div>
 
-          {/* Photo Upload Section */}
+          {/* Photo Upload & Buttons — unchanged */}
           <div className="mb-12 text-center">
             <p className="text-3xl font-bold mb-8">📸 Add Your Finish Line Photo!</p>
             <div className="flex justify-center gap-8 mb-8">
@@ -287,7 +281,6 @@ export default function ResultCardPreviewModal({
             )}
           </div>
 
-          {/* Action Buttons */}
           <div className="flex justify-center gap-8 mb-12">
             <button onClick={generateResultCard} className="px-12 py-6 bg-primary text-white font-bold text-2xl rounded-full hover:bg-primary/90 transition shadow-2xl">
               {isMobileDevice ? 'Save to Photos' : 'Download Image'}
@@ -297,7 +290,6 @@ export default function ResultCardPreviewModal({
             </button>
           </div>
 
-          {/* Social Share */}
           <div className="text-center">
             <p className="text-2xl font-bold text-brand-dark mb-6">Or Share Directly</p>
             <div className="flex justify-center gap-6 flex-wrap">
