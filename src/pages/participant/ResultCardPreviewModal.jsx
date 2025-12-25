@@ -1,6 +1,7 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
 import { useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
+import { formatChronoTime } from '../../utils/timeUtils';
 
 export default function ResultCardPreviewModal({
   show,
