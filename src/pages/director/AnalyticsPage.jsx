@@ -15,8 +15,9 @@ import {
   Title,
   Tooltip,
   Legend,
-} from 'chart.js';
-import { Bar, Line, Doughnut } from 'react-chart.js-2';
+} from 'chart.js'; // ← Correct import (with the dot)
+
+import { Bar, Line, Doughnut } from 'react-chartjs-2';
 
 ChartJS.register(
   CategoryScale,
