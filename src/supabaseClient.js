@@ -25,7 +25,10 @@ export const supabase = (() => {
   if (!publicClient) {
     publicClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        persistSession: false, // No user auth needed
+        persistSession: true,        // ← NOW ENABLED: Sessions saved to localStorage
+        autoRefreshToken: true,      // ← Auto-refreshes expired tokens
+        detectSessionInUrl: true,    // ← Handles OAuth/magic link redirects
+        storage: localStorage,       // ← Explicitly use localStorage (default but safe)
       },
     });
   }
@@ -40,7 +43,6 @@ export const createAdminSupabaseClient = () => {
   if (adminClient) {
     return adminClient;
   }
-
   if (!supabaseServiceRoleKey) {
     console.error(
       'VITE_SUPABASE_SERVICE_ROLE_KEY is missing in .env! ' +
@@ -49,7 +51,6 @@ export const createAdminSupabaseClient = () => {
     // Fallback to public client (writes will be blocked by RLS)
     return supabase;
   }
-
   adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -61,6 +62,5 @@ export const createAdminSupabaseClient = () => {
       },
     },
   });
-
   return adminClient;
 };
