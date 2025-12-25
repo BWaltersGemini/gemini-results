@@ -1,5 +1,5 @@
 // src/pages/ParticipantPage.jsx
-// COMPLETE FINAL VERSION — All Features Restored + Fixed Direct URL Refresh + Fixed Shareable Card Alignment
+// COMPLETE FINAL VERSION — All Features + Fixes
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
@@ -51,6 +51,8 @@ export default function ParticipantPage() {
   const photoInputRef = useRef(null);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
+
+  // Email feature
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState('');
   const [optIn, setOptIn] = useState(false);
@@ -101,7 +103,7 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Photo upload — now updates preview instantly
+  // Photo upload — updates preview instantly
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -134,7 +136,7 @@ export default function ParticipantPage() {
 
   const removePhoto = () => setUserPhoto(null);
 
-  // Email sending
+  // Email sending — full branded template matching ResultsKiosk
   const sendEmail = async () => {
     if (!email || !optIn) return;
     setEmailStatus('sending');
@@ -146,108 +148,117 @@ export default function ParticipantPage() {
     const genderCount = results.finishers.filter(r => r.gender === participant.gender).length;
     const divisionCount = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
     const baseUrl = window.location.origin;
+    const getResultsUrl = () => {
+      const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+      let masterSlug = 'overall';
+      const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+        ids.includes(selectedEvent.id.toString())
+      );
+      if (foundMaster) masterSlug = slugify(foundMaster[0]);
+      const year = getYearFromEvent(selectedEvent);
+      return `${baseUrl}/results/${masterSlug}/${year}`;
+    };
     const brandedHtml = `
       <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
       <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9f9; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; margin:0; padding:0;">
         <tr>
-          <td>
-            <td align="center">
-              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-collapse:collapse;">
-                <!-- Logo Header -->
-                <tr>
-                  <td align="center" style="padding:40px 20px 20px;">
-                    <img src="${baseUrl}/GRR.png" alt="Gemini Race Results" width="220" style="display:block; max-width:100%; height:auto;" />
-                  </td>
-                </tr>
-                <!-- Hero Section -->
-                <tr>
-                  <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
-                    <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
-                    <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">${fullName}</h2>
-                    <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
-                    <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
-                    <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
-                    <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
-                  </td>
-                </tr>
-                <!-- Stats Section -->
-                <tr>
-                  <td style="padding:50px 30px; background:#F0F8FF;">
-                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td align="center">
-                          <h3 style="font-size:28px; font-weight:800; color:#263238; margin:0 0 40px;">Your Race Highlights</h3>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td align="center" style="padding:20px;">
-                          <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                            <tr>
-                              <td align="center" width="33%" style="padding:15px;">
-                                <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Overall</p>
-                                <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.place)}</p>
-                                <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${totalFinishers}</p>
-                              </td>
-                              <td align="center" width="33%" style="padding:15px;">
-                                <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Gender</p>
-                                <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.gender_place)}</p>
-                                <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${genderCount}</p>
-                              </td>
-                              <td align="center" width="33%" style="padding:15px;">
-                                <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Division</p>
-                                <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.age_group_place)}</p>
-                                <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${divisionCount} (${participant.age_group_name || ''})</p>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                <!-- Race Story -->
-                <tr>
-                  <td align="center" style="padding:40px 30px;">
-                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
-                      <tr>
-                        <td style="background:#ffffff; padding:40px; border-left:8px solid #B22222; box-shadow:0 4px 20px rgba(178,34,34,0.15);">
-                          <p style="font-size:24px; font-weight:700; color:#263238; margin:0; line-height:1.5;">
-                            ${raceStory}
-                          </p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                <!-- CTAs -->
-                <tr>
-                  <td align="center" style="padding:40px 30px; background:#F0F8FF;">
-                    <p style="margin:0 0 20px;">
-                      <a href="${getResultsUrl()}" target="_blank" style="display:inline-block; background:#B22222; color:#ffffff; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
-                        View Full Results →
-                      </a>
-                    </p>
-                    <p style="margin:0;">
-                      <a href="https://youkeepmoving.com/events" target="_blank" style="display:inline-block; background:#48D1CC; color:#263238; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
-                        Find Your Next Race →
-                      </a>
-                    </p>
-                  </td>
-                </tr>
-                <!-- Footer -->
-                <tr>
-                  <td align="center" style="background:#263238; color:#aaaaaa; padding:40px 20px;">
-                    <p style="font-size:18px; margin:0 0 12px; color:#ffffff;">— The Gemini Timing Team</p>
-                    <p style="margin:0;">
-                      <a href="https://geminitiming.com" target="_blank" style="color:#48D1CC; font-size:16px; text-decoration:underline;">geminitiming.com</a>
-                    </p>
-                    <p style="font-size:12px; margin-top:20px; color:#94a3b8;">You received this because you participated in ${eventName}.</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
+          <td align="center" style="padding:20px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-collapse:collapse;">
+              <!-- Logo Header -->
+              <tr>
+                <td align="center" style="padding:40px 20px 20px;">
+                  <img src="${baseUrl}/GRR.png" alt="Gemini Race Results" width="220" style="display:block; max-width:100%; height:auto;" />
+                </td>
+              </tr>
+              <!-- Hero Section -->
+              <tr>
+                <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
+                  <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
+                  <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">${fullName}</h2>
+                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
+                  <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
+                  <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
+                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
+                </td>
+              </tr>
+              <!-- Stats Section -->
+              <tr>
+                <td style="padding:50px 30px; background:#F0F8FF;">
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td align="center">
+                        <h3 style="font-size:28px; font-weight:800; color:#263238; margin:0 0 40px;">Your Race Highlights</h3>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td align="center" style="padding:20px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Overall</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${totalFinishers}</p>
+                            </td>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Gender</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.gender_place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${genderCount}</p>
+                            </td>
+                            <td align="center" width="33%" style="padding:15px;">
+                              <p style="font-size:18px; color:#263238; margin:0 0 10px; font-weight:600;">Division</p>
+                              <p style="font-size:48px; font-weight:900; color:#B22222; margin:0; line-height:1;">${ordinal(participant.age_group_place)}</p>
+                              <p style="font-size:16px; color:#666; margin:5px 0 0;">of ${divisionCount} (${participant.age_group_name || ''})</p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <!-- Race Story -->
+              <tr>
+                <td align="center" style="padding:40px 30px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
+                    <tr>
+                      <td style="background:#ffffff; padding:40px; border-left:8px solid #B22222; box-shadow:0 4px 20px rgba(178,34,34,0.15);">
+                        <p style="font-size:24px; font-weight:700; color:#263238; margin:0; line-height:1.5;">
+                          ${raceStory}
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <!-- CTAs -->
+              <tr>
+                <td align="center" style="padding:40px 30px; background:#F0F8FF;">
+                  <p style="margin:0 0 20px;">
+                    <a href="${getResultsUrl()}" target="_blank" style="display:inline-block; background:#B22222; color:#ffffff; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
+                      View Full Results →
+                    </a>
+                  </p>
+                  <p style="margin:0;">
+                    <a href="https://youkeepmoving.com/events" target="_blank" style="display:inline-block; background:#48D1CC; color:#263238; padding:16px 40px; text-decoration:none; font-weight:bold; font-size:20px; border-radius:8px;">
+                      Find Your Next Race →
+                    </a>
+                  </p>
+                </td>
+              </tr>
+              <!-- Footer -->
+              <tr>
+                <td align="center" style="background:#263238; color:#aaaaaa; padding:40px 20px;">
+                  <p style="font-size:18px; margin:0 0 12px; color:#ffffff;">— The Gemini Timing Team</p>
+                  <p style="margin:0;">
+                    <a href="https://geminitiming.com" target="_blank" style="color:#48D1CC; font-size:16px; text-decoration:underline;">geminitiming.com</a>
+                  </p>
+                  <p style="font-size:12px; margin-top:20px; color:#94a3b8;">You received this because you participated in ${eventName}.</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     `;
 
     try {
@@ -256,7 +267,7 @@ export default function ParticipantPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: [email],
-          subject: `${fullName.split(' ')[0]}, You Absolutely Crushed ${eventName}!`,
+          subject: `${fullName.split(' ')[0]}, Your Official ${eventName} Results!`,
           html: brandedHtml,
         }),
       });
@@ -271,6 +282,71 @@ export default function ParticipantPage() {
       setEmailStatus('error');
     }
   };
+
+  // Load participant — works on navigation AND direct refresh
+  useEffect(() => {
+    const loadParticipant = async () => {
+      if (participant && selectedEvent && results.finishers.length > 0 && results.nonFinishers.length >= 0) {
+        if (!timeRevealed && participant.chip_time) {
+          confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
+        }
+        return;
+      }
+
+      setLoading(true);
+      setFetchError(null);
+
+      try {
+        if (events.length === 0 || !contextSelectedEvent) {
+          const interval = setInterval(() => {
+            if (events.length > 0 && contextSelectedEvent) {
+              clearInterval(interval);
+              loadParticipant();
+            }
+          }, 200);
+          setTimeout(() => clearInterval(interval), 10000);
+          return;
+        }
+
+        let targetEvent = selectedEvent || contextSelectedEvent;
+        if (!targetEvent) {
+          const allResults = [...contextResults.finishers, ...contextResults.nonFinishers];
+          const match = allResults.find(r => String(r.bib) === String(bib));
+          if (match?.event_id) {
+            targetEvent = events.find(e => e.id === match.event_id);
+          }
+        }
+
+        if (!targetEvent) throw new Error('Event not found for this participant');
+
+        setSelectedEvent(targetEvent);
+
+        const { data: fetchedResults, error } = await supabase
+          .from('chronotrack_results')
+          .select('*')
+          .eq('event_id', targetEvent.id);
+
+        if (error) throw error;
+
+        const finishers = fetchedResults?.filter(r => r.chip_time && r.chip_time.trim() !== '') || [];
+        const nonFinishers = fetchedResults?.filter(r => !r.chip_time || r.chip_time.trim() === '') || [];
+        setResults({ finishers, nonFinishers });
+
+        const found = fetchedResults?.find(r => String(r.bib) === String(bib));
+        if (!found) throw new Error('Participant not found');
+
+        setParticipant(found);
+        confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
+      } catch (err) {
+        console.error('[ParticipantPage] Load error:', err);
+        setFetchError(err.message || 'Failed to load participant');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadParticipant();
+  }, [bib, events, contextSelectedEvent, contextResults, loadingResults]);
 
   const handleTimeComplete = () => setTimeRevealed(true);
 
@@ -342,6 +418,48 @@ export default function ParticipantPage() {
     alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
   };
 
+  // Division click
+  const handleDivisionClick = () => {
+    if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
+    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
+    const eventYear = getYearFromEvent(selectedEvent);
+    navigate(`/results/${masterSlug}/${eventYear}`, {
+      state: { divisionFilter: participant.age_group_name, highlightBib: participant.bib },
+    });
+  };
+
+  // Track Me
+  const trackMe = () => {
+    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
+    const eventYear = getYearFromEvent(selectedEvent);
+    navigate(`/results/${masterSlug}/${eventYear}`, { state: { highlightBib: participant.bib } });
+  };
+
+  const goBackToResults = () => {
+    if (!selectedEvent) {
+      navigate('/results');
+      return;
+    }
+    const allMasterGroups = { ...masterGroupsLocal, ...masterGroups };
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(allMasterGroups).find(([key, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
+    const eventYear = getYearFromEvent(selectedEvent);
+    navigate(`/results/${masterSlug}/${eventYear}`);
+  };
+
   // Loading / Error
   if (loading || loadingResults) {
     return (
@@ -394,7 +512,7 @@ export default function ParticipantPage() {
     if (finalPlace === 1 && firstPlace > 5) return "EPIC COMEBACK! Started mid-pack but stormed to victory with an unstoppable surge! 🔥";
     if (bestPlace === 1 && finalPlace > 3) return "Had the lead early but got passed late — a valiant fight to the line!";
     if (worstPlace - bestPlace >= 20) return "A rollercoaster race — big swings, but battled through every step!";
-    if (finalPlace <= 3 && firstPlace > 10) return "Patient and powerful — saved the best for last with a huge negative split! 🚀";
+    if (finalPlace <= 3 && firstPlace > 10) return "Patient and powerful — saved the best for the finish! 🚀";
     if (Math.abs(firstPlace - finalPlace) <= 3) return "Rock-solid consistency — stayed near the front the entire race!";
     return "Gritty, determined performance — gave it everything out there!";
   };
@@ -747,7 +865,7 @@ export default function ParticipantPage() {
           )}
         </section>
 
-        {/* Action Buttons — Back + Question */}
+        {/* Action Buttons */}
         <div className="text-center mt-16 space-y-8">
           <button
             onClick={goBackToResults}
