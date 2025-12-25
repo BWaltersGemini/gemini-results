@@ -4,20 +4,18 @@
 @tailwind utilities;
 
 /* ============================================= */
-/* BRAND COLOR PALETTE – Gemini Race Results     */
-/* Primary: #B22222 (Red)                         */
-/* Accent:  #48D1CC (Turquoise)                   */
-/* Light:   #F0F8FF (Ice Blue – backgrounds)     */
-/* Dark:    #263238 (Slate – text/headers)       */
+/* BRAND COLOR PALETTE – Gemini Race Results */
+/* Primary: #B22222 (Red) */
+/* Accent: #48D1CC (Turquoise) */
+/* Light: #F0F8FF (Ice Blue – backgrounds) */
+/* Dark: #263238 (Slate – text/headers) */
 /* ============================================= */
-
 :root {
   /* Core Brand Colors */
   --brand-red: #B22222;
   --brand-turquoise: #48D1CC;
   --brand-light: #F0F8FF;
   --brand-dark: #263238;
-
   /* Semantic Aliases – use these in your components */
   --primary: var(--brand-red);
   --accent: var(--brand-turquoise);
@@ -93,7 +91,6 @@ button:focus-visible {
     background-color: #ffffff;
   }
 }
-
 @media (prefers-color-scheme: dark) {
   :root {
     color: var(--text-dark);
@@ -107,13 +104,11 @@ button:focus-visible {
 main {
   padding-top: 160px; /* Mobile: generous space for search bar + logo */
 }
-
 @media (min-width: 768px) {
   main {
     padding-top: 140px; /* Desktop: slightly less since search bar is inline */
   }
 }
-
 @media (min-width: 1024px) {
   main {
     padding-top: 130px;
@@ -132,12 +127,10 @@ main {
     transform: translateX(-50%);
   }
 }
-
 .animate-scroll {
   display: flex;
   animation: scroll 35s linear infinite;
 }
-
 .hover\:pause:hover {
   animation-play-state: paused;
 }
@@ -150,7 +143,15 @@ main {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
-
 .scrollbar-hide::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
+}
+
+/* ============================================= */
+/* NEW: Fix for dark sidebar dropdown options visibility */
+/* Ensures event names are readable when dropdown opens */
+/* ============================================= */
+select option {
+  background-color: #263238; /* --text-dark / sidebar background */
+  color: #ffffff;           /* --text-light / white text */
 }

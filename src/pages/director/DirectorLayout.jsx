@@ -19,7 +19,7 @@ export default function DirectorLayout({ children }) {
   const [eventOptions, setEventOptions] = useState([]); // { id, name }
   const [loadingEvents, setLoadingEvents] = useState(true);
 
-  // Fetch names for all assigned events
+  // Fetch real event names from chronotrack_events table
   useEffect(() => {
     if (assignedEvents.length === 0) {
       setEventOptions([]);
@@ -31,25 +31,30 @@ export default function DirectorLayout({ children }) {
       setLoadingEvents(true);
       try {
         const { data, error } = await supabase
-          .from('chronotrack_results')
-          .select('event_id, event_name')
-          .in('event_id', assignedEvents);
+          .from('chronotrack_events')
+          .select('id, name')
+          .in('id', assignedEvents);
 
         if (error) throw error;
 
-        // Create unique list with best available name
-        const uniqueMap = new Map();
-        data.forEach(row => {
-          if (!uniqueMap.has(row.event_id)) {
-            uniqueMap.set(row.event_id, row.event_name || `Event ${row.event_id}`);
-          }
+        const options = data
+          .map(row => ({
+            id: row.id.toString(), // Ensure string for consistency
+            name: row.name.trim() || `Event ${row.id}`,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        // Fallback for any missing events
+        const fetchedIds = options.map(o => o.id);
+        const missingIds = assignedEvents.filter(id => !fetchedIds.includes(id.toString()));
+        missingIds.forEach(id => {
+          options.push({ id, name: `Event ${id}` });
         });
 
-        const options = Array.from(uniqueMap, ([id, name]) => ({ id, name }));
-        setEventOptions(options.sort((a, b) => a.name.localeCompare(b.name)));
+        setEventOptions(options);
       } catch (err) {
-        console.error('Failed to fetch event names for dropdown:', err);
-        // Fallback to ID-only
+        console.error('Failed to fetch events from chronotrack_events:', err);
+        // Ultimate fallback
         setEventOptions(
           assignedEvents.map(id => ({ id, name: `Event ${id}` }))
         );
@@ -112,8 +117,7 @@ export default function DirectorLayout({ children }) {
               <select
                 value={selectedEventId || ''}
                 onChange={(e) => setSelectedEvent(e.target.value || null)}
-                className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
-                disabled={eventOptions.length === 0}
+                className="w-full px-4 py-3 bg-text-dark/50 text-text-light rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="">
                   {eventOptions.length === 0 ? 'No events assigned' : 'Select an event...'}
@@ -223,7 +227,7 @@ export default function DirectorLayout({ children }) {
                         setSelectedEvent(e.target.value || null);
                         setMobileMenuOpen(false);
                       }}
-                      className="w-full px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full px-4 py-3 bg-text-dark/50 text-text-light rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-accent"
                     >
                       <option value="">
                         {eventOptions.length === 0 ? 'No events assigned' : 'Select an event...'}
