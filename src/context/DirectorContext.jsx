@@ -12,29 +12,50 @@ export function DirectorProvider({ children }) {
 
   const navigate = useNavigate();
 
-  // Critical: Listen to Supabase auth state changes
   useEffect(() => {
-    // Get the current session on mount (including after refresh)
+    console.log('[DirectorContext] Initializing auth listener...');
+
+    // 1. Get current session on mount (including after refresh)
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setCurrentUser(session?.user ?? null);
+      console.log('[DirectorContext] Initial getSession result:', session ? 'Session found' : 'No session');
+      if (session) {
+        console.log('[DirectorContext] Setting currentUser from initial session:', session.user.id);
+        setCurrentUser(session.user);
+      } else {
+        console.log('[DirectorContext] No initial session → redirecting to login');
+        navigate('/director-login', { replace: true });
+      }
     });
 
-    // Listen for all auth events (login, logout, token refresh, page load)
+    // 2. Listen for ALL auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setCurrentUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[DirectorContext] Auth event:', event);
+      console.log('[DirectorContext] Session user:', session?.user?.id || 'null');
 
-      // If signed out, redirect to login
-      if (!session) {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user) {
+          console.log('[DirectorContext] User signed in / session restored:', session.user.id);
+          setCurrentUser(session.user);
+        } else {
+          console.log('[DirectorContext] Event triggered but no user in session');
+          setCurrentUser(null);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        console.log('[DirectorContext] User signed out');
+        setCurrentUser(null);
         setAssignedEvents([]);
         setSelectedEventId(null);
         navigate('/director-login', { replace: true });
       }
     });
 
-    // Cleanup subscription on unmount
+    console.log('[DirectorContext] Auth listener subscribed');
+
+    // Cleanup
     return () => {
+      console.log('[DirectorContext] Unsubscribing auth listener');
       subscription.unsubscribe();
     };
   }, [navigate]);
