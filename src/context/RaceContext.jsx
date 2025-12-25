@@ -5,7 +5,7 @@
 // • Fresh global config from Supabase (no localStorage cache)
 // • Correct event_id string conversion for Supabase upserts
 // • Admin-triggered forced refresh support
-import { createContext, useState, useEffect } from 'react';
+import { createContext, useState, useEffect, useContext } from 'react'; // ← ADDED useContext HERE
 import { fetchEvents, fetchRacesForEvent, fetchResultsForEvent } from '../api/chronotrackapi';
 import { supabase } from '../supabaseClient';
 import { loadAppConfig } from '../utils/appConfig';
@@ -328,7 +328,7 @@ export function RaceProvider({ children }) {
   );
 }
 
-// ← ADDED: Export hook for use in DirectorContext
+// Export hook for use in DirectorContext
 export const useRace = () => {
   const context = useContext(RaceContext);
   if (!context) {
