@@ -18,16 +18,16 @@ let publicClient = null;
 let adminClient = null;
 
 /**
- * Public Supabase client (anon key) — used everywhere in the app
+ * Public Supabase client (anon key) — used everywhere in the app (including Director auth)
  */
 export const supabase = (() => {
   if (!publicClient) {
     publicClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        persistSession: true,     // ← CHANGED: Now saves session to localStorage
-        autoRefreshToken: true,   // ← Keeps session alive
-        detectSessionInUrl: true,
-        storage: localStorage,    // ← Explicitly use localStorage
+        persistSession: true,           // ← CRITICAL: Sessions now saved to localStorage
+        autoRefreshToken: true,         // ← Automatically refreshes expired tokens
+        detectSessionInUrl: true,       // ← Handles magic links / redirects properly
+        storage: localStorage,          // ← Explicitly use localStorage (default, but safe to specify)
       },
     });
   }
@@ -35,23 +35,25 @@ export const supabase = (() => {
 })();
 
 /**
- * Admin Supabase client factory (service_role key)
+ * Admin Supabase client factory (service_role key) — ONLY for server-side/admin actions
  */
 export const createAdminSupabaseClient = () => {
   if (adminClient) {
     return adminClient;
   }
+
   if (!supabaseServiceRoleKey) {
     console.error(
       'VITE_SUPABASE_SERVICE_ROLE_KEY is missing in .env! ' +
       'Admin actions will fail due to RLS. Add the service_role key from Supabase → Settings → API.'
     );
-    return supabase;
+    return supabase; // Fallback to public client (writes will fail due to RLS)
   }
+
   adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       autoRefreshToken: false,
-      persistSession: false,
+      persistSession: false,          // ← Admin client doesn't need session persistence
     },
     global: {
       headers: {
@@ -59,5 +61,6 @@ export const createAdminSupabaseClient = () => {
       },
     },
   });
+
   return adminClient;
 };
