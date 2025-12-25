@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL VERSION — Beautiful 1080x1080 Square Card Preview (Instagram Style)
+// FINAL FIXED — Perfect Square 1080x1080 Preview (No Stretch!)
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -141,21 +141,9 @@ export default function ResultCardPreviewModal({
           </div>
 
           <div className="grid grid-cols-3 gap-16 text-white w-full max-w-5xl mb-16">
-            <div>
-              <p className="text-3xl text-gray-400 uppercase mb-3">Overall</p>
-              <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
-              <p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p>
-            </div>
-            <div>
-              <p className="text-3xl text-gray-400 uppercase mb-3">Gender</p>
-              <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
-              <p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p>
-            </div>
-            <div>
-              <p className="text-3xl text-gray-400 uppercase mb-3">Division</p>
-              <p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
-              <p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p>
-            </div>
+            <div><p className="text-3xl text-gray-400 uppercase mb-3">Overall</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {overallTotal}</p></div>
+            <div><p className="text-3xl text-gray-400 uppercase mb-3">Gender</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {genderTotal}</p></div>
+            <div><p className="text-3xl text-gray-400 uppercase mb-3">Division</p><p className="text-8xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p><p className="text-2xl text-gray-400 mt-3">of {divisionTotal}</p></div>
           </div>
 
           <div className="absolute bottom-28 right-12">
@@ -174,7 +162,7 @@ export default function ResultCardPreviewModal({
         </div>
       </div>
 
-      {/* Visible Modal — Beautiful Square Instagram-Style Preview */}
+      {/* Modal — Perfect Square Preview */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div
           className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative max-h-screen overflow-y-auto"
@@ -189,22 +177,23 @@ export default function ResultCardPreviewModal({
 
           <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
 
-          {/* Square Phone Frame — Perfect for 1080x1080 */}
+          {/* Square Phone Frame */}
           <div className="flex justify-center mb-12">
             <div className="relative bg-black rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-300 w-96 h-96">
-              {/* Notch + Status Bar (optional polish) */}
+              {/* Optional notch */}
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-black rounded-b-2xl z-10"></div>
 
-              <div className="absolute inset-0 flex items-center justify-center p-4">
+              {/* Perfectly Scaled Square Card */}
+              <div className="absolute inset-0 flex items-center justify-center">
                 <div
-                  className="w-[1080px] h-[1080px] origin-center rounded-2xl overflow-hidden shadow-2xl"
+                  className="relative w-[1080px] h-[1080px]"
                   style={{
                     transform: 'scale(0.355)',
                     transformOrigin: 'center center',
                   }}
                 >
-                  {/* Live Preview Card (exact duplicate of hidden one) */}
-                  <div className="w-full h-full bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16">
+                  {/* Exact duplicate of the hidden card — now perfectly square */}
+                  <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-12 pt-10 pb-16 overflow-hidden">
                     <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 mb-8">
                       {masterLogo ? (
                         <img src={masterLogo} alt="Series Logo" className="max-w-full max-h-32 object-contain mx-auto" />
