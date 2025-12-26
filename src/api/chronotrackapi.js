@@ -7,6 +7,7 @@
 // • Batched entry_status calls
 // • Stores BOTH finishers and DNFs in Supabase
 // • NEW: Detects "STARTED" athletes (crossed start mat, no splits/finish yet)
+// • NEW: STARTED athletes included in nonFinishers for search visibility
 
 import axios from 'axios';
 import { supabase } from '../supabaseClient'; // ← Critical import
@@ -144,7 +145,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
       console.log(`[ChronoTrack] ${bracketName} (page ${page}) → +${newResults.length} new unique (total: ${allResults.length}) from ${raceName}`);
 
       if (results.length < pageSize) break;
-      if (page >= maxPages) {
+      ifif (page >= maxPages) {
         console.warn(`[ChronoTrack] Hit maxPages (${maxPages}) for ${bracketName}`);
         break;
       }
@@ -158,7 +159,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   return allResults;
 };
 
-const fetchEntryStatusesInBatches = async (entryIds) => {
+const fetch decentralEntryStatusesInBatches = async (entryIds) => {
   if (entryIds.length === 0) return {};
 
   const statuses = {};
@@ -429,10 +430,17 @@ export const fetchResultsForEvent = async (eventId) => {
       _status: status, // Now includes 'STARTED'
     };
 
-    if (['DNF', 'DQ'].includes(status)) {
+    // UPDATED: Include STARTED athletes in nonFinishers for search visibility
+    if (['DNF', 'DQ', 'STARTED'].includes(status)) {
+      // Clear rankings for non-finishers and started-only
       participant.place = null;
       participant.gender_place = null;
       participant.age_group_place = null;
+
+      // Ensure they have basic info for search
+      participant.chip_time = participant.chip_time || '';
+      participant.race_name = participant.race_name || 'Unknown Race';
+
       nonFinishers.push(participant);
     } else {
       finishers.push(participant);
@@ -456,7 +464,7 @@ export const fetchResultsForEvent = async (eventId) => {
     if (error) {
       console.error('[ChronoTrack] Upsert failed:', error);
     } else {
-      console.log(`[ChronoTrack] Stored ${finishers.length} finishers + ${nonFinishers.length} DNF/DQ/STARTED in Supabase`);
+      console.log(`[ChronoTrack] Stored ${finishers.length} finishers + ${nonFinishers.length} non-finishers (incl. STARTED) in Supabase`);
     }
   }
 
