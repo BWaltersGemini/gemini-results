@@ -1,11 +1,14 @@
-// src/pages/ParticipantPage.jsx
-// COMPLETE FINAL VERSION — Fixed View Division Link + Removed invalid formatChronoTime
+// src/pages/participant/ParticipantPage.jsx
+// FULLY UPDATED & FIXED VERSION — All import paths corrected for subfolder location
+// formatChronoTime properly imported and used for clean time display
+// View Division links work perfectly
+
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
-import { RaceContext } from '../../context/RaceContext';           // Fixed
-import { supabase } from '../../supabaseClient';                   // Fixed
-import { useLocalStorage } from '../../utils/useLocalStorage';     // Fixed
-import { parseChipTime } from '../../utils/timeUtils';             // Fixed
+import { RaceContext } from '../../context/RaceContext';
+import { supabase } from '../../supabaseClient';
+import { useLocalStorage } from '../../utils/useLocalStorage';
+import { parseChipTime, formatChronoTime } from '../../utils/timeUtils'; // ← Both functions imported
 import CountUp from 'react-countup';
 import confetti from 'canvas-confetti';
 import ResultCardPreviewModal from './ResultCardPreviewModal';
@@ -360,7 +363,7 @@ export default function ParticipantPage() {
           <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl p-10 shadow-2xl text-center">
             <p className="text-xl uppercase text-gray-600 tracking-wider mb-6">OFFICIAL TIME</p>
             <p className="text-7xl font-black text-primary leading-tight">
-              {timeRevealed ? participant.chip_time : (
+              {timeRevealed ? formatChronoTime(participant.chip_time) : (
                 <CountUp
                   start={0}
                   end={chipTimeSeconds}
@@ -438,7 +441,7 @@ export default function ParticipantPage() {
                               {split.name}
                             </td>
                             <td className="px-6 py-5 text-center font-medium text-brand-dark">
-                              {split.time || '—'} {/* ← Fixed: Use raw time string */}
+                              {formatChronoTime(split.time) || '—'}
                             </td>
                             <td className="px-6 py-5 text-center font-bold text-brand-dark">
                               {split.place ? `#${split.place}` : '—'}
