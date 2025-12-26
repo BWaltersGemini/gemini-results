@@ -1,5 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – Accurate per-race totals + Race Name highlighted + clearer opt-in
+// FINAL – Race name & opt-in text in Gemini Red (#B22222)
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Confetti from 'react-confetti';
@@ -62,7 +62,6 @@ export default function ResultsKiosk() {
     return `https://gemini-results.vercel.app/results/${slug}/${year}`;
   };
 
-  // Robust ordinal function
   const ordinal = (n) => {
     if (!n) return '—';
     const s = ['th', 'st', 'nd', 'rd'];
@@ -124,7 +123,6 @@ export default function ResultsKiosk() {
     startCountdown();
   };
 
-  // Countdown – paused when email form open
   useEffect(() => {
     if (countdown === null || showEmailForm) return;
     const interval = setInterval(() => {
@@ -158,7 +156,7 @@ export default function ResultsKiosk() {
     document.getElementById('kiosk-search-input')?.focus();
   };
 
-  // Email sending with accurate per-race totals and highlighted race name
+  // Email sending with accurate per-race totals
   const sendEmail = async () => {
     if (!email || !optIn) return;
     setEmailStatus('sending');
@@ -169,7 +167,6 @@ export default function ResultsKiosk() {
 
     const raceStory = getRaceStory(participant.splits || [], participant.place);
 
-    // === Accurate per-race totals ===
     const participantRaceName = participant.race_name || raceName;
 
     const raceResults = allParticipants.filter(
@@ -203,7 +200,6 @@ export default function ResultsKiosk() {
                 <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
                   <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
                   <h2 style="font-size:36px; font-weight:700; margin:0 0 12px; color:#ffffff;">${fullName}</h2>
-                  <!-- Race Name Highlighted -->
                   <p style="font-size:32px; font-weight:800; margin:0 0 24px; color:#FFD700; line-height:1.2;">${raceName}</p>
                   <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the finish line!</p>
                   <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
@@ -320,7 +316,6 @@ export default function ResultsKiosk() {
     if (stage === 'kiosk') document.getElementById('kiosk-search-input')?.focus();
   }, [stage]);
 
-  // Exit protection
   useEffect(() => {
     if (stage !== 'kiosk') return;
     const preventBack = (e) => {
@@ -571,9 +566,9 @@ export default function ResultsKiosk() {
             <h2 className="text-4xl font-black mb-2">
               {participant.first_name} {participant.last_name}
             </h2>
-            {/* Race Name Prominently Displayed */}
+            {/* Race Name in Gemini Red */}
             {participant.race_name && (
-              <p className="text-3xl font-bold text-brand-turquoise mb-6 drop-shadow-md">
+              <p className="text-3xl font-bold text-brand-red mb-6 drop-shadow-md">
                 {participant.race_name}
               </p>
             )}
@@ -608,7 +603,7 @@ export default function ResultsKiosk() {
                 <button
                   onClick={() => {
                     setShowEmailForm(true);
-                    setCountdown(null); // Pause countdown
+                    setCountdown(null);
                   }}
                   className="px-20 py-8 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
                 >
@@ -633,7 +628,7 @@ export default function ResultsKiosk() {
                       {emailStatus === 'sending' ? 'Sending...' : 'Send Email'}
                     </button>
                   </div>
-                  {/* Clearer Opt-In Text */}
+                  {/* Opt-in text in Gemini Red */}
                   <label className="flex items-start justify-center gap-4 text-lg cursor-pointer max-w-md mx-auto">
                     <input
                       type="checkbox"
@@ -642,7 +637,7 @@ export default function ResultsKiosk() {
                       className="mt-1 w-6 h-6 text-brand-turquoise rounded focus:ring-brand-turquoise flex-shrink-0"
                     />
                     <span className="leading-tight text-left">
-                      <strong className="text-brand-turquoise">✓ Yes, I'd like to receive my results email</strong>
+                      <strong className="text-brand-red">✓ Yes, I'd like to receive my results email</strong>
                       <br />
                       <span className="text-gray-600 text-base">and occasional race updates from Gemini Timing</span>
                     </span>
