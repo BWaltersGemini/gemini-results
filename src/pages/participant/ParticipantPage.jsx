@@ -2,10 +2,10 @@
 // COMPLETE FINAL VERSION — Fixed View Division Link + Removed invalid formatChronoTime
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
-import { RaceContext } from '../context/RaceContext';
+import { RaceContext } from '../../context/RaceContext';  // ← Fixed path
 import { supabase } from '../supabaseClient';
 import { useLocalStorage } from '../utils/useLocalStorage';
-import { parseChipTime } from '../utils/timeUtils'; // ← Removed formatChronoTime (doesn't exist)
+import { parseChipTime } from '../utils/timeUtils';
 import CountUp from 'react-countup';
 import confetti from 'canvas-confetti';
 import ResultCardPreviewModal from './ResultCardPreviewModal';
