@@ -1,5 +1,5 @@
 // src/pages/participant/ParticipantPage.jsx
-// Complete, fully working version with multi-athlete tracking support
+// Complete, fully working version with multi-athlete tracking support and small preview
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
