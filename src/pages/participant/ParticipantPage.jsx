@@ -1,20 +1,20 @@
 // src/pages/participant/ParticipantPage.jsx
-// FULLY UPDATED & FIXED VERSION — All import paths corrected for subfolder location
-// formatChronoTime properly imported and used for clean time display
-// View Division links work perfectly
+// FULLY FIXED + EXTRA CONSOLE LOGGING FOR DEBUGGING
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../../context/RaceContext';
 import { supabase } from '../../supabaseClient';
 import { useLocalStorage } from '../../utils/useLocalStorage';
-import { parseChipTime, formatChronoTime } from '../../utils/timeUtils'; // ← Both functions correctly imported
+import { parseChipTime, formatChronoTime } from '../../utils/timeUtils';
 import CountUp from 'react-countup';
 import confetti from 'canvas-confetti';
 import ResultCardPreviewModal from './ResultCardPreviewModal';
 import EmailResultsForm from './EmailResultsForm';
 
 export default function ParticipantPage() {
+  console.log('[ParticipantPage] Component mounted / re-rendered');
+
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -31,6 +31,8 @@ export default function ParticipantPage() {
   } = useContext(RaceContext);
 
   const navState = location.state || {};
+  console.log('[ParticipantPage] Navigation state from link:', navState);
+
   const initialParticipant = navState.participant || null;
   const initialSelectedEvent = navState.selectedEvent || null;
   const initialResults = navState.results || { finishers: [], nonFinishers: [] };
@@ -129,16 +131,22 @@ export default function ParticipantPage() {
   // Load participant
   useEffect(() => {
     const loadParticipant = async () => {
+      console.log('[ParticipantPage] loadParticipant called — bib:', bib);
+
       if (participant && selectedEvent && results.finishers.length > 0) {
+        console.log('[ParticipantPage] Data already loaded — triggering confetti if needed');
         if (!timeRevealed && participant.chip_time) {
           confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
         }
         return;
       }
+
       setLoading(true);
       setFetchError(null);
+
       try {
         if (events.length === 0 || !contextSelectedEvent) {
+          console.log('[ParticipantPage] Waiting for events/context to load...');
           const interval = setInterval(() => {
             if (events.length > 0 && contextSelectedEvent) {
               clearInterval(interval);
@@ -148,16 +156,20 @@ export default function ParticipantPage() {
           setTimeout(() => clearInterval(interval), 10000);
           return;
         }
+
         let targetEvent = selectedEvent || contextSelectedEvent;
         if (!targetEvent) {
           const allResults = [...contextResults.finishers, ...contextResults.nonFinishers];
           const match = allResults.find(r => String(r.bib) === String(bib));
           if (match?.event_id) {
             targetEvent = events.find(e => e.id === match.event_id);
+            console.log('[ParticipantPage] Found event via results match:', targetEvent?.name);
           }
         }
+
         if (!targetEvent) throw new Error('Event not found');
         setSelectedEvent(targetEvent);
+        console.log('[ParticipantPage] Selected event:', targetEvent.name, targetEvent.id);
 
         const { data: fetchedResults, error } = await supabase
           .from('chronotrack_results')
@@ -172,6 +184,9 @@ export default function ParticipantPage() {
 
         const found = fetchedResults?.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found');
+
+        console.log('[ParticipantPage] Participant loaded:', found.first_name, found.last_name, 'Bib:', found.bib);
+        console.log('[ParticipantPage] Has splits?', !!found.splits?.length);
         setParticipant(found);
 
         confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
@@ -182,27 +197,50 @@ export default function ParticipantPage() {
         setLoading(false);
       }
     };
+
     loadParticipant();
   }, [bib, events, contextSelectedEvent, contextResults, loadingResults]);
 
-  const handleTimeComplete = () => setTimeRevealed(true);
+  const handleTimeComplete = () => {
+    console.log('[ParticipantPage] Time reveal animation complete');
+    setTimeRevealed(true);
+  };
 
   const handleDivisionClick = () => {
-    if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
+    console.log('[ParticipantPage] View Division clicked');
+    console.log('Participant division:', participant?.age_group_name);
+    console.log('Selected event:', selectedEvent?.name, selectedEvent?.id);
+
+    if (!participant?.age_group_name || !selectedEvent) {
+      console.log('Missing data — falling back to results page');
+      return goBackToResults();
+    }
 
     let masterSlug = 'overall';
     const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
-    if (foundMaster) masterSlug = slugify(foundMaster[0]);
+
+    if (foundMaster) {
+      masterSlug = slugify(foundMaster[0]);
+      console.log('Found master group:', foundMaster[0], '→ slug:', masterSlug);
+    } else {
+      console.log('No master group found for this event');
+    }
 
     const eventYear = getYearFromEvent(selectedEvent);
+    console.log('Navigating to:', `/results/${masterSlug}/${eventYear}`, 'with state:', {
+      divisionFilter: participant.age_group_name,
+      highlightBib: participant.bib
+    });
+
     navigate(`/results/${masterSlug}/${eventYear}`, {
       state: { divisionFilter: participant.age_group_name, highlightBib: participant.bib },
     });
   };
 
   const trackMe = () => {
+    console.log('[ParticipantPage] Track Me clicked');
     let masterSlug = 'overall';
     const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
@@ -214,6 +252,7 @@ export default function ParticipantPage() {
   };
 
   const goBackToResults = () => {
+    console.log('[ParticipantPage] Back to Results clicked');
     if (!selectedEvent) {
       navigate('/results');
       return;
@@ -227,6 +266,10 @@ export default function ParticipantPage() {
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
+
+  // Debug splits rendering
+  console.log('[ParticipantPage] About to render — participant.splits:', participant?.splits);
+  console.log('[ParticipantPage] formatChronoTime available?', typeof formatChronoTime === 'function');
 
   if (loading || loadingResults) {
     return (
@@ -309,6 +352,8 @@ export default function ParticipantPage() {
   };
 
   const splitsWithFullCourse = [...enrichedSplits, fullCourseSplit];
+
+  console.log('[ParticipantPage] Rendering splits — count:', splitsWithFullCourse.length);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-light to-white pt-40 py-16">
@@ -471,7 +516,9 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Create Card */}
+        {/* The rest of the JSX remains exactly the same as before */}
+        {/* Create Card, Email Results, Track Me, Sponsors, Upcoming Events, Back Button, Modals */}
+
         <div className="text-center my-20">
           <button
             onClick={() => setShowCardPreview(true)}
@@ -481,7 +528,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Email Results */}
         <div className="text-center mb-16">
           <button
             onClick={() => setShowEmailForm(true)}
@@ -491,7 +537,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Track Me */}
         <div className="text-center mb-16">
           <button
             onClick={trackMe}
@@ -501,7 +546,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Sponsors */}
         {ads.length > 0 && (
           <div className="mb-20">
             <h3 className="text-4xl font-bold text-center text-brand-dark mb-12">Event Sponsors</h3>
@@ -515,7 +559,6 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {/* Upcoming Events Carousel */}
         <section className="mt-20">
           <h2 className="text-5xl font-black text-center text-brand-dark mb-12">Ready for Your Next Adventure?</h2>
           <p className="text-2xl text-center text-gray-600 mb-12">From 5K to Marathon — we’ve got your next goal.</p>
@@ -563,7 +606,6 @@ export default function ParticipantPage() {
           )}
         </section>
 
-        {/* Back Button */}
         <div className="text-center mt-16">
           <button
             onClick={goBackToResults}
@@ -573,7 +615,6 @@ export default function ParticipantPage() {
           </button>
         </div>
 
-        {/* Hidden Photo Input */}
         <input
           type="file"
           ref={photoInputRef}
@@ -582,7 +623,6 @@ export default function ParticipantPage() {
           className="hidden"
         />
 
-        {/* Result Card Modal */}
         <ResultCardPreviewModal
           show={showCardPreview}
           onClose={() => setShowCardPreview(false)}
@@ -599,7 +639,6 @@ export default function ParticipantPage() {
           bibLogo={bibLogo}
         />
 
-        {/* Email Results Form */}
         <EmailResultsForm
           show={showEmailForm}
           onClose={() => setShowEmailForm(false)}
