@@ -14,7 +14,7 @@ import { formatChronoTime } from '../utils/timeUtils';
 export default function ResultsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { masterKey, year, raceSlug } from useParams();
+  const { masterKey, year, raceSlug } = useParams();
 
   const {
     selectedEvent,
