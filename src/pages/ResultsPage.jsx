@@ -1,6 +1,6 @@
 // src/pages/ResultsPage.jsx
-// FINAL VERSION — Multi-athlete tracking persists even after page refresh
-// Uses sessionStorage with event-specific key to survive refresh, back/forward, and tab navigation
+// FINAL VERSION — Multi-athlete tracking with "Started – Awaiting First Split" support
+// Displays athletes immediately after crossing start mat (even with no splits/finish)
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -32,59 +32,34 @@ export default function ResultsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [liveToast, setLiveToast] = useState(null);
 
-  // Unique key for this specific event/year to avoid mixing tracked athletes across different races
-  const storageKey = `trackedBibs_${masterKey}_${year}`;
-
-  // Load tracked bibs from sessionStorage on mount
+  // Multi-athlete tracking — stored in sessionStorage for full persistence
   const [trackedBibs, setTrackedBibs] = useState(() => {
-    const saved = sessionStorage.getItem(storageKey);
+    const saved = sessionStorage.getItem('trackedBibs');
     return saved ? JSON.parse(saved) : [];
   });
 
   // Save to sessionStorage whenever trackedBibs changes
   useEffect(() => {
     if (trackedBibs.length > 0) {
-      sessionStorage.setItem(storageKey, JSON.stringify(trackedBibs));
+      sessionStorage.setItem('trackedBibs', JSON.stringify(trackedBibs));
     } else {
-      sessionStorage.removeItem(storageKey);
+      sessionStorage.removeItem('trackedBibs');
     }
-  }, [trackedBibs, storageKey]);
+  }, [trackedBibs]);
 
-  // Handle incoming addToTracked from ParticipantPage "Track Me"
+  // Optional: tie tracking to current event (clear when switching events)
   useEffect(() => {
-    if (location.state?.addToTracked) {
-      const bibToAdd = String(location.state.addToTracked);
-      setTrackedBibs(prev => {
-        if (prev.includes(bibToAdd)) return prev;
-        if (prev.length >= 6) {
-          alert('Maximum of 6 athletes can be tracked at once.');
-          return prev;
-        }
-        return [...prev, bibToAdd];
-      });
-      // Clean up the navigation state flag
-      navigate(location.pathname, { replace: true, state: {} });
-    }
+    const currentEventId = selectedEvent?.id?.toString();
+    const savedEventId = sessionStorage.getItem('trackedEventId');
 
-    // Optional: auto-apply division filter from ParticipantPage
-    // if (location.state?.divisionFilter) {
-    //   setSelectedDivision(location.state.divisionFilter);
-    //   navigate(location.pathname, { replace: true, state: {} });
-    // }
-  }, [location.state, navigate, location.pathname]);
-
-  // Reset on master/year change (different race series)
-  useEffect(() => {
-    const currentKey = `${masterKey}_${year}`;
-    const savedKey = sessionStorage.getItem('lastTrackedEventKey');
-
-    if (savedKey && savedKey !== currentKey) {
+    if (currentEventId && savedEventId && currentEventId !== savedEventId) {
       setTrackedBibs([]);
-      sessionStorage.removeItem(storageKey);
+      sessionStorage.removeItem('trackedBibs');
+      sessionStorage.removeItem('trackedEventId');
+    } else if (currentEventId) {
+      sessionStorage.setItem('trackedEventId', currentEventId);
     }
-
-    sessionStorage.setItem('lastTrackedEventKey', currentKey);
-  }, [masterKey, year, storageKey]);
+  }, [selectedEvent]);
 
   // Filters
   const [selectedRaceId, setSelectedRaceId] = useState('all');
@@ -119,10 +94,34 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // Reset filters on master change
+  // ====================== INCOMING STATE FROM PARTICIPANT PAGE ======================
+  useEffect(() => {
+    if (location.state?.addToTracked) {
+      const bibToAdd = String(location.state.addToTracked);
+      setTrackedBibs(prev => {
+        if (prev.includes(bibToAdd)) return prev;
+        if (prev.length >= 6) {
+          alert('Maximum of 6 athletes can be tracked at once.');
+          return prev;
+        }
+        return [...prev, bibToAdd];
+      });
+      // Clean up the navigation state flag
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+
+    // Optional: auto-apply division filter from ParticipantPage
+    // if (location.state?.divisionFilter) {
+    //   setSelectedDivision(location.state.divisionFilter);
+    //   navigate(location.pathname, { replace: true, state: {} });
+    // }
+  }, [location.state, navigate, location.pathname]);
+
+  // Reset on master series change
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
+      setTrackedBibs([]);
       setSelectedRaceId('all');
       setSelectedDivision('all');
       setExpandedRaces({});
@@ -330,7 +329,7 @@ export default function ResultsPage() {
     .sort((a, b) => (b.dateEpoch || 0) - (a.dateEpoch || 0))
     .slice(0, 3);
 
-  // Tracked Athletes
+  // Tracked Athletes — now includes STARTED athletes
   const trackedAthletes = useMemo(() => {
     if (trackedBibs.length === 0) return [];
     const all = [...results.finishers, ...results.nonFinishers];
@@ -532,33 +531,54 @@ export default function ResultsPage() {
               ⭐ Tracked Athletes ({trackedAthletes.length}{trackedAthletes.length >= 6 ? '/6' : ''})
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {trackedAthletes.map((athlete) => (
-                <button
-                  key={athlete.entry_id || athlete.bib}
-                  onClick={() => handleNameClick(athlete)}
-                  className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-3xl shadow-2xl p-8 hover:shadow-3xl hover:scale-105 transition-all border-4 border-primary/30 text-center"
-                >
-                  <p className="text-5xl font-black text-primary mb-4">Bib {athlete.bib}</p>
-                  <p className="text-3xl font-bold text-brand-dark mb-2">
-                    {athlete.first_name} {athlete.last_name}
-                  </p>
-                  <p className="text-xl text-gray-600 mb-4">
-                    {athlete.race_name || 'Overall'}
-                  </p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {formatChronoTime(athlete.chip_time) || 'On Course'}
-                  </p>
-                  <p className="text-lg text-gray-600 mt-2">
-                    Overall: {athlete.place ? `#${athlete.place}` : '—'}
-                  </p>
-                </button>
-              ))}
+              {trackedAthletes.map((athlete) => {
+                const isStartedOnly = athlete._status === 'STARTED';
+                const isOnCourse = athlete.splits?.length > 0 || (athlete.chip_time && !isStartedOnly);
+                const statusText = isStartedOnly 
+                  ? 'Started – Awaiting First Split' 
+                  : isOnCourse 
+                    ? 'On Course' 
+                    : formatChronoTime(athlete.chip_time) || 'On Course';
+
+                const statusColor = isStartedOnly 
+                  ? 'text-blue-600' 
+                  : athlete.chip_time 
+                    ? 'text-green-600' 
+                    : 'text-orange-600';
+
+                return (
+                  <button
+                    key={athlete.entry_id || athlete.bib}
+                    onClick={() => handleNameClick(athlete)}
+                    className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-3xl shadow-2xl p-8 hover:shadow-3xl hover:scale-105 transition-all border-4 border-primary/30 text-center"
+                  >
+                    <p className="text-5xl font-black text-primary mb-4">Bib {athlete.bib}</p>
+                    <p className="text-3xl font-bold text-brand-dark mb-2">
+                      {athlete.first_name} {athlete.last_name}
+                    </p>
+                    <p className="text-xl text-gray-600 mb-4">
+                      {athlete.race_name || 'Overall'}
+                    </p>
+                    <p className={`text-2xl font-bold ${statusColor}`}>
+                      {statusText}
+                    </p>
+                    {isStartedOnly && (
+                      <p className="text-sm text-gray-500 mt-2">
+                        Crossed start line • Waiting for first timing point
+                      </p>
+                    )}
+                    <p className="text-lg text-gray-600 mt-2">
+                      Overall: {athlete.place ? `#${athlete.place}` : '—'}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
             <div className="text-center mt-8">
               <button
                 onClick={() => {
                   setTrackedBibs([]);
-                  sessionStorage.removeItem(storageKey);
+                  sessionStorage.removeItem('trackedBibs');
                 }}
                 className="px-10 py-4 bg-gray-600 text-white font-bold rounded-full hover:bg-gray-700 transition"
               >
