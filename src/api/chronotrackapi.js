@@ -159,7 +159,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   return allResults;
 };
 
-const fetch ; = async (entryIds) => {
+const fetchEntryStatusesInBatches = async (entryIds) => {
   if (entryIds.length === 0) return {};
 
   const statuses = {};
