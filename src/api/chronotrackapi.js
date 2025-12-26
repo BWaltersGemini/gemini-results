@@ -159,7 +159,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   return allResults;
 };
 
-const fetch decentralEntryStatusesInBatches = async (entryIds) => {
+const fetch ; = async (entryIds) => {
   if (entryIds.length === 0) return {};
 
   const statuses = {};
