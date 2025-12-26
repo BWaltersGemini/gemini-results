@@ -584,7 +584,7 @@ export default function ParticipantPage() {
           selectedEvent={selectedEvent}
           raceDisplayName={raceDisplayName}
           participantResultsUrl={participantResultsUrl}
-          results={results}
+          results={[...results.finishers, ...results.nonFinishers]}
           userPhoto={userPhoto}
           triggerCamera={triggerCamera}
           triggerGallery={triggerGallery}
