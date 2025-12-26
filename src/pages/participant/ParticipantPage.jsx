@@ -1,10 +1,11 @@
 // src/pages/participant/ParticipantPage.jsx
-// MAIN PARTICIPANT PAGE — Fully Fixed with Photo Upload + Perfect Card Preview
+// COMPLETE FINAL VERSION — Fixed View Division Link + Pace Display in Splits
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
-import { RaceContext } from '../../context/RaceContext';
-import { supabase } from '../../supabaseClient';
-import { formatChronoTime, parseChipTime } from '../../utils/timeUtils';
+import { RaceContext } from '../context/RaceContext';
+import { supabase } from '../supabaseClient';
+import { useLocalStorage } from '../utils/useLocalStorage';
+import { formatChronoTime, parseChipTime } from '../utils/timeUtils';
 import CountUp from 'react-countup';
 import confetti from 'canvas-confetti';
 import ResultCardPreviewModal from './ResultCardPreviewModal';
@@ -45,7 +46,7 @@ export default function ParticipantPage() {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
 
-  // Photo upload state and ref
+  // Photo upload state
   const [userPhoto, setUserPhoto] = useState(null);
   const photoInputRef = useRef(null);
 
@@ -123,7 +124,7 @@ export default function ParticipantPage() {
 
   const removePhoto = () => setUserPhoto(null);
 
-  // Load participant data
+  // Load participant
   useEffect(() => {
     const loadParticipant = async () => {
       if (participant && selectedEvent && results.finishers.length > 0) {
@@ -439,8 +440,9 @@ export default function ParticipantPage() {
                                 </span>
                               ) : '—'}
                             </td>
+                            {/* FIXED: Use split.pace directly — it's already formatted */}
                             <td className="px-6 py-5 text-center text-gray-700">
-                              {formatChronoTime(split.pace) || '—'}
+                              {split.pace || '—'}
                             </td>
                           </tr>
                         );
@@ -574,8 +576,6 @@ export default function ParticipantPage() {
           onClose={() => setShowCardPreview(false)}
           participant={participant}
           selectedEvent={selectedEvent}
-          masterLogo={masterLogo}
-          bibLogo={bibLogo}
           raceDisplayName={raceDisplayName}
           participantResultsUrl={participantResultsUrl}
           results={results}
@@ -583,8 +583,8 @@ export default function ParticipantPage() {
           triggerCamera={triggerCamera}
           triggerGallery={triggerGallery}
           removePhoto={removePhoto}
-          masterLogo={masterLogo}   // ← Add this
-          bibLogo={bibLogo}         // ← Add this
+          masterLogo={masterLogo}
+          bibLogo={bibLogo}
         />
 
         {/* Email Results Form */}
