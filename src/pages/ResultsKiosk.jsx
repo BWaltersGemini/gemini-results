@@ -1,6 +1,5 @@
 // src/pages/ResultsKiosk.jsx
-// FINAL – All Features: Correct Ordinals, Event Search, Email Opt-In, iPad Safe
-
+// FINAL – Accurate per-race totals + Race Name highlighted + clearer opt-in
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Confetti from 'react-confetti';
@@ -63,7 +62,7 @@ export default function ResultsKiosk() {
     return `https://gemini-results.vercel.app/results/${slug}/${year}`;
   };
 
-  // Robust ordinal function – used everywhere
+  // Robust ordinal function
   const ordinal = (n) => {
     if (!n) return '—';
     const s = ['th', 'st', 'nd', 'rd'];
@@ -97,13 +96,11 @@ export default function ResultsKiosk() {
     }
     const term = query.trim();
     const lowerTerm = term.toLowerCase();
-
     const found = allParticipants.filter((r) => {
       if (r.bib && r.bib.toString() === term) return true;
       const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
       return fullName.includes(lowerTerm);
     });
-
     if (found.length === 1) {
       setParticipant(found[0]);
       setMatches([]);
@@ -130,7 +127,6 @@ export default function ResultsKiosk() {
   // Countdown – paused when email form open
   useEffect(() => {
     if (countdown === null || showEmailForm) return;
-
     const interval = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -141,7 +137,6 @@ export default function ResultsKiosk() {
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(interval);
   }, [countdown, showEmailForm]);
 
@@ -163,20 +158,31 @@ export default function ResultsKiosk() {
     document.getElementById('kiosk-search-input')?.focus();
   };
 
-  // Email sending with full branded template
+  // Email sending with accurate per-race totals and highlighted race name
   const sendEmail = async () => {
     if (!email || !optIn) return;
-
     setEmailStatus('sending');
 
     const fullName = `${participant.first_name} ${participant.last_name}`.trim() || 'Champion';
     const eventName = getEventDisplayName();
     const raceName = participant.race_name || eventName;
+
     const raceStory = getRaceStory(participant.splits || [], participant.place);
 
-    const totalFinishers = allParticipants.length;
-    const genderCount = allParticipants.filter(r => r.gender === participant.gender).length;
-    const divisionCount = allParticipants.filter(r => r.age_group_name === participant.age_group_name).length;
+    // === Accurate per-race totals ===
+    const participantRaceName = participant.race_name || raceName;
+
+    const raceResults = allParticipants.filter(
+      r => (r.race_name || raceName) === participantRaceName
+    );
+
+    const raceFinishers = raceResults.filter(
+      r => r.chip_time && r.chip_time.trim() !== ''
+    );
+
+    const totalFinishers = raceResults.length;
+    const genderCount = raceFinishers.filter(r => r.gender === participant.gender).length;
+    const divisionCount = raceFinishers.filter(r => r.age_group_name === participant.age_group_name).length;
 
     const baseUrl = window.location.origin;
 
@@ -196,11 +202,13 @@ export default function ResultsKiosk() {
               <tr>
                 <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
                   <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
-                  <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">${fullName}</h2>
-                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
+                  <h2 style="font-size:36px; font-weight:700; margin:0 0 12px; color:#ffffff;">${fullName}</h2>
+                  <!-- Race Name Highlighted -->
+                  <p style="font-size:32px; font-weight:800; margin:0 0 24px; color:#FFD700; line-height:1.2;">${raceName}</p>
+                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the finish line!</p>
                   <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
                   <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
-                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
+                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace || '—'}</p>
                 </td>
               </tr>
               <!-- Stats Section -->
@@ -289,11 +297,10 @@ export default function ResultsKiosk() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: [email],
-          subject: `${fullName.split(' ')[0]}, You Absolutely Crushed ${eventName}!`,
+          subject: `${fullName.split(' ')[0]}, You Crushed the ${raceName}!`,
           html: brandedHtml,
         }),
       });
-
       if (res.ok) {
         setEmailStatus('success');
         setTimeout(() => {
@@ -316,7 +323,6 @@ export default function ResultsKiosk() {
   // Exit protection
   useEffect(() => {
     if (stage !== 'kiosk') return;
-
     const preventBack = (e) => {
       e.preventDefault();
       const confirmed = window.confirm('Are you sure you want to leave kiosk mode?');
@@ -326,17 +332,14 @@ export default function ResultsKiosk() {
         window.history.pushState(null, '', window.location.href);
       }
     };
-
     const preventUnload = (e) => {
       e.preventDefault();
       e.returnValue = 'Are you sure you want to leave kiosk mode?';
       return 'Are you sure you want to leave kiosk mode?';
     };
-
     window.history.pushState(null, '', window.location.href);
     window.addEventListener('popstate', preventBack);
     window.addEventListener('beforeunload', preventUnload);
-
     return () => {
       window.removeEventListener('popstate', preventBack);
       window.removeEventListener('beforeunload', preventUnload);
@@ -390,14 +393,11 @@ export default function ResultsKiosk() {
       .filter((event) =>
         event.name?.toLowerCase().includes(eventSearchTerm.toLowerCase())
       );
-
     return (
       <div className="fixed inset-0 bg-bg-light flex flex-col">
         <div className="bg-brand-turquoise text-white p-6 text-center shadow-2xl">
           <h1 className="text-4xl font-black">Select Event</h1>
         </div>
-
-        {/* Search Bar */}
         <div className="px-6 pt-6 pb-4">
           <input
             type="text"
@@ -408,7 +408,6 @@ export default function ResultsKiosk() {
             autoFocus
           />
         </div>
-
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {sortedEvents.length === 0 ? (
             <div className="text-center py-20">
@@ -423,7 +422,6 @@ export default function ResultsKiosk() {
                   masterGroups[k]?.includes(String(event.id))
                 );
                 const eventLogo = eventMasterKey ? eventLogos[eventMasterKey] : null;
-
                 return (
                   <button
                     key={event.id}
@@ -477,7 +475,7 @@ export default function ResultsKiosk() {
           <p className="text-xl mt-1 opacity-90">Finish Line Kiosk</p>
         </div>
 
-        {/* QR Code – Small & Top-Left */}
+        {/* QR Code */}
         {participant && typeof participant === 'object' && (
           <div className="fixed top-2 left-2 z-40 bg-white p-3 rounded-2xl shadow-2xl border-4 border-brand-turquoise">
             <div className="w-28 h-28">
@@ -528,7 +526,7 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Multiple Matches – Shows Race Name */}
+        {/* Multiple Matches */}
         {matches.length > 0 && (
           <div className="w-full max-w-4xl z-10 mt-6">
             <p className="text-4xl text-center mb-8 font-black drop-shadow-2xl">Tap Your Name</p>
@@ -564,25 +562,22 @@ export default function ResultsKiosk() {
           </div>
         )}
 
-        {/* Athlete Result Card – Shows Race Name + Correct Ordinals */}
+        {/* Athlete Result Card */}
         {participant && typeof participant === 'object' && (
           <div className="bg-white/96 backdrop-blur-xl text-brand-dark rounded-3xl shadow-2xl p-8 max-w-3xl w-full text-center border-6 border-brand-turquoise z-10 mt-4">
             <div className="text-7xl font-black text-brand-red mb-4 drop-shadow-lg">
               #{ordinal(participant.place || '—')}
             </div>
-
             <h2 className="text-4xl font-black mb-2">
               {participant.first_name} {participant.last_name}
             </h2>
-
+            {/* Race Name Prominently Displayed */}
             {participant.race_name && (
-              <p className="text-2xl font-medium text-brand-turquoise mb-4">
+              <p className="text-3xl font-bold text-brand-turquoise mb-6 drop-shadow-md">
                 {participant.race_name}
               </p>
             )}
-
             <p className="text-2xl text-text-muted mb-6">Bib #{participant.bib}</p>
-
             <div className="grid grid-cols-2 gap-6 text-2xl mb-8">
               <div className="bg-brand-red/15 rounded-3xl py-6 shadow-lg">
                 <div className="font-black text-brand-red text-4xl">
@@ -592,12 +587,11 @@ export default function ResultsKiosk() {
               </div>
               <div className="bg-brand-red/10 rounded-3xl py-6 shadow-lg">
                 <div className="font-black text-brand-dark text-4xl">
-                  {participant.pace ? formatChronoTime(participant.pace) : '—'}
+                  {participant.pace || '—'}
                 </div>
                 <div className="text-text-muted mt-2 text-lg">Pace</div>
               </div>
             </div>
-
             <div className="text-xl space-y-3 mb-8">
               <p><strong>Gender Place:</strong> {ordinal(participant.gender_place)} {participant.gender}</p>
               {participant.age_group_place && (
@@ -608,13 +602,13 @@ export default function ResultsKiosk() {
               )}
             </div>
 
-            {/* Email My Stats – Inline */}
+            {/* Email My Stats */}
             <div className="mt-6">
               {!showEmailForm ? (
                 <button
                   onClick={() => {
                     setShowEmailForm(true);
-                    setCountdown(null);
+                    setCountdown(null); // Pause countdown
                   }}
                   className="px-20 py-8 bg-brand-turquoise text-white text-3xl font-black rounded-full hover:scale-105 transition shadow-2xl"
                 >
@@ -639,17 +633,20 @@ export default function ResultsKiosk() {
                       {emailStatus === 'sending' ? 'Sending...' : 'Send Email'}
                     </button>
                   </div>
-
-                  <label className="flex items-center justify-center gap-4 text-lg">
+                  {/* Clearer Opt-In Text */}
+                  <label className="flex items-start justify-center gap-4 text-lg cursor-pointer max-w-md mx-auto">
                     <input
                       type="checkbox"
                       checked={optIn}
                       onChange={(e) => setOptIn(e.target.checked)}
-                      className="w-6 h-6 text-brand-turquoise rounded focus:ring-brand-turquoise"
+                      className="mt-1 w-6 h-6 text-brand-turquoise rounded focus:ring-brand-turquoise flex-shrink-0"
                     />
-                    <span>Yes, send me future race updates from Gemini Timing</span>
+                    <span className="leading-tight text-left">
+                      <strong className="text-brand-turquoise">✓ Yes, I'd like to receive my results email</strong>
+                      <br />
+                      <span className="text-gray-600 text-base">and occasional race updates from Gemini Timing</span>
+                    </span>
                   </label>
-
                   <div className="text-center">
                     <button
                       onClick={resetToSearch}
@@ -658,7 +655,6 @@ export default function ResultsKiosk() {
                       Cancel
                     </button>
                   </div>
-
                   {emailStatus === 'success' && (
                     <p className="text-green-600 text-2xl font-bold animate-pulse">✓ Email sent! Returning to search...</p>
                   )}
