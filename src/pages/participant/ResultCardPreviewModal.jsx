@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL OPTIMIZED — Tight preview spacing + smaller event name + geminitiming.com footer
+// FINAL — Footer moved up ~1/16 inch in preview only
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -92,12 +92,12 @@ export default function ResultCardPreviewModal({
   const ResultCardContent = ({ isPreview = false }) => {
     const baseClasses = 'bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center text-white';
     const containerClass = isPreview 
-      ? `${baseClasses} px-3 pt-4 pb-6` 
+      ? `${baseClasses} px-3 pt-4 pb-4`   // ← Reduced bottom padding (was pb-6)
       : `${baseClasses} px-8 pt-6 pb-10`;
 
     const textSize = isPreview
       ? {
-          event: 'text-xl',     // ← Shrunk from text-2xl
+          event: 'text-xl',
           race: 'text-base',
           date: 'text-xs',
           name: userPhoto ? 'text-2xl' : 'text-3xl',
@@ -105,7 +105,7 @@ export default function ResultCardPreviewModal({
           time: 'text-4xl',
           statLabel: 'text-xs',
           statNum: 'text-xl',
-          statOf: 'text-2xs',   // very small for "of X"
+          statOf: 'text-2xs',
           footer: 'text-xs'
         }
       : {
@@ -162,7 +162,7 @@ export default function ResultCardPreviewModal({
           </p>
         </div>
 
-        {/* Stats Grid - Tighter */}
+        {/* Stats Grid */}
         <div className={`grid grid-cols-3 gap-${isPreview ? '3' : '10'} w-full max-w-${isPreview ? 'xs' : '4xl'} text-white`}>
           <div>
             <p className={`${textSize.statLabel} text-gray-400 uppercase mb-1`}>Overall</p>
@@ -181,8 +181,8 @@ export default function ResultCardPreviewModal({
           </div>
         </div>
 
-        {/* Updated Footer */}
-        <p className={`${textSize.footer} italic mt-auto pt-${isPreview ? '4' : '8'}`}>
+        {/* Footer — moved up in preview */}
+        <p className={`${textSize.footer} italic mt-auto pt-${isPreview ? '2' : '8'}`}>
           Find your next race at www.geminitiming.com
         </p>
       </div>
@@ -198,7 +198,7 @@ export default function ResultCardPreviewModal({
         </div>
       </div>
 
-      {/* Modal with Optimized Preview */}
+      {/* Modal with refined preview spacing */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 relative my-8" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 text-4xl text-gray-600 hover:text-gray-900">
@@ -207,7 +207,7 @@ export default function ResultCardPreviewModal({
 
           <h3 className="text-3xl font-bold text-center mb-6">Your Result Card 🎉</h3>
 
-          {/* Tight Live Preview */}
+          {/* Preview with better bottom breathing room */}
           <div className="mb-8 flex justify-center">
             <div className="w-full max-w-sm aspect-square rounded-3xl overflow-hidden shadow-2xl">
               <ResultCardContent isPreview={true} />
@@ -234,7 +234,7 @@ export default function ResultCardPreviewModal({
             </div>
           </div>
 
-          {/* Buttons */}
+          {/* Action Buttons */}
           <div className="flex flex-col gap-4">
             <button onClick={generateAndDownload} className="w-full py-4 bg-primary text-white font-bold text-lg rounded-full hover:opacity-90 shadow-lg transition">
               {isMobile ? 'Save to Photos' : 'Download Card'}
