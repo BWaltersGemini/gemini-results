@@ -1,5 +1,5 @@
 // src/pages/participant/EmailResultsForm.jsx
-// FINAL — Accurate per-race totals in email + geminitiming.com
+// FINAL — Race name highlighted + clearer opt-in text
 import { useState } from 'react';
 import { formatChronoTime } from '../../utils/timeUtils';
 
@@ -9,7 +9,7 @@ export default function EmailResultsForm({
   participant,
   selectedEvent,
   raceDisplayName,
-  results, // ← Add this prop: full results array for the event
+  results, // Full results array for accurate totals
 }) {
   const [email, setEmail] = useState('');
   const [optIn, setOptIn] = useState(false);
@@ -22,20 +22,17 @@ export default function EmailResultsForm({
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
   };
 
-  // === Calculate accurate per-race totals ===
+  // Accurate per-race totals
   const participantRaceName = participant.race_name || raceDisplayName || 'Overall';
-
-  const allResults = results || []; // Safety fallback
-
+  const allResults = results || [];
   const raceResults = allResults.filter(
     r => (r.race_name || raceDisplayName) === participantRaceName
   );
-
   const raceFinishers = raceResults.filter(
     r => r.chip_time && r.chip_time.trim() !== ''
   );
 
-  const totalFinishers = raceResults.length; // All entrants in this race
+  const totalFinishers = raceResults.length;
   const genderCount = raceFinishers.filter(r => r.gender === participant.gender).length;
   const divisionCount = raceFinishers.filter(r => r.age_group_name === participant.age_group_name).length;
 
@@ -48,7 +45,6 @@ export default function EmailResultsForm({
     const eventName = selectedEvent.name;
     const raceName = raceDisplayName;
 
-    // Simple race story placeholder — can be enhanced later with splits logic
     const raceStory = "Strong, steady performance throughout!";
 
     const baseUrl = window.location.origin;
@@ -70,14 +66,16 @@ export default function EmailResultsForm({
               <tr>
                 <td align="center" style="background:#263238; color:#ffffff; padding:60px 20px;">
                   <h1 style="font-size:48px; font-weight:900; margin:0 0 20px; color:#ffffff; line-height:1.2;">CONGRATULATIONS!</h1>
-                  <h2 style="font-size:36px; font-weight:700; margin:0 0 16px; color:#ffffff;">${fullName}</h2>
-                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
+                  <h2 style="font-size:36px; font-weight:700; margin:0 0 12px; color:#ffffff;">${fullName}</h2>
+                  <!-- NEW: Race Name prominently displayed -->
+                  <p style="font-size:32px; font-weight:800; margin:0 0 24px; color:#FFD700; line-height:1.2;">${raceName}</p>
+                  <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the finish line!</p>
                   <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
                   <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
                   <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? participant.pace : '—'}</p>
                 </td>
               </tr>
-              <!-- Stats Section -->
+              <!-- Stats Section (unchanged — already using accurate totals) -->
               <tr>
                 <td style="padding:50px 30px; background:#F0F8FF;">
                   <table width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -112,7 +110,7 @@ export default function EmailResultsForm({
                   </table>
                 </td>
               </tr>
-              <!-- Race Story -->
+              <!-- Race Story, CTAs, Footer unchanged -->
               <tr>
                 <td align="center" style="padding:40px 30px;">
                   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;">
@@ -126,7 +124,6 @@ export default function EmailResultsForm({
                   </table>
                 </td>
               </tr>
-              <!-- CTAs -->
               <tr>
                 <td align="center" style="padding:40px 30px; background:#F0F8FF;">
                   <p style="margin:0 0 20px;">
@@ -141,7 +138,6 @@ export default function EmailResultsForm({
                   </p>
                 </td>
               </tr>
-              <!-- Footer -->
               <tr>
                 <td align="center" style="background:#263238; color:#aaaaaa; padding:40px 20px;">
                   <p style="font-size:18px; margin:0 0 12px; color:#ffffff;">— The Gemini Timing Team</p>
@@ -156,13 +152,14 @@ export default function EmailResultsForm({
         </tr>
       </table>
     `;
+
     try {
       const res = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: [email],
-          subject: `${fullName.split(' ')[0]}, Your Official ${eventName} Results!`,
+          subject: `${fullName.split(' ')[0]}, Your Official ${raceName} Results!`,
           html: brandedHtml,
         }),
       });
@@ -192,26 +189,31 @@ export default function EmailResultsForm({
           className="w-full px-6 py-4 text-xl rounded-full border-2 border-gray-300 focus:border-primary focus:outline-none mb-6"
           autoFocus
         />
-        <label className="flex items-center gap-4 text-lg mb-8">
+        {/* IMPROVED OPT-IN TEXT */}
+        <label className="flex items-start gap-4 text-lg mb-8 cursor-pointer">
           <input
             type="checkbox"
             checked={optIn}
             onChange={(e) => setOptIn(e.target.checked)}
-            className="w-6 h-6 text-primary rounded focus:ring-primary"
+            className="mt-1 w-6 h-6 text-primary rounded focus:ring-primary flex-shrink-0"
           />
-          <span>Yes, send me future race updates from Gemini Timing</span>
+          <span className="leading-tight">
+            <strong className="text-primary">✓ Yes, I'd like to receive my results email</strong>
+            <br />
+            <span className="text-gray-600">and occasional race updates from Gemini Timing</span>
+          </span>
         </label>
         <div className="flex justify-center gap-6">
           <button
             onClick={sendEmail}
             disabled={!email || !optIn || emailStatus === 'sending'}
-            className="px-12 py-5 bg-primary text-white font-bold text-xl rounded-full disabled:opacity-60 shadow-xl"
+            className="px-12 py-5 bg-primary text-white font-bold text-xl rounded-full disabled:opacity-60 shadow-xl transition"
           >
             {emailStatus === 'sending' ? 'Sending...' : 'Send Results'}
           </button>
           <button
             onClick={onClose}
-            className="px-12 py-5 bg-gray-500 text-white font-bold text-xl rounded-full hover:bg-gray-600 shadow-xl"
+            className="px-12 py-5 bg-gray-500 text-white font-bold text-xl rounded-full hover:bg-gray-600 shadow-xl transition"
           >
             Cancel
           </button>
