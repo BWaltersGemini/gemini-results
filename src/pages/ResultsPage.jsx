@@ -7,6 +7,7 @@ import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import ResultsTable from '../components/ResultsTable';
 import { RaceContext } from '../context/RaceContext';
+import { formatChronoTime } from '../utils/timeUtils'; // ← This fixes the crash
 
 export default function ResultsPage() {
   const navigate = useNavigate();
