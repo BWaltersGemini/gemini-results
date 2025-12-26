@@ -6,12 +6,9 @@
 // • Safe bracket fetching
 // • Batched entry_status calls
 // • Stores BOTH finishers and DNFs in Supabase
-// • Detects "STARTED" athletes (crossed start mat, no splits/finish yet)
-// • STARTED athletes included in nonFinishers for search visibility
-// • event_id now correctly added to every participant (fixes Supabase upsert)
 
 import axios from 'axios';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabaseClient'; // ← Critical import
 
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
 const PROXY_BASE = '/chrono-api';
@@ -31,7 +28,6 @@ const fetchAccessToken = async () => {
     }
 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
-
     const response = await axios.get(`${PROXY_BASE}/oauth2/token`, {
       headers: { Authorization: `Basic ${basicAuth}` },
       params: {
@@ -85,6 +81,7 @@ export const fetchEvents = async () => {
 
     const events = response.data.event || [];
     console.log(`[ChronoTrack Direct] Fetched ${events.length} events in one call`);
+
     return events.map(event => ({
       id: event.event_id,
       name: event.event_name,
@@ -116,6 +113,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
   let page = 1;
   const pageSize = 1000;
   const maxPages = 50;
+
   const seenKeys = new Set();
 
   while (page <= maxPages) {
@@ -131,6 +129,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
       });
 
       const results = res.data.bracket_results || [];
+
       if (results.length === 0) break;
 
       const newResults = [];
@@ -143,6 +142,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
       }
 
       allResults.push(...newResults);
+
       console.log(`[ChronoTrack] ${bracketName} (page ${page}) → +${newResults.length} new unique (total: ${allResults.length}) from ${raceName}`);
 
       if (results.length < pageSize) break;
@@ -150,6 +150,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
         console.warn(`[ChronoTrack] Hit maxPages (${maxPages}) for ${bracketName}`);
         break;
       }
+
       page++;
     } catch (err) {
       console.warn(`[ChronoTrack] Failed page ${page} for ${bracketName}`, err.message || err);
@@ -166,10 +167,12 @@ const fetchEntryStatusesInBatches = async (entryIds) => {
   const statuses = {};
   const batchSize = 50;
   const delayMs = 600;
+
   let processed = 0;
 
   for (let i = 0; i < entryIds.length; i += batchSize) {
     const batch = entryIds.slice(i, i + batchSize);
+
     const batchPromises = batch.map(async (entryId) => {
       try {
         const authHeader = await getAuthHeader();
@@ -242,13 +245,11 @@ export const fetchResultsForEvent = async (eventId) => {
   const divisionBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' && ['AGE', 'OTHER'].includes(b.bracket_type)
   );
-
   const genderBrackets = allBrackets.filter(b =>
     b.bracket_wants_leaderboard === '1' &&
     b.bracket_type === 'SEX' &&
     /^(Male|Female)$/i.test(b.bracket_name?.trim() || '')
   );
-
   const overallBrackets = allBrackets.filter(b => {
     const name = (b.bracket_name || '').toLowerCase();
     return b.bracket_wants_leaderboard === '1' && (name.includes('overall') || name.includes('all participants'));
@@ -258,7 +259,6 @@ export const fetchResultsForEvent = async (eventId) => {
   let rawIntervalResults = [];
   let page = 1;
   const maxPages = 40;
-
   try {
     while (page <= maxPages) {
       const res = await axios.get(`${PROXY_BASE}/api/event/${eventId}/results`, {
@@ -270,12 +270,9 @@ export const fetchResultsForEvent = async (eventId) => {
           interval: 'ALL',
         },
       });
-
       const results = res.data.event_results || [];
       if (results.length === 0) break;
-
       rawIntervalResults = [...rawIntervalResults, ...results];
-
       if (results.length < 500) break;
       page++;
     }
@@ -295,12 +292,14 @@ export const fetchResultsForEvent = async (eventId) => {
   const genderPlaces = {};
   const divisionPlaces = {};
 
-  // Process brackets (unchanged)
+  // Process brackets (same safe logic)
   for (const bracket of genderBrackets) {
     const name = (bracket.bracket_name || '').trim() || 'Unnamed Gender';
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `GENDER "${name}"`, raceName);
+
     bracketResults.forEach(r => {
       const key = getLookupKey(r);
       if (key && r.results_rank && r.results_interval_full === '1') {
@@ -314,9 +313,12 @@ export const fetchResultsForEvent = async (eventId) => {
     if (!name) continue;
     const lowerName = name.toLowerCase();
     if (lowerName.includes('overall') || lowerName.includes('all participants')) continue;
+
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `DIVISION "${name}"`, raceName);
+
     bracketResults.forEach(r => {
       const key = getLookupKey(r);
       if (key && r.results_rank && r.results_interval_full === '1') {
@@ -330,9 +332,12 @@ export const fetchResultsForEvent = async (eventId) => {
     const name = (bracket.bracket_name || '').trim();
     const raceId = bracket.race_id || 'unknown';
     const raceName = races.find(r => r.race_id === raceId)?.race_name || 'Unknown Race';
+
     const bracketResults = await fetchAllBracketResults(bracket.bracket_id, `OVERALL "${name}"`, raceName);
+
     bracketResults.forEach(r => {
       if (r.results_interval_full !== '1') return;
+
       const key = getLookupKey(r);
       if (key && r.results_rank) {
         const rank = parseInt(r.results_rank, 10);
@@ -348,12 +353,14 @@ export const fetchResultsForEvent = async (eventId) => {
   rawIntervalResults.forEach(row => {
     const entryId = row.results_entry_id;
     if (!entryId) return;
+
     if (!participantsByEntry[entryId]) {
       participantsByEntry[entryId] = {
         fullCourse: null,
         intervals: [],
       };
     }
+
     if (row.results_interval_full === '1') {
       participantsByEntry[entryId].fullCourse = row;
     } else {
@@ -364,6 +371,7 @@ export const fetchResultsForEvent = async (eventId) => {
 
   const candidates = Object.values(participantsByEntry).filter(p => p.fullCourse !== null);
   const entryIds = candidates.map(p => p.fullCourse.results_entry_id).filter(Boolean);
+
   const entryStatuses = await fetchEntryStatusesInBatches(entryIds);
 
   const finishers = [];
@@ -372,16 +380,7 @@ export const fetchResultsForEvent = async (eventId) => {
   candidates.forEach(p => {
     const r = p.fullCourse;
     const entryId = r.results_entry_id;
-    let status = entryStatuses[entryId] || 'FIN';
-
-    // Detect "Started but no splits/finish yet"
-    const hasStarted = r.results_begin_chip_time && parseFloat(r.results_begin_chip_time) > 0;
-    const hasFinished = r.results_end_chip_time && parseFloat(r.results_end_chip_time) > 0;
-    const hasSplits = p.intervals.length > 0;
-
-    if (hasStarted && !hasFinished && !hasSplits) {
-      status = 'STARTED';
-    }
+    const status = entryStatuses[entryId] || 'FIN';
 
     const lookupKey = getLookupKey(r);
     const divInfo = lookupKey ? divisionPlaces[lookupKey] : null;
@@ -409,7 +408,6 @@ export const fetchResultsForEvent = async (eventId) => {
     }));
 
     const participant = {
-      event_id: eventId, // ← FIXED: now included
       first_name: r.results_first_name || '',
       last_name: r.results_last_name || '',
       chip_time: r.results_time || '',
@@ -432,15 +430,10 @@ export const fetchResultsForEvent = async (eventId) => {
       _status: status,
     };
 
-    // Include STARTED athletes in nonFinishers for search visibility
-    if (['DNF', 'DQ', 'STARTED'].includes(status)) {
+    if (['DNF', 'DQ'].includes(status)) {
       participant.place = null;
       participant.gender_place = null;
       participant.age_group_place = null;
-
-      participant.chip_time = participant.chip_time || '';
-      participant.race_name = participant.race_name || 'Unknown Race';
-
       nonFinishers.push(participant);
     } else {
       finishers.push(participant);
@@ -464,10 +457,11 @@ export const fetchResultsForEvent = async (eventId) => {
     if (error) {
       console.error('[ChronoTrack] Upsert failed:', error);
     } else {
-      console.log(`[ChronoTrack] Stored ${finishers.length} finishers + ${nonFinishers.length} non-finishers (incl. STARTED) in Supabase`);
+      console.log(`[ChronoTrack] Stored ${finishers.length} finishers + ${nonFinishers.length} DNF/DQ in Supabase`);
     }
   }
 
-  console.log(`[ChronoTrack] Final: ${finishers.length} finishers | ${nonFinishers.length} non-finishers (incl. STARTED)`);
+  console.log(`[ChronoTrack] Final: ${finishers.length} finishers | ${nonFinishers.length} DNF/DQ`);
+
   return { finishers, nonFinishers };
 };
