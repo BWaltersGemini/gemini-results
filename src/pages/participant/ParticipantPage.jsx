@@ -1,11 +1,11 @@
-// src/pages/participant/ParticipantPage.jsx
-// COMPLETE FINAL VERSION — Fixed View Division Link + Pace Display in Splits
+// src/pages/ParticipantPage.jsx
+// COMPLETE FINAL VERSION — Fixed View Division Link + Removed invalid formatChronoTime
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../context/RaceContext';
 import { supabase } from '../supabaseClient';
 import { useLocalStorage } from '../utils/useLocalStorage';
-import { formatChronoTime, parseChipTime } from '../utils/timeUtils';
+import { parseChipTime } from '../utils/timeUtils'; // ← Removed formatChronoTime (doesn't exist)
 import CountUp from 'react-countup';
 import confetti from 'canvas-confetti';
 import ResultCardPreviewModal from './ResultCardPreviewModal';
@@ -16,6 +16,7 @@ export default function ParticipantPage() {
   const navigate = useNavigate();
   const params = useParams();
   const { bib } = params;
+
   const {
     events = [],
     selectedEvent: contextSelectedEvent,
@@ -49,7 +50,6 @@ export default function ParticipantPage() {
   // Photo upload state
   const [userPhoto, setUserPhoto] = useState(null);
   const photoInputRef = useRef(null);
-
   const participantResultsUrl = window.location.href;
 
   // Fetch upcoming events
@@ -94,7 +94,6 @@ export default function ParticipantPage() {
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
@@ -156,17 +155,22 @@ export default function ParticipantPage() {
         }
         if (!targetEvent) throw new Error('Event not found');
         setSelectedEvent(targetEvent);
+
         const { data: fetchedResults, error } = await supabase
           .from('chronotrack_results')
           .select('*')
           .eq('event_id', targetEvent.id);
+
         if (error) throw error;
+
         const finishers = fetchedResults?.filter(r => r.chip_time && r.chip_time.trim() !== '') || [];
         const nonFinishers = fetchedResults?.filter(r => !r.chip_time || r.chip_time.trim() === '') || [];
         setResults({ finishers, nonFinishers });
+
         const found = fetchedResults?.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found');
         setParticipant(found);
+
         confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
       } catch (err) {
         console.error('[ParticipantPage] Load error:', err);
@@ -182,11 +186,13 @@ export default function ParticipantPage() {
 
   const handleDivisionClick = () => {
     if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
+
     let masterSlug = 'overall';
     const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
+
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`, {
       state: { divisionFilter: participant.age_group_name, highlightBib: participant.bib },
@@ -199,6 +205,7 @@ export default function ParticipantPage() {
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
+
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`, { state: { highlightBib: participant.bib } });
   };
@@ -213,6 +220,7 @@ export default function ParticipantPage() {
       ids.includes(selectedEvent.id.toString())
     );
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
+
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
@@ -248,9 +256,11 @@ export default function ParticipantPage() {
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
   const chipTimeSeconds = parseChipTime(participant.chip_time);
+
   const currentMasterKey = Object.keys(masterGroups).find(key => masterGroups[key]?.includes(selectedEvent?.id?.toString()));
   const masterLogo = currentMasterKey ? eventLogos[currentMasterKey] : null;
   const bibLogo = eventLogos[selectedEvent.id] || '/GRR.png';
+
   const isTop10Percent = participant.place && overallTotal > 10 && participant.place <= Math.ceil(overallTotal * 0.1);
   const isAgeGroupWinner = participant.age_group_place === 1;
 
@@ -350,7 +360,7 @@ export default function ParticipantPage() {
           <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl p-10 shadow-2xl text-center">
             <p className="text-xl uppercase text-gray-600 tracking-wider mb-6">OFFICIAL TIME</p>
             <p className="text-7xl font-black text-primary leading-tight">
-              {timeRevealed ? formatChronoTime(participant.chip_time) : (
+              {timeRevealed ? participant.chip_time : (
                 <CountUp
                   start={0}
                   end={chipTimeSeconds}
@@ -428,7 +438,7 @@ export default function ParticipantPage() {
                               {split.name}
                             </td>
                             <td className="px-6 py-5 text-center font-medium text-brand-dark">
-                              {formatChronoTime(split.time) || '—'}
+                              {split.time || '—'} {/* ← Fixed: Use raw time string */}
                             </td>
                             <td className="px-6 py-5 text-center font-bold text-brand-dark">
                               {split.place ? `#${split.place}` : '—'}
@@ -440,7 +450,6 @@ export default function ParticipantPage() {
                                 </span>
                               ) : '—'}
                             </td>
-                            {/* FIXED: Use split.pace directly — it's already formatted */}
                             <td className="px-6 py-5 text-center text-gray-700">
                               {split.pace || '—'}
                             </td>
