@@ -1,6 +1,6 @@
 // src/pages/ResultsPage.jsx
-// FINAL VERSION — Multi-athlete tracking with sessionStorage (fully persistent, no throttling)
-// All features intact, no redaction
+// FINAL VERSION — Multi-athlete tracking persists even after page refresh
+// Uses sessionStorage with event-specific key to survive refresh, back/forward, and tab navigation
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -32,34 +32,59 @@ export default function ResultsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [liveToast, setLiveToast] = useState(null);
 
-  // Multi-athlete tracking — stored in sessionStorage for full persistence
+  // Unique key for this specific event/year to avoid mixing tracked athletes across different races
+  const storageKey = `trackedBibs_${masterKey}_${year}`;
+
+  // Load tracked bibs from sessionStorage on mount
   const [trackedBibs, setTrackedBibs] = useState(() => {
-    const saved = sessionStorage.getItem('trackedBibs');
+    const saved = sessionStorage.getItem(storageKey);
     return saved ? JSON.parse(saved) : [];
   });
 
   // Save to sessionStorage whenever trackedBibs changes
   useEffect(() => {
     if (trackedBibs.length > 0) {
-      sessionStorage.setItem('trackedBibs', JSON.stringify(trackedBibs));
+      sessionStorage.setItem(storageKey, JSON.stringify(trackedBibs));
     } else {
-      sessionStorage.removeItem('trackedBibs');
+      sessionStorage.removeItem(storageKey);
     }
-  }, [trackedBibs]);
+  }, [trackedBibs, storageKey]);
 
-  // Optional: tie tracking to current event (clear when switching events)
+  // Handle incoming addToTracked from ParticipantPage "Track Me"
   useEffect(() => {
-    const currentEventId = selectedEvent?.id?.toString();
-    const savedEventId = sessionStorage.getItem('trackedEventId');
-
-    if (currentEventId && savedEventId && currentEventId !== savedEventId) {
-      setTrackedBibs([]);
-      sessionStorage.removeItem('trackedBibs');
-      sessionStorage.removeItem('trackedEventId');
-    } else if (currentEventId) {
-      sessionStorage.setItem('trackedEventId', currentEventId);
+    if (location.state?.addToTracked) {
+      const bibToAdd = String(location.state.addToTracked);
+      setTrackedBibs(prev => {
+        if (prev.includes(bibToAdd)) return prev;
+        if (prev.length >= 6) {
+          alert('Maximum of 6 athletes can be tracked at once.');
+          return prev;
+        }
+        return [...prev, bibToAdd];
+      });
+      // Clean up the navigation state flag
+      navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [selectedEvent]);
+
+    // Optional: auto-apply division filter from ParticipantPage
+    // if (location.state?.divisionFilter) {
+    //   setSelectedDivision(location.state.divisionFilter);
+    //   navigate(location.pathname, { replace: true, state: {} });
+    // }
+  }, [location.state, navigate, location.pathname]);
+
+  // Reset on master/year change (different race series)
+  useEffect(() => {
+    const currentKey = `${masterKey}_${year}`;
+    const savedKey = sessionStorage.getItem('lastTrackedEventKey');
+
+    if (savedKey && savedKey !== currentKey) {
+      setTrackedBibs([]);
+      sessionStorage.removeItem(storageKey);
+    }
+
+    sessionStorage.setItem('lastTrackedEventKey', currentKey);
+  }, [masterKey, year, storageKey]);
 
   // Filters
   const [selectedRaceId, setSelectedRaceId] = useState('all');
@@ -94,34 +119,10 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // ====================== INCOMING STATE FROM PARTICIPANT PAGE ======================
-  useEffect(() => {
-    if (location.state?.addToTracked) {
-      const bibToAdd = String(location.state.addToTracked);
-      setTrackedBibs(prev => {
-        if (prev.includes(bibToAdd)) return prev;
-        if (prev.length >= 6) {
-          alert('Maximum of 6 athletes can be tracked at once.');
-          return prev;
-        }
-        return [...prev, bibToAdd];
-      });
-      // Clean up navigation state
-      navigate(location.pathname, { replace: true, state: {} });
-    }
-
-    // Optional: auto-apply division filter (uncomment if desired)
-    // if (location.state?.divisionFilter) {
-    //   setSelectedDivision(location.state.divisionFilter);
-    //   navigate(location.pathname, { replace: true, state: {} });
-    // }
-  }, [location.state, navigate, location.pathname]);
-
-  // Reset on master series change
+  // Reset filters on master change
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
       setSearchQuery('');
-      setTrackedBibs([]);
       setSelectedRaceId('all');
       setSelectedDivision('all');
       setExpandedRaces({});
@@ -557,7 +558,7 @@ export default function ResultsPage() {
               <button
                 onClick={() => {
                   setTrackedBibs([]);
-                  sessionStorage.removeItem('trackedBibs');
+                  sessionStorage.removeItem(storageKey);
                 }}
                 className="px-10 py-4 bg-gray-600 text-white font-bold rounded-full hover:bg-gray-700 transition"
               >
