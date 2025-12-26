@@ -8,7 +8,7 @@ import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../../context/RaceContext';
 import { supabase } from '../../supabaseClient';
 import { useLocalStorage } from '../../utils/useLocalStorage';
-import { parseChipTime, formatChronoTime } from '../../utils/timeUtils'; // ← Both functions imported
+import { parseChipTime, formatChronoTime } from '../../utils/timeUtils'; // ← Both functions correctly imported
 import CountUp from 'react-countup';
 import confetti from 'canvas-confetti';
 import ResultCardPreviewModal from './ResultCardPreviewModal';
