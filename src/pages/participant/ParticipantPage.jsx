@@ -614,6 +614,7 @@ export default function ParticipantPage() {
           participant={participant}
           selectedEvent={selectedEvent}
           raceDisplayName={raceDisplayName}
+          results={allEventResults}
         />
       </div>
     </div>

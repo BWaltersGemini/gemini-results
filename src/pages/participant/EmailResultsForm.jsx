@@ -1,4 +1,5 @@
 // src/pages/participant/EmailResultsForm.jsx
+// FINAL — Accurate per-race totals in email + geminitiming.com
 import { useState } from 'react';
 import { formatChronoTime } from '../../utils/timeUtils';
 
@@ -8,6 +9,7 @@ export default function EmailResultsForm({
   participant,
   selectedEvent,
   raceDisplayName,
+  results, // ← Add this prop: full results array for the event
 }) {
   const [email, setEmail] = useState('');
   const [optIn, setOptIn] = useState(false);
@@ -20,20 +22,37 @@ export default function EmailResultsForm({
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
   };
 
+  // === Calculate accurate per-race totals ===
+  const participantRaceName = participant.race_name || raceDisplayName || 'Overall';
+
+  const allResults = results || []; // Safety fallback
+
+  const raceResults = allResults.filter(
+    r => (r.race_name || raceDisplayName) === participantRaceName
+  );
+
+  const raceFinishers = raceResults.filter(
+    r => r.chip_time && r.chip_time.trim() !== ''
+  );
+
+  const totalFinishers = raceResults.length; // All entrants in this race
+  const genderCount = raceFinishers.filter(r => r.gender === participant.gender).length;
+  const divisionCount = raceFinishers.filter(r => r.age_group_name === participant.age_group_name).length;
+
   const sendEmail = async () => {
     if (!email || !optIn) return;
+
     setEmailStatus('sending');
 
     const fullName = `${participant.first_name} ${participant.last_name}`.trim() || 'Champion';
     const eventName = selectedEvent.name;
-    const raceName = raceDisplayName; // ← Moved up
-    const raceStory = "Strong, steady performance throughout!"; // Placeholder — can enhance later
-    const totalFinishers = 1698; // Placeholder — ideally pass real numbers
-    const genderCount = 850;
-    const divisionCount = 120;
-    const baseUrl = window.location.origin;
+    const raceName = raceDisplayName;
 
-    const getResultsUrl = () => `${baseUrl}/results`; // Simplified
+    // Simple race story placeholder — can be enhanced later with splits logic
+    const raceStory = "Strong, steady performance throughout!";
+
+    const baseUrl = window.location.origin;
+    const getResultsUrl = () => `${baseUrl}/results`;
 
     const brandedHtml = `
       <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
@@ -55,7 +74,7 @@ export default function EmailResultsForm({
                   <p style="font-size:24px; margin:0 0 30px; color:#ffffff;">You conquered the ${raceName}!</p>
                   <p style="font-size:20px; margin:0 0 8px; color:#ffffff;">Official Chip Time</p>
                   <p style="font-size:56px; font-weight:900; margin:16px 0; color:#ffffff; line-height:1;">${formatChronoTime(participant.chip_time)}</p>
-                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? formatChronoTime(participant.pace) : '—'}</p>
+                  <p style="font-size:20px; margin:0; color:#ffffff;">Pace: ${participant.pace ? participant.pace : '—'}</p>
                 </td>
               </tr>
               <!-- Stats Section -->
@@ -137,7 +156,6 @@ export default function EmailResultsForm({
         </tr>
       </table>
     `;
-
     try {
       const res = await fetch('/api/send-email', {
         method: 'POST',
