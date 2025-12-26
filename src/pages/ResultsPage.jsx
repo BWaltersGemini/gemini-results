@@ -1,10 +1,5 @@
 // src/pages/ResultsPage.jsx
-// Complete, fully working version as of December 25, 2025
-// Features:
-// - Multi-athlete tracking (up to 6 athletes)
-// - Auto-applies division filter when coming from "View Division"
-// - formatChronoTime properly imported (no more crashes)
-// - All original features preserved
+// Complete, fully working version with PERSISTENT multi-athlete tracking (up to 6)
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -36,8 +31,8 @@ export default function ResultsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [liveToast, setLiveToast] = useState(null);
 
-  // Multi-athlete tracking — array of bib strings (max 6)
-  const [trackedBibs, setTrackedBibs] = useState([]);
+  // Persistent multi-athlete tracking — stored in navigation state
+  const [trackedBibs, setTrackedBibs] = useState(location.state?.trackedBibs || []);
 
   // Filters
   const [selectedRaceId, setSelectedRaceId] = useState('all');
@@ -72,9 +67,14 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // ====================== MULTI-TRACKING & AUTO FILTERS ======================
+  // ====================== PERSISTENT TRACKING & AUTO FILTERS ======================
   useEffect(() => {
-    // Add bib from ParticipantPage "Track Me"
+    // Restore from navigation state on mount
+    if (location.state?.trackedBibs) {
+      setTrackedBibs(location.state.trackedBibs);
+    }
+
+    // Add new bib from ParticipantPage "Track Me"
     if (location.state?.addToTracked) {
       const bibToAdd = String(location.state.addToTracked);
       setTrackedBibs(prev => {
@@ -83,17 +83,33 @@ export default function ResultsPage() {
           alert('Maximum of 6 athletes can be tracked at once.');
           return prev;
         }
-        return [...prev, bibToAdd];
+        const newList = [...prev, bibToAdd];
+        // Persist immediately
+        navigate(location.pathname, { 
+          replace: true, 
+          state: { ...location.state, trackedBibs: newList } 
+        });
+        return newList;
       });
-      // Clear navigation state to prevent re-trigger
-      navigate(location.pathname, { replace: true, state: {} });
     }
 
     // Auto-apply division filter from "View Division"
     if (location.state?.divisionFilter) {
       setSelectedDivision(location.state.divisionFilter);
+      // Clean up state after applying
+      navigate(location.pathname, { replace: true, state: { ...location.state, divisionFilter: undefined } });
     }
   }, [location.state, navigate, location.pathname]);
+
+  // Persist trackedBibs on every change
+  useEffect(() => {
+    if (trackedBibs.length > 0) {
+      navigate(location.pathname, {
+        replace: true,
+        state: { ...location.state, trackedBibs }
+      });
+    }
+  }, [trackedBibs, navigate, location.pathname, location.state]);
 
   // Reset everything when changing master series
   useEffect(() => {
@@ -173,7 +189,7 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Auto-scroll to tracked section when adding a new athlete
+  // Auto-scroll to tracked section when list changes
   useEffect(() => {
     if (trackedBibs.length > 0 && trackedSectionRef.current) {
       trackedSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -268,7 +284,8 @@ export default function ResultsPage() {
         results: {
           finishers: results.finishers,
           nonFinishers: results.nonFinishers
-        }
+        },
+        trackedBibs // Preserve tracking when going to participant page
       },
     });
   };
