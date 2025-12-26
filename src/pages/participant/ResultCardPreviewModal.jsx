@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL — Footer moved up ~1/16 inch in preview only
+// FINAL — Race-specific totals + optimized preview + geminitiming.com footer
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -11,7 +11,7 @@ export default function ResultCardPreviewModal({
   selectedEvent,
   raceDisplayName,
   participantResultsUrl,
-  results,
+  results, // Full array of results for the event
   userPhoto,
   triggerCamera,
   triggerGallery,
@@ -20,10 +20,24 @@ export default function ResultCardPreviewModal({
   const cardRef = useRef(null);
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  const finishers = results.filter(r => r.chip_time && r.chip_time.trim() !== '');
-  const overallTotal = results.length;
-  const genderTotal = finishers.filter(r => r.gender === participant.gender).length;
-  const divisionTotal = finishers.filter(r => r.age_group_name === participant.age_group_name).length;
+  // CRITICAL FIX: Use only results from the participant's specific race
+  const participantRaceName = participant.race_name || raceDisplayName;
+
+  const raceResults = results.filter(
+    r => (r.race_name || raceDisplayName) === participantRaceName
+  );
+
+  const raceFinishers = raceResults.filter(
+    r => r.chip_time && r.chip_time.trim() !== ''
+  );
+
+  const overallTotal = raceResults.length; // All entrants in this race
+  const genderTotal = raceFinishers.filter(
+    r => r.gender === participant.gender
+  ).length;
+  const divisionTotal = raceFinishers.filter(
+    r => r.age_group_name === participant.age_group_name
+  ).length;
 
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
@@ -35,7 +49,10 @@ export default function ResultCardPreviewModal({
   };
 
   const generateAndDownload = async () => {
-    if (!cardRef.current) return;
+    if (!cardRef.current) {
+      alert('Card not ready. Please try again.');
+      return;
+    }
     try {
       const canvas = await html2canvas(cardRef.current, {
         scale: 2.5,
@@ -57,6 +74,7 @@ export default function ResultCardPreviewModal({
 
   const shareCard = async () => {
     if (!cardRef.current) return generateAndDownload();
+
     try {
       const canvas = await html2canvas(cardRef.current, {
         scale: 2.5,
@@ -65,9 +83,12 @@ export default function ResultCardPreviewModal({
         width: 1080,
         height: 1080,
       });
+
       canvas.toBlob(async (blob) => {
         if (!blob) return generateAndDownload();
+
         const file = new File([blob], 'result-card.png', { type: 'image/png' });
+
         if (navigator.canShare?.({ files: [file] })) {
           try {
             await navigator.share({
@@ -76,6 +97,7 @@ export default function ResultCardPreviewModal({
               text: `I finished the ${raceDisplayName} in ${formatChronoTime(participant.chip_time)}! 🏁\n${participantResultsUrl}`,
             });
           } catch (shareErr) {
+            console.warn('[ResultCardModal] Share canceled/failed:', shareErr);
             generateAndDownload();
           }
         } else {
@@ -83,6 +105,7 @@ export default function ResultCardPreviewModal({
         }
       });
     } catch (err) {
+      console.error('[ResultCardModal] Share failed:', err);
       generateAndDownload();
     }
   };
@@ -91,8 +114,8 @@ export default function ResultCardPreviewModal({
 
   const ResultCardContent = ({ isPreview = false }) => {
     const baseClasses = 'bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center text-white';
-    const containerClass = isPreview 
-      ? `${baseClasses} px-3 pt-4 pb-4`   // ← Reduced bottom padding (was pb-6)
+    const containerClass = isPreview
+      ? `${baseClasses} px-3 pt-4 pb-4`  // Tight bottom padding
       : `${baseClasses} px-8 pt-6 pb-10`;
 
     const textSize = isPreview
@@ -123,7 +146,7 @@ export default function ResultCardPreviewModal({
 
     return (
       <div className={containerClass} style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-        {/* Event Name Header */}
+        {/* Event Name (replaces logo) */}
         <div className={`w-full bg-white rounded-3xl shadow-2xl px-${isPreview ? '4' : '8'} py-${isPreview ? '3' : '6'} mb-${isPreview ? '2' : '6'} truncate`}>
           <h2 className={`${textSize.event} font-black text-brand-dark leading-tight truncate px-2`}>
             {selectedEvent.name || raceDisplayName || 'Race Event'}
@@ -181,7 +204,7 @@ export default function ResultCardPreviewModal({
           </div>
         </div>
 
-        {/* Footer — moved up in preview */}
+        {/* Footer — moved up slightly in preview */}
         <p className={`${textSize.footer} italic mt-auto pt-${isPreview ? '2' : '8'}`}>
           Find your next race at www.geminitiming.com
         </p>
@@ -191,14 +214,14 @@ export default function ResultCardPreviewModal({
 
   return (
     <>
-      {/* Hidden full-size for export */}
+      {/* Hidden full-size card for high-quality export */}
       <div className="fixed -top-full opacity-0 pointer-events-none">
         <div ref={cardRef} className="w-[1080px] h-[1080px]">
           <ResultCardContent isPreview={false} />
         </div>
       </div>
 
-      {/* Modal with refined preview spacing */}
+      {/* Modal with live preview */}
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
         <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 relative my-8" onClick={(e) => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 text-4xl text-gray-600 hover:text-gray-900">
@@ -207,7 +230,7 @@ export default function ResultCardPreviewModal({
 
           <h3 className="text-3xl font-bold text-center mb-6">Your Result Card 🎉</h3>
 
-          {/* Preview with better bottom breathing room */}
+          {/* Live Preview */}
           <div className="mb-8 flex justify-center">
             <div className="w-full max-w-sm aspect-square rounded-3xl overflow-hidden shadow-2xl">
               <ResultCardContent isPreview={true} />
@@ -219,10 +242,14 @@ export default function ResultCardPreviewModal({
             {userPhoto ? (
               <>
                 <img src={userPhoto} alt="Your photo" className="w-32 h-32 object-cover rounded-full mx-auto shadow-xl mb-4" />
-                <button onClick={removePhoto} className="text-red-600 underline text-sm">Remove Photo</button>
+                <button onClick={removePhoto} className="text-red-600 underline text-sm">
+                  Remove Photo
+                </button>
               </>
             ) : (
-              <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto mb-6 flex items-center justify-center text-5xl">📸</div>
+              <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto mb-6 flex items-center justify-center text-5xl">
+                📸
+              </div>
             )}
             <div className="flex justify-center gap-4">
               <button onClick={triggerCamera} className="px-5 py-2 bg-brand-dark text-white font-bold rounded-full hover:opacity-90 transition text-sm">

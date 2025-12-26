@@ -1,6 +1,5 @@
 // src/pages/participant/ParticipantPage.jsx
-// Complete, fully working version with multi-athletes tracking support and small preview
-
+// FINAL — Accurate per-race totals on participant page + all previous features
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { RaceContext } from '../../context/RaceContext';
@@ -39,6 +38,7 @@ export default function ParticipantPage() {
     finishers: initialResults.finishers || [],
     nonFinishers: initialResults.nonFinishers || []
   });
+
   const [showSplits, setShowSplits] = useState(false);
   const [loading, setLoading] = useState(!initialParticipant);
   const [fetchError, setFetchError] = useState(null);
@@ -47,8 +47,8 @@ export default function ParticipantPage() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
-
   const [userPhoto, setUserPhoto] = useState(null);
+
   const photoInputRef = useRef(null);
   const participantResultsUrl = window.location.href;
 
@@ -166,12 +166,13 @@ export default function ParticipantPage() {
 
         const finishers = fetchedResults?.filter(r => r.chip_time && r.chip_time.trim() !== '') || [];
         const nonFinishers = fetchedResults?.filter(r => !r.chip_time || r.chip_time.trim() === '') || [];
+
         setResults({ finishers, nonFinishers });
 
         const found = fetchedResults?.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found');
-        setParticipant(found);
 
+        setParticipant(found);
         confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
       } catch (err) {
         console.error('[ParticipantPage] Load error:', err);
@@ -197,7 +198,7 @@ export default function ParticipantPage() {
 
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`, {
-      state: { 
+      state: {
         divisionFilter: participant.age_group_name,
       },
     });
@@ -211,11 +212,10 @@ export default function ParticipantPage() {
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
 
     const eventYear = getYearFromEvent(selectedEvent);
-
-    navigate(`/results/${masterSlug}/${eventYear}`, { 
-      state: { 
-        addToTracked: participant.bib 
-      } 
+    navigate(`/results/${masterSlug}/${eventYear}`, {
+      state: {
+        addToTracked: participant.bib
+      }
     });
   };
 
@@ -224,6 +224,7 @@ export default function ParticipantPage() {
       navigate('/results');
       return;
     }
+
     let masterSlug = 'overall';
     const foundMaster = Object.entries(masterGroups).find(([key, ids]) =>
       ids.includes(selectedEvent.id.toString())
@@ -259,11 +260,26 @@ export default function ParticipantPage() {
     );
   }
 
-  const overallTotal = results.finishers.length + results.nonFinishers.length;
-  const genderTotal = results.finishers.filter(r => r.gender === participant.gender).length;
-  const divisionTotal = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
+  // === CRITICAL FIX: Per-race totals ===
+  const participantRaceName = participant.race_name || 'Overall';
+
+  const allEventResults = [...results.finishers, ...results.nonFinishers];
+
+  const raceResults = allEventResults.filter(
+    r => (r.race_name || 'Overall') === participantRaceName
+  );
+
+  const raceFinishers = raceResults.filter(
+    r => r.chip_time && r.chip_time.trim() !== ''
+  );
+
+  const overallTotal = raceResults.length;
+  const genderTotal = raceFinishers.filter(r => r.gender === participant.gender).length;
+  const divisionTotal = raceFinishers.filter(r => r.age_group_name === participant.age_group_name).length;
+
   const participantRace = selectedEvent.races?.find(r => r.race_id === participant.race_id);
   const raceDisplayName = participantRace?.race_name || participant.race_name || 'Overall';
+
   const chipTimeSeconds = parseChipTime(participant.chip_time);
 
   const currentMasterKey = Object.keys(masterGroups).find(key => masterGroups[key]?.includes(selectedEvent?.id?.toString()));
@@ -383,6 +399,7 @@ export default function ParticipantPage() {
               )}
             </p>
           </div>
+
           <div className="grid grid-cols-3 gap-6 text-center">
             <div>
               <p className="text-sm uppercase text-gray-500 tracking-wide mb-3">Overall</p>
@@ -584,13 +601,11 @@ export default function ParticipantPage() {
           selectedEvent={selectedEvent}
           raceDisplayName={raceDisplayName}
           participantResultsUrl={participantResultsUrl}
-          results={[...results.finishers, ...results.nonFinishers]}
+          results={allEventResults} // Full event results for card (card already filters internally)
           userPhoto={userPhoto}
           triggerCamera={triggerCamera}
           triggerGallery={triggerGallery}
           removePhoto={removePhoto}
-          masterLogo={masterLogo}
-          bibLogo={bibLogo}
         />
 
         <EmailResultsForm
