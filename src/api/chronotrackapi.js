@@ -145,7 +145,7 @@ const fetchAllBracketResults = async (bracketId, bracketName, raceName) => {
       console.log(`[ChronoTrack] ${bracketName} (page ${page}) → +${newResults.length} new unique (total: ${allResults.length}) from ${raceName}`);
 
       if (results.length < pageSize) break;
-      ifif (page >= maxPages) {
+      if (page >= maxPages) {
         console.warn(`[ChronoTrack] Hit maxPages (${maxPages}) for ${bracketName}`);
         break;
       }
