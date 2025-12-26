@@ -1,5 +1,5 @@
 // src/pages/participant/ParticipantPage.jsx
-// FULLY FIXED + EXTRA CONSOLE LOGGING FOR DEBUGGING
+// Complete, fully working version with multi-athlete tracking support
 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useContext, useRef } from 'react';
@@ -13,8 +13,6 @@ import ResultCardPreviewModal from './ResultCardPreviewModal';
 import EmailResultsForm from './EmailResultsForm';
 
 export default function ParticipantPage() {
-  console.log('[ParticipantPage] Component mounted / re-rendered');
-
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -31,8 +29,6 @@ export default function ParticipantPage() {
   } = useContext(RaceContext);
 
   const navState = location.state || {};
-  console.log('[ParticipantPage] Navigation state from link:', navState);
-
   const initialParticipant = navState.participant || null;
   const initialSelectedEvent = navState.selectedEvent || null;
   const initialResults = navState.results || { finishers: [], nonFinishers: [] };
@@ -52,12 +48,10 @@ export default function ParticipantPage() {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(true);
 
-  // Photo upload state
   const [userPhoto, setUserPhoto] = useState(null);
   const photoInputRef = useRef(null);
   const participantResultsUrl = window.location.href;
 
-  // Fetch upcoming events
   useEffect(() => {
     const fetchUpcoming = async () => {
       try {
@@ -95,7 +89,6 @@ export default function ParticipantPage() {
     return new Date(event.start_time * 1000).getFullYear().toString();
   };
 
-  // Photo upload handlers
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -128,13 +121,9 @@ export default function ParticipantPage() {
 
   const removePhoto = () => setUserPhoto(null);
 
-  // Load participant
   useEffect(() => {
     const loadParticipant = async () => {
-      console.log('[ParticipantPage] loadParticipant called — bib:', bib);
-
       if (participant && selectedEvent && results.finishers.length > 0) {
-        console.log('[ParticipantPage] Data already loaded — triggering confetti if needed');
         if (!timeRevealed && participant.chip_time) {
           confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
         }
@@ -146,7 +135,6 @@ export default function ParticipantPage() {
 
       try {
         if (events.length === 0 || !contextSelectedEvent) {
-          console.log('[ParticipantPage] Waiting for events/context to load...');
           const interval = setInterval(() => {
             if (events.length > 0 && contextSelectedEvent) {
               clearInterval(interval);
@@ -163,13 +151,11 @@ export default function ParticipantPage() {
           const match = allResults.find(r => String(r.bib) === String(bib));
           if (match?.event_id) {
             targetEvent = events.find(e => e.id === match.event_id);
-            console.log('[ParticipantPage] Found event via results match:', targetEvent?.name);
           }
         }
 
         if (!targetEvent) throw new Error('Event not found');
         setSelectedEvent(targetEvent);
-        console.log('[ParticipantPage] Selected event:', targetEvent.name, targetEvent.id);
 
         const { data: fetchedResults, error } = await supabase
           .from('chronotrack_results')
@@ -184,9 +170,6 @@ export default function ParticipantPage() {
 
         const found = fetchedResults?.find(r => String(r.bib) === String(bib));
         if (!found) throw new Error('Participant not found');
-
-        console.log('[ParticipantPage] Participant loaded:', found.first_name, found.last_name, 'Bib:', found.bib);
-        console.log('[ParticipantPage] Has splits?', !!found.splits?.length);
         setParticipant(found);
 
         confetti({ particleCount: 250, spread: 100, origin: { y: 0.6 }, colors: ['#B22222', '#48D1CC', '#FFD700', '#FF6B6B', '#263238'] });
@@ -201,46 +184,11 @@ export default function ParticipantPage() {
     loadParticipant();
   }, [bib, events, contextSelectedEvent, contextResults, loadingResults]);
 
-  const handleTimeComplete = () => {
-    console.log('[ParticipantPage] Time reveal animation complete');
-    setTimeRevealed(true);
-  };
+  const handleTimeComplete = () => setTimeRevealed(true);
 
   const handleDivisionClick = () => {
-    console.log('[ParticipantPage] View Division clicked');
-    console.log('Participant division:', participant?.age_group_name);
-    console.log('Selected event:', selectedEvent?.name, selectedEvent?.id);
+    if (!participant?.age_group_name || !selectedEvent) return goBackToResults();
 
-    if (!participant?.age_group_name || !selectedEvent) {
-      console.log('Missing data — falling back to results page');
-      return goBackToResults();
-    }
-
-    let masterSlug = 'overall';
-    const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
-      ids.includes(selectedEvent.id.toString())
-    );
-
-    if (foundMaster) {
-      masterSlug = slugify(foundMaster[0]);
-      console.log('Found master group:', foundMaster[0], '→ slug:', masterSlug);
-    } else {
-      console.log('No master group found for this event');
-    }
-
-    const eventYear = getYearFromEvent(selectedEvent);
-    console.log('Navigating to:', `/results/${masterSlug}/${eventYear}`, 'with state:', {
-      divisionFilter: participant.age_group_name,
-      highlightBib: participant.bib
-    });
-
-    navigate(`/results/${masterSlug}/${eventYear}`, {
-      state: { divisionFilter: participant.age_group_name, highlightBib: participant.bib },
-    });
-  };
-
-  const trackMe = () => {
-    console.log('[ParticipantPage] Track Me clicked');
     let masterSlug = 'overall';
     const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
       ids.includes(selectedEvent.id.toString())
@@ -248,11 +196,30 @@ export default function ParticipantPage() {
     if (foundMaster) masterSlug = slugify(foundMaster[0]);
 
     const eventYear = getYearFromEvent(selectedEvent);
-    navigate(`/results/${masterSlug}/${eventYear}`, { state: { highlightBib: participant.bib } });
+    navigate(`/results/${masterSlug}/${eventYear}`, {
+      state: { 
+        divisionFilter: participant.age_group_name,
+      },
+    });
+  };
+
+  const trackMe = () => {
+    let masterSlug = 'overall';
+    const foundMaster = Object.entries(masterGroups).find(([_, ids]) =>
+      ids.includes(selectedEvent.id.toString())
+    );
+    if (foundMaster) masterSlug = slugify(foundMaster[0]);
+
+    const eventYear = getYearFromEvent(selectedEvent);
+
+    navigate(`/results/${masterSlug}/${eventYear}`, { 
+      state: { 
+        addToTracked: participant.bib 
+      } 
+    });
   };
 
   const goBackToResults = () => {
-    console.log('[ParticipantPage] Back to Results clicked');
     if (!selectedEvent) {
       navigate('/results');
       return;
@@ -266,10 +233,6 @@ export default function ParticipantPage() {
     const eventYear = getYearFromEvent(selectedEvent);
     navigate(`/results/${masterSlug}/${eventYear}`);
   };
-
-  // Debug splits rendering
-  console.log('[ParticipantPage] About to render — participant.splits:', participant?.splits);
-  console.log('[ParticipantPage] formatChronoTime available?', typeof formatChronoTime === 'function');
 
   if (loading || loadingResults) {
     return (
@@ -353,12 +316,9 @@ export default function ParticipantPage() {
 
   const splitsWithFullCourse = [...enrichedSplits, fullCourseSplit];
 
-  console.log('[ParticipantPage] Rendering splits — count:', splitsWithFullCourse.length);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-light to-white pt-40 py-16">
       <div className="max-w-5xl mx-auto px-6 bg-white rounded-3xl shadow-2xl p-10 border border-primary/20">
-        {/* Hero */}
         <div className="text-center mb-12">
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-primary mb-6 drop-shadow-lg px-4">
             Congratulations!
@@ -386,7 +346,6 @@ export default function ParticipantPage() {
               </div>
             </div>
           </div>
-          {/* Badges */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             {isTop10Percent && (
               <span className="px-6 py-3 bg-yellow-400 text-white text-xl font-bold rounded-full shadow-lg">Top 10% Overall!</span>
@@ -403,7 +362,6 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
           <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl p-10 shadow-2xl text-center">
             <p className="text-xl uppercase text-gray-600 tracking-wider mb-6">OFFICIAL TIME</p>
@@ -447,7 +405,6 @@ export default function ParticipantPage() {
           </div>
         </div>
 
-        {/* Splits / Race Story */}
         {participant.splits && participant.splits.length > 0 && (
           <div className="bg-gradient-to-br from-accent/10 to-primary/5 rounded-3xl shadow-2xl overflow-hidden border border-accent/30 mb-16">
             <button
@@ -515,9 +472,6 @@ export default function ParticipantPage() {
             )}
           </div>
         )}
-
-        {/* The rest of the JSX remains exactly the same as before */}
-        {/* Create Card, Email Results, Track Me, Sponsors, Upcoming Events, Back Button, Modals */}
 
         <div className="text-center my-20">
           <button
