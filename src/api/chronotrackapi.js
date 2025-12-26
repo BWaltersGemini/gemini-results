@@ -6,11 +6,12 @@
 // • Safe bracket fetching
 // • Batched entry_status calls
 // • Stores BOTH finishers and DNFs in Supabase
-// • NEW: Detects "STARTED" athletes (crossed start mat, no splits/finish yet)
-// • NEW: STARTED athletes included in nonFinishers for search visibility
+// • Detects "STARTED" athletes (crossed start mat, no splits/finish yet)
+// • STARTED athletes included in nonFinishers for search visibility
+// • event_id now correctly added to every participant (fixes Supabase upsert)
 
 import axios from 'axios';
-import { supabase } from '../supabaseClient'; // ← Critical import
+import { supabase } from '../supabaseClient';
 
 const CHRONOTRACK_API = 'https://api.chronotrack.com/api';
 const PROXY_BASE = '/chrono-api';
@@ -373,13 +374,13 @@ export const fetchResultsForEvent = async (eventId) => {
     const entryId = r.results_entry_id;
     let status = entryStatuses[entryId] || 'FIN';
 
-    // NEW: Safe detection of "Started but no splits/finish yet"
+    // Detect "Started but no splits/finish yet"
     const hasStarted = r.results_begin_chip_time && parseFloat(r.results_begin_chip_time) > 0;
     const hasFinished = r.results_end_chip_time && parseFloat(r.results_end_chip_time) > 0;
     const hasSplits = p.intervals.length > 0;
 
     if (hasStarted && !hasFinished && !hasSplits) {
-      status = 'STARTED'; // New status — completely safe addition
+      status = 'STARTED';
     }
 
     const lookupKey = getLookupKey(r);
@@ -408,6 +409,7 @@ export const fetchResultsForEvent = async (eventId) => {
     }));
 
     const participant = {
+      event_id: eventId, // ← FIXED: now included
       first_name: r.results_first_name || '',
       last_name: r.results_last_name || '',
       chip_time: r.results_time || '',
@@ -427,17 +429,15 @@ export const fetchResultsForEvent = async (eventId) => {
       country,
       splits,
       entry_id: entryId || null,
-      _status: status, // Now includes 'STARTED'
+      _status: status,
     };
 
-    // UPDATED: Include STARTED athletes in nonFinishers for search visibility
+    // Include STARTED athletes in nonFinishers for search visibility
     if (['DNF', 'DQ', 'STARTED'].includes(status)) {
-      // Clear rankings for non-finishers and started-only
       participant.place = null;
       participant.gender_place = null;
       participant.age_group_place = null;
 
-      // Ensure they have basic info for search
       participant.chip_time = participant.chip_time || '';
       participant.race_name = participant.race_name || 'Unknown Race';
 
