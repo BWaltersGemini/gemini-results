@@ -1,5 +1,5 @@
 // src/pages/participant/ResultCardPreviewModal.jsx
-// FINAL VERSION — With Helpful Message About Photo in Preview
+// FINAL CLEAN VERSION — No preview, small modal, with console logs
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { formatChronoTime } from '../../utils/timeUtils';
@@ -11,7 +11,7 @@ export default function ResultCardPreviewModal({
   selectedEvent,
   raceDisplayName,
   participantResultsUrl,
-  results,
+  results, // ← Array of results (not object with finishers/nonFinishers)
   userPhoto,
   triggerCamera,
   triggerGallery,
@@ -20,93 +20,121 @@ export default function ResultCardPreviewModal({
   bibLogo,
 }) {
   const cardRef = useRef(null);
-  const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  const overallTotal = results.finishers.length + results.nonFinishers.length;
-  const genderTotal = results.finishers.filter(r => r.gender === participant.gender).length;
-  const divisionTotal = results.finishers.filter(r => r.age_group_name === participant.age_group_name).length;
+  console.log('[ResultCardModal] Modal opened:', { show, participant: participant?.bib, userPhoto: !!userPhoto });
+
+  // Calculate totals safely from results array
+  const finishers = results.filter(r => r.chip_time && r.chip_time.trim() !== '');
+  const overallTotal = results.length;
+  const genderTotal = finishers.filter(r => r.gender === participant.gender).length;
+  const divisionTotal = finishers.filter(r => r.age_group_name === participant.age_group_name).length;
+
+  console.log('[ResultCardModal] Totals calculated:', { overallTotal, genderTotal, divisionTotal });
 
   const formatDate = (epoch) => {
     if (!epoch || isNaN(epoch)) return 'Date TBD';
-    const date = new Date(epoch * 1000);
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    return new Date(epoch * 1000).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
-  const generateResultCard = async () => {
-    if (!cardRef.current) return;
+  const generateAndDownload = async () => {
+    console.log('[ResultCardModal] Download triggered');
+    if (!cardRef.current) {
+      console.warn('[ResultCardModal] cardRef is null!');
+      return;
+    }
+
     try {
+      console.log('[ResultCardModal] Starting html2canvas...');
       const canvas = await html2canvas(cardRef.current, {
         scale: 2.5,
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        logging: false,
         width: 1080,
         height: 1080,
       });
-      const image = canvas.toDataURL('image/png');
+
+      console.log('[ResultCardModal] Canvas generated, triggering download');
       const link = document.createElement('a');
       link.download = `${participant.first_name}_${participant.last_name}_result.png`;
-      link.href = image;
+      link.href = canvas.toDataURL('image/png');
       link.click();
     } catch (err) {
-      console.error('Card generation failed:', err);
-      alert('Failed to generate card — please try again!');
+      console.error('[ResultCardModal] Download failed:', err);
+      alert('Failed to generate card. Please try again.');
     }
   };
 
-  const shareResultCard = async () => {
-    if (!cardRef.current) return;
+  const shareCard = async () => {
+    console.log('[ResultCardModal] Share triggered');
+    if (!cardRef.current) {
+      console.warn('[ResultCardModal] cardRef missing, falling back to download');
+      return generateAndDownload();
+    }
+
     try {
+      console.log('[ResultCardModal] Generating canvas for share...');
       const canvas = await html2canvas(cardRef.current, {
         scale: 2.5,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: null,
         width: 1080,
         height: 1080,
       });
+
       canvas.toBlob(async (blob) => {
+        if (!blob) {
+          console.warn('[ResultCardModal] Blob empty, falling back to download');
+          generateAndDownload();
+          return;
+        }
+
         const file = new File([blob], 'result-card.png', { type: 'image/png' });
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: 'My Race Result!',
-            text: `I finished the ${raceDisplayName} in ${participant.chip_time}! 🏁\n\nFull results: ${participantResultsUrl}`,
-          });
+        const canShare = navigator.share && navigator.canShare?.({ files: [file] });
+
+        console.log('[ResultCardModal] Native share available:', canShare);
+
+        if (canShare) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'My Race Result!',
+              text: `I finished the ${raceDisplayName} in ${formatChronoTime(participant.chip_time)}! 🏁\n${participantResultsUrl}`,
+            });
+            console.log('[ResultCardModal] Native share successful');
+          } catch (shareErr) {
+            console.warn('[ResultCardModal] Native share canceled/failed:', shareErr);
+            generateAndDownload();
+          }
         } else {
-          generateResultCard();
+          generateAndDownload();
         }
       });
     } catch (err) {
-      generateResultCard();
+      console.error('[ResultCardModal] Share failed:', err);
+      generateAndDownload();
     }
   };
 
-  const shareOnFacebook = () => {
-    const url = encodeURIComponent(participantResultsUrl);
-    const text = encodeURIComponent(`I just finished the ${raceDisplayName} in ${participant.chip_time}! 🏁`);
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`, '_blank');
-  };
+  if (!show) {
+    console.log('[ResultCardModal] Modal hidden (show=false)');
+    return null;
+  }
 
-  const shareOnX = () => {
-    const text = encodeURIComponent(`Just finished the ${raceDisplayName} in ${participant.chip_time}! Overall: ${participant.place}, Gender: ${participant.gender_place}, Division: ${participant.age_group_place} 🏁\n\n${participantResultsUrl}`);
-    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
-  };
-
-  const shareOnInstagram = () => {
-    alert('Instagram sharing works best with the downloaded image! Save your card and post it directly in the app.');
-  };
-
-  if (!show) return null;
+  console.log('[ResultCardModal] Rendering modal');
 
   return (
     <>
-      {/* Hidden Full-Size Card — Your Perfect Working Version */}
-      <div className="fixed -top-full left-0 opacity-0 pointer-events-none">
+      {/* Hidden card for html2canvas — full size, perfect quality */}
+      <div className="fixed -top-full opacity-0 pointer-events-none">
         <div
           ref={cardRef}
-          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-8 pt-6 pb-10 overflow-hidden relative"
+          className="w-[1080px] h-[1080px] bg-gradient-to-br from-brand-dark via-[#1a2a3f] to-brand-dark flex flex-col items-center justify-start text-center px-8 pt-6 pb-10"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
           <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-4 mb-6">
@@ -118,11 +146,13 @@ export default function ResultCardPreviewModal({
               <h2 className="text-4xl font-black text-brand-dark">{selectedEvent.name}</h2>
             )}
           </div>
+
           <p className="text-3xl font-black text-accent mb-2">{raceDisplayName}</p>
           <p className="text-2xl text-gray-300 mb-8">{formatDate(selectedEvent.start_time)}</p>
-          <div className={`flex items-center justify-center gap-16 mb-8 w-full max-w-5xl ${!userPhoto ? 'flex-col gap-6' : ''}`}>
+
+          <div className={`flex items-center justify-center gap-16 mb-8 ${!userPhoto ? 'flex-col gap-6' : ''}`}>
             {userPhoto && (
-              <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl flex-shrink-0">
+              <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-white shadow-2xl">
                 <img src={userPhoto} alt="Finisher" className="w-full h-full object-cover" />
               </div>
             )}
@@ -130,104 +160,104 @@ export default function ResultCardPreviewModal({
               {participant.first_name}<br />{participant.last_name}
             </h1>
           </div>
+
           <div className="mb-10">
             <p className="text-3xl text-gray-400 uppercase tracking-widest mb-3">Finish Time</p>
-            <p className="text-9xl font-black text-[#FFD700] drop-shadow-2xl leading-none">
+            <p className="text-9xl font-black text-[#FFD700] drop-shadow-2xl">
               {formatChronoTime(participant.chip_time)}
             </p>
           </div>
+
           <div className="grid grid-cols-3 gap-10 text-white w-full max-w-4xl mb-12">
             <div>
               <p className="text-2xl text-gray-400 uppercase mb-2">Overall</p>
-              <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.place || '—'}</p>
+              <p className="text-7xl font-bold text-[#FFD700]">{participant.place || '—'}</p>
               <p className="text-xl text-gray-400 mt-2">of {overallTotal}</p>
             </div>
             <div>
               <p className="text-2xl text-gray-400 uppercase mb-2">Gender</p>
-              <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.gender_place || '—'}</p>
+              <p className="text-7xl font-bold text-[#FFD700]">{participant.gender_place || '—'}</p>
               <p className="text-xl text-gray-400 mt-2">of {genderTotal}</p>
             </div>
             <div>
               <p className="text-2xl text-gray-400 uppercase mb-2">Division</p>
-              <p className="text-7xl font-bold text-[#FFD700] leading-none">{participant.age_group_place || '—'}</p>
+              <p className="text-7xl font-bold text-[#FFD700]">{participant.age_group_place || '—'}</p>
               <p className="text-xl text-gray-400 mt-2">of {divisionTotal}</p>
             </div>
           </div>
+
           <p className="text-3xl text-white italic mt-auto mb-8">
             Find your next race at www.youkeepmoving.com
           </p>
         </div>
       </div>
 
-      {/* Modal Preview */}
-      <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
-        <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full mx-auto my-8 p-8 relative" onClick={e => e.stopPropagation()}>
+      {/* Compact, clean modal — NO PREVIEW */}
+      <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div
+          className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 relative"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-brand-dark text-3xl font-light hover:bg-gray-100 transition z-50"
+            className="absolute top-4 right-4 text-4xl text-gray-600 hover:text-gray-900"
           >
-            ×
+            &times;
           </button>
-          <h3 className="text-4xl font-bold text-center text-brand-dark mb-10">Your Result Card 🎉</h3>
 
-          {/* Preview Frame */}
-          <div className="flex justify-center mb-10">
-            <div className="relative w-full max-w-lg aspect-square rounded-3xl overflow-hidden shadow-2xl border-8 border-gray-200 bg-black">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div
-                  className="w-[1080px] h-[1080px]"
-                  style={{
-                    transform: 'scale(0.45)',
-                    transformOrigin: 'center center',
-                  }}
-                >
-                  {cardRef.current && (
-                    <div
-                      dangerouslySetInnerHTML={{
-                        __html: cardRef.current.outerHTML
-                          .replace(/className/g, 'class')
-                          .replace(/crossOrigin="anonymous"/g, '')
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <h3 className="text-3xl font-bold text-center mb-6">Your Result Card 🎉</h3>
+          <p className="text-lg text-center text-gray-700 mb-8">
+            Add your photo, then download and share!
+          </p>
 
-          {/* Helpful Message */}
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-10 text-center">
-            <p className="text-lg font-medium text-blue-900 mb-2">📸 Your Finish Line Photo</p>
-            <p className="text-base text-blue-800">
-              The photo you take or upload will appear on the final downloaded/shared card.
-            </p>
-            <p className="text-base text-blue-800">
-              It is not shown in this live preview for performance reasons, but it will be included when you download or share!
-            </p>
-          </div>
-
-          {/* Photo Upload Section */}
-          <div className="mb-10 text-center">
-            <p className="text-2xl font-bold mb-6">Add Your Finish Line Photo!</p>
-            <div className="flex justify-center gap-6 mb-6">
-              <button onClick={triggerCamera} className="px-8 py-4 bg-primary text-white font-bold rounded-full hover:bg-primary/90 transition">📷 Take Photo</button>
-              <button onClick={triggerGallery} className="px-8 py-4 bg-brand-dark text-white font-bold rounded-full hover:bg-brand-dark/90 transition">🖼️ Choose from Gallery</button>
-            </div>
-            {userPhoto && (
-              <div className="text-center">
-                <img src={userPhoto} alt="Your photo" className="w-32 h-32 object-cover rounded-full mx-auto shadow-xl mb-4" />
-                <button onClick={removePhoto} className="text-primary underline">Remove Photo</button>
+          {/* Photo Upload */}
+          <div className="text-center mb-8">
+            {userPhoto ? (
+              <>
+                <img
+                  src={userPhoto}
+                  alt="Your finish line photo"
+                  className="w-40 h-40 object-cover rounded-full mx-auto shadow-xl mb-4"
+                />
+                <button onClick={removePhoto} className="text-red-600 underline">
+                  Remove Photo
+                </button>
+              </>
+            ) : (
+              <div className="w-40 h-40 bg-gray-200 rounded-full mx-auto mb-6 flex items-center justify-center text-6xl">
+                📸
               </div>
             )}
+
+            <div className="flex justify-center gap-4 mt-6">
+              <button
+                onClick={triggerCamera}
+                className="px-6 py-3 bg-brand-dark text-white font-bold rounded-full hover:opacity-90 transition"
+              >
+                📷 Take Photo
+              </button>
+              <button
+                onClick={triggerGallery}
+                className="px-6 py-3 bg-gray-700 text-white font-bold rounded-full hover:opacity-90 transition"
+              >
+                🖼️ From Gallery
+              </button>
+            </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex justify-center gap-6">
-            <button onClick={generateResultCard} className="px-10 py-4 bg-primary text-white font-bold text-xl rounded-full hover:bg-primary/90 transition shadow-xl">
-              {isMobileDevice ? 'Save to Photos' : 'Download Image'}
+          <div className="flex flex-col gap-4">
+            <button
+              onClick={generateAndDownload}
+              className="w-full py-4 bg-primary text-white font-bold text-lg rounded-full hover:opacity-90 shadow-lg transition"
+            >
+              {isMobile ? 'Save to Photos' : 'Download Card'}
             </button>
-            <button onClick={shareResultCard} className="px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xl rounded-full hover:opacity-90 transition shadow-xl">
-              Share Now
+            <button
+              onClick={shareCard}
+              className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg rounded-full hover:opacity-90 shadow-lg transition"
+            >
+              Share Card
             </button>
           </div>
         </div>
