@@ -1,5 +1,9 @@
 // src/pages/ResultsPage.jsx
-// Complete, fully working version with PERSISTENT multi-athlete tracking (up to 6)
+// Complete, fully working version — December 25, 2025
+// Multi-athlete tracking (up to 6) with full persistence
+// Auto-applies division filter from ParticipantPage
+// formatChronoTime fixed
+// Extensive console logging for debugging
 
 import { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -11,6 +15,9 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { masterKey, year, raceSlug } = useParams();
+
+  console.log('[ResultsPage] Rendered — pathname:', location.pathname);
+  console.log('[ResultsPage] Current navigation state:', location.state);
 
   const {
     selectedEvent,
@@ -31,8 +38,12 @@ export default function ResultsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [liveToast, setLiveToast] = useState(null);
 
-  // Persistent multi-athlete tracking — stored in navigation state
-  const [trackedBibs, setTrackedBibs] = useState(location.state?.trackedBibs || []);
+  // Multi-athlete tracking — persistent across navigations
+  const [trackedBibs, setTrackedBibs] = useState(() => {
+    const saved = location.state?.trackedBibs || [];
+    console.log('[ResultsPage] Initial trackedBibs from navigation state:', saved);
+    return saved;
+  });
 
   // Filters
   const [selectedRaceId, setSelectedRaceId] = useState('all');
@@ -67,53 +78,69 @@ export default function ResultsPage() {
     }
   }, [liveToast]);
 
-  // ====================== PERSISTENT TRACKING & AUTO FILTERS ======================
+  // ====================== PERSISTENCE & INCOMING STATE ======================
   useEffect(() => {
-    // Restore from navigation state on mount
-    if (location.state?.trackedBibs) {
+    console.log('[ResultsPage] useEffect triggered by location.state change:', location.state);
+
+    // Restore trackedBibs if present in navigation state
+    if (location.state?.trackedBibs && Array.isArray(location.state.trackedBibs)) {
+      console.log('[ResultsPage] Restoring trackedBibs from navigation state:', location.state.trackedBibs);
       setTrackedBibs(location.state.trackedBibs);
     }
 
-    // Add new bib from ParticipantPage "Track Me"
+    // Handle incoming "addToTracked" from ParticipantPage
     if (location.state?.addToTracked) {
       const bibToAdd = String(location.state.addToTracked);
+      console.log('[ResultsPage] Received addToTracked request for bib:', bibToAdd);
+
       setTrackedBibs(prev => {
-        if (prev.includes(bibToAdd)) return prev;
-        if (prev.length >= 6) {
-          alert('Maximum of 6 athletes can be tracked at once.');
+        if (prev.includes(bibToAdd)) {
+          console.log('[ResultsPage] Bib already tracked — no change');
           return prev;
         }
-        const newList = [...prev, bibToAdd];
-        // Persist immediately
-        navigate(location.pathname, { 
-          replace: true, 
-          state: { ...location.state, trackedBibs: newList } 
-        });
-        return newList;
+        if (prev.length >= 6) {
+          alert('Maximum of 6 athletes can be tracked at once.');
+          console.log('[ResultsPage] Max limit reached (6)');
+          return prev;
+        }
+        const updated = [...prev, bibToAdd];
+        console.log('[ResultsPage] Added bib — new trackedBibs:', updated);
+        return updated;
       });
+
+      // Clean up the flag
+      navigate(location.pathname, { replace: true, state: { ...location.state, addToTracked: undefined } });
     }
 
-    // Auto-apply division filter from "View Division"
+    // Auto-apply division filter from ParticipantPage
     if (location.state?.divisionFilter) {
+      console.log('[ResultsPage] Applying division filter:', location.state.divisionFilter);
       setSelectedDivision(location.state.divisionFilter);
-      // Clean up state after applying
       navigate(location.pathname, { replace: true, state: { ...location.state, divisionFilter: undefined } });
     }
   }, [location.state, navigate, location.pathname]);
 
   // Persist trackedBibs on every change
   useEffect(() => {
+    console.log('[ResultsPage] trackedBibs changed:', trackedBibs);
     if (trackedBibs.length > 0) {
       navigate(location.pathname, {
         replace: true,
         state: { ...location.state, trackedBibs }
       });
+    } else if (location.state?.trackedBibs) {
+      // Clear from state when empty
+      navigate(location.pathname, {
+        replace: true,
+        state: { ...location.state, trackedBibs: undefined }
+      });
     }
   }, [trackedBibs, navigate, location.pathname, location.state]);
 
-  // Reset everything when changing master series
+  // Reset on master series change
   useEffect(() => {
     if (masterKey && masterKey !== prevMasterKeyRef.current) {
+      console.log('[ResultsPage] Master series changed — resetting all filters and tracking');
       setSearchQuery('');
       setTrackedBibs([]);
       setSelectedRaceId('all');
@@ -126,6 +153,7 @@ export default function ResultsPage() {
     }
   }, [masterKey]);
 
+  // Reset expansions on filter change
   useEffect(() => {
     setExpandedRaces({});
     setRacePagination({});
@@ -189,9 +217,10 @@ export default function ResultsPage() {
     }
   }, [masterKey, year, events, masterGroups, selectedEvent, setSelectedEvent]);
 
-  // Auto-scroll to tracked section when list changes
+  // Auto-scroll to tracked athletes when list changes
   useEffect(() => {
     if (trackedBibs.length > 0 && trackedSectionRef.current) {
+      console.log('[ResultsPage] Scrolling to tracked athletes section');
       trackedSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [trackedBibs.length]);
@@ -305,7 +334,7 @@ export default function ResultsPage() {
     }, 0);
   }, [searchQuery, displayedRaces, results.finishers]);
 
-  // Master landing tiles (top 3 recent)
+  // Master landing tiles
   const visibleMasters = Object.keys(masterGroups).filter(key => !hiddenMasters.includes(key));
   const masterEventTiles = visibleMasters
     .map((storedKey) => {
@@ -326,9 +355,12 @@ export default function ResultsPage() {
 
   // Tracked Athletes
   const trackedAthletes = useMemo(() => {
+    console.log('[ResultsPage] Computing trackedAthletes from trackedBibs:', trackedBibs);
     if (trackedBibs.length === 0) return [];
     const all = [...results.finishers, ...results.nonFinishers];
-    return all.filter(r => trackedBibs.includes(String(r.bib)));
+    const matched = all.filter(r => trackedBibs.includes(String(r.bib)));
+    console.log('[ResultsPage] Found tracked athletes:', matched.length);
+    return matched;
   }, [trackedBibs, results]);
 
   // ====================== RENDER ======================
@@ -550,7 +582,10 @@ export default function ResultsPage() {
             </div>
             <div className="text-center mt-8">
               <button
-                onClick={() => setTrackedBibs([])}
+                onClick={() => {
+                  console.log('[ResultsPage] Clear All clicked — resetting trackedBibs');
+                  setTrackedBibs([]);
+                }}
                 className="px-10 py-4 bg-gray-600 text-white font-bold rounded-full hover:bg-gray-700 transition"
               >
                 Clear All Tracked Athletes ({trackedBibs.length})
