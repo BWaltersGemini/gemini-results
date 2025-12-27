@@ -86,19 +86,19 @@ export default function LiveTrackingPage() {
   // No eventId provided
   if (!eventId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6 text-center">
-        <h1 className="text-5xl font-black text-gemini-dark-gray mb-8">
-          🔴 Live Athlete Tracking
+      <div className="min-h-screen bg-bg-light flex flex-col items-center justify-center px-6 text-center">
+        <h1 className="text-5xl font-black text-text-dark mb-8">
+          Live Athlete Tracking
         </h1>
-        <p className="text-2xl text-gray-600 mb-8 max-w-2xl">
+        <p className="text-2xl text-text-muted mb-8 max-w-2xl">
           No event selected. Add <code className="bg-gray-200 px-4 py-2 rounded-lg font-mono text-lg">?eventId=XXXX</code> to the URL.
         </p>
-        <p className="text-lg text-gray-500 mb-12">
+        <p className="text-lg text-text-muted mb-12">
           Example: <span className="font-mono bg-gray-200 px-3 py-1 rounded">/live-tracking?eventId=12345</span>
         </p>
         <button
           onClick={() => navigate('/race-directors-hub')}
-          className="px-10 py-5 bg-gemini-blue text-white text-xl font-bold rounded-full hover:bg-gemini-blue/90 transition shadow-xl"
+          className="px-10 py-5 bg-primary text-text-light text-xl font-bold rounded-full hover:bg-brand-red/90 transition shadow-xl"
         >
           ← Back to Director Hub
         </button>
@@ -107,14 +107,14 @@ export default function LiveTrackingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Fixed Top Control Bar */}
-      <div className="fixed top-0 left-0 right-0 bg-gemini-dark-gray text-white shadow-2xl z-50">
+    <div className="min-h-screen bg-bg-light">
+      {/* Fixed Top Control Bar – Turquoise Accent */}
+      <div className="fixed top-0 left-0 right-0 bg-accent text-text-dark shadow-2xl z-50">
         <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
           <div className="flex flex-col">
             <h1 className="text-2xl md:text-4xl font-black flex items-center gap-4">
               {eventName}
-              <span className="text-red-500 animate-pulse text-3xl">🔴 LIVE</span>
+              <span className="text-primary animate-pulse text-3xl">LIVE</span>
             </h1>
             <p className="text-lg opacity-80 mt-1">Event ID: {eventId}</p>
           </div>
@@ -131,7 +131,7 @@ export default function LiveTrackingPage() {
                   type="checkbox"
                   checked={autoRefresh}
                   onChange={(e) => setAutoRefresh(e.target.checked)}
-                  className="w-6 h-6 text-gemini-blue rounded focus:ring-gemini-blue"
+                  className="w-6 h-6 text-primary rounded focus:ring-primary"
                 />
                 <span className="font-medium">Auto-refresh (30s)</span>
               </label>
@@ -139,7 +139,7 @@ export default function LiveTrackingPage() {
               <button
                 onClick={loadData}
                 disabled={loading}
-                className="px-8 py-3 bg-gemini-blue rounded-full font-bold hover:bg-gemini-blue/90 disabled:opacity-50 transition shadow-lg"
+                className="px-8 py-3 bg-primary text-text-light rounded-full font-bold hover:bg-brand-red/90 disabled:opacity-50 transition shadow-lg"
               >
                 {loading ? 'Refreshing...' : 'Refresh Now'}
               </button>
@@ -158,48 +158,48 @@ export default function LiveTrackingPage() {
 
         {trackingData && (
           <>
-            {/* OVERALL PROGRESS - BIG NUMBERS */}
+            {/* OVERALL PROGRESS */}
             <section className="mb-20">
-              <h2 className="text-4xl md:text-6xl font-black text-center text-gemini-dark-gray mb-12">
+              <h2 className="text-4xl md:text-6xl font-black text-center text-text-dark mb-12">
                 Overall Race Progress
               </h2>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-10">
-                <div className="bg-white rounded-3xl shadow-2xl p-12 text-center">
-                  <p className="text-7xl md:text-8xl font-black text-gemini-blue">
+                <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
+                  <p className="text-6xl md:text-7xl font-black text-primary">
                     {trackingData.overall.started.toLocaleString()}
                   </p>
-                  <p className="text-3xl text-gray-700 mt-6 font-bold">Started</p>
+                  <p className="text-3xl text-text-muted mt-6 font-bold">Started</p>
                 </div>
-                <div className="bg-white rounded-3xl shadow-2xl p-12 text-center">
-                  <p className="text-7xl md:text-8xl font-black text-green-600">
+                <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
+                  <p className="text-6xl md:text-7xl font-black text-green-600">
                     {trackingData.overall.finished.toLocaleString()}
                   </p>
-                  <p className="text-3xl text-gray-700 mt-6 font-bold">Finished</p>
+                  <p className="text-3xl text-text-muted mt-6 font-bold">Finished</p>
                 </div>
-                <div className="bg-white rounded-3xl shadow-2xl p-12 text-center">
-                  <p className="text-7xl md:text-8xl font-black text-orange-600 animate-pulse">
+                <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
+                  <p className="text-6xl md:text-7xl font-black text-orange-600 animate-pulse">
                     {trackingData.overall.stillOnCourse.toLocaleString()}
                   </p>
-                  <p className="text-3xl text-gray-700 mt-6 font-bold">On Course</p>
+                  <p className="text-3xl text-text-muted mt-6 font-bold">On Course</p>
                 </div>
-                <div className="bg-white rounded-3xl shadow-2xl p-12 text-center">
-                  <p className="text-7xl md:text-8xl font-black text-gray-600">
+                <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
+                  <p className="text-6xl md:text-7xl font-black text-text-muted">
                     {trackingData.overall.yetToStart.toLocaleString()}
                   </p>
-                  <p className="text-3xl text-gray-700 mt-6 font-bold">Yet to Start</p>
+                  <p className="text-3xl text-text-muted mt-6 font-bold">Yet to Start</p>
                 </div>
               </div>
             </section>
 
             {/* PER-RACE BREAKDOWN */}
             <section>
-              <h2 className="text-4xl md:text-6xl font-black text-center text-gemini-dark-gray mb-16">
+              <h2 className="text-4xl md:text-6xl font-black text-center text-text-dark mb-16">
                 Progress by Race
               </h2>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
                 {trackingData.races.map((race) => (
                   <div key={race.raceId} className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-                    <div className="bg-gradient-to-r from-gemini-blue to-gemini-blue/90 text-white py-8 px-12">
+                    <div className="bg-gradient-to-r from-accent to-brand-turquoise text-text-dark py-8 px-12">
                       <h3 className="text-4xl font-black">{race.raceName}</h3>
                       <p className="text-2xl opacity-90 mt-3">
                         Total Entrants: {race.total.toLocaleString()}
@@ -208,32 +208,32 @@ export default function LiveTrackingPage() {
                     <div className="p-12">
                       <div className="grid grid-cols-2 gap-12 mb-12 text-center">
                         <div>
-                          <p className="text-6xl font-black text-green-600">{race.finished}</p>
-                          <p className="text-2xl text-gray-600 mt-4">Finished</p>
+                          <p className="text-5xl md:text-6xl font-black text-green-600">{race.finished}</p>
+                          <p className="text-2xl text-text-muted mt-4">Finished</p>
                         </div>
                         <div>
-                          <p className="text-6xl font-black text-orange-600">{race.stillOnCourse}</p>
-                          <p className="text-2xl text-gray-600 mt-4">On Course</p>
+                          <p className="text-5xl md:text-6xl font-black text-orange-600">{race.stillOnCourse}</p>
+                          <p className="text-2xl text-text-muted mt-4">On Course</p>
                         </div>
                       </div>
 
                       {/* Split Progress Bars */}
                       {race.splitProgress.length > 0 && (
                         <div className="space-y-10">
-                          <h4 className="text-3xl font-bold text-gemini-dark-gray text-center mb-8">
+                          <h4 className="text-3xl font-bold text-text-dark text-center mb-8">
                             Split Progress
                           </h4>
                           {race.splitProgress.map((split) => (
                             <div key={split.name} className="space-y-3">
                               <div className="flex justify-between items-center">
                                 <span className="text-xl font-semibold">{split.name}</span>
-                                <span className="text-xl font-medium text-gray-600">
+                                <span className="text-xl font-medium text-text-muted">
                                   {split.passed} / {race.total} ({split.percentage}%)
                                 </span>
                               </div>
                               <div className="w-full bg-gray-200 rounded-full h-14 overflow-hidden shadow-inner">
                                 <div
-                                  className="bg-gradient-to-r from-gemini-blue to-gemini-blue/70 h-full rounded-full transition-all duration-1500 ease-out shadow-lg"
+                                  className="bg-gradient-to-r from-accent to-brand-turquoise h-full rounded-full transition-all duration-1500 ease-out shadow-lg"
                                   style={{ width: `${split.percentage}%` }}
                                 />
                               </div>
@@ -249,7 +249,7 @@ export default function LiveTrackingPage() {
 
             {/* Critical Final Push Alert */}
             {trackingData.overall.stillOnCourse > 0 && trackingData.overall.stillOnCourse <= 20 && (
-              <div className="mt-24 bg-gradient-to-r from-orange-600 to-red-700 text-white rounded-3xl shadow-2xl p-16 text-center">
+              <div className="mt-24 bg-gradient-to-r from-primary to-brand-red text-text-light rounded-3xl shadow-2xl p-16 text-center">
                 <p className="text-7xl md:text-9xl font-black animate-pulse">
                   ONLY {trackingData.overall.stillOnCourse} ATHLETES REMAIN!
                 </p>
