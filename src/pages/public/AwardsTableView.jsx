@@ -1,5 +1,5 @@
 // src/pages/public/AwardsTableView.jsx
-// FINAL — Dual award support + mobile-optimized UX + correct checkboxes per division
+// FINAL — Mobile UX fixed: readable dropdown + visible text in cards
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -341,7 +341,7 @@ export default function AwardsTableView() {
                 <select
                   value={selectedRace}
                   onChange={(e) => setSelectedRace(e.target.value)}
-                  className="w-full px-5 py-4 rounded-xl border-2 border-primary text-lg focus:ring-4 focus:ring-primary/30"
+                  className="w-full px-5 py-4 rounded-xl border-2 border-primary text-gray-800 bg-white text-lg focus:ring-4 focus:ring-primary/30"
                 >
                   <option value="all">All Races</option>
                   {races
@@ -362,7 +362,7 @@ export default function AwardsTableView() {
                 placeholder="Name, bib, city..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-5 py-4 rounded-xl border-2 border-primary text-lg focus:ring-4 focus:ring-primary/30"
+                className="w-full px-5 py-4 rounded-xl border-2 border-primary text-gray-800 bg-white text-lg focus:ring-4 focus:ring-primary/30"
               />
             </div>
           </div>
@@ -397,7 +397,7 @@ export default function AwardsTableView() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <div className="text-3xl font-black text-primary">#{place || '-'}</div>
-                            <div className="text-xl font-bold mt-1">
+                            <div className="text-xl font-bold mt-1 text-gray-800">
                               {r.first_name} {r.last_name}
                             </div>
                             <div className="text-sm text-gray-600 mt-1">Bib: {r.bib || '-'}</div>
@@ -419,7 +419,7 @@ export default function AwardsTableView() {
                                 />
                               </div>
                             )}
-                            {status.is_overall_winner && (
+                            {(status.is_overall_winner || isOverall) && (
                               <div className="text-center">
                                 <label className="block text-sm font-medium text-purple-700">Overall</label>
                                 <input
@@ -432,7 +432,7 @@ export default function AwardsTableView() {
                             )}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
                           <div>
                             <span className="font-medium">Race:</span>
                             <br />
@@ -468,9 +468,7 @@ export default function AwardsTableView() {
                         {!isOverall && (
                           <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Age Group Picked Up</th>
                         )}
-                        <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">
-                          Overall Picked Up
-                        </th>
+                        <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Overall Picked Up</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
