@@ -365,7 +365,7 @@ export default function AwardsPage() {
             Status: 'Previously Picked Up (No Longer in Awards)',
           });
         }
-      });
+      };
     });
 
     // Sort: current winners first
