@@ -382,7 +382,7 @@ export default function AwardsPage() {
             Status: 'Previously Picked Up (No Longer in Awards)',
           });
         }
-      });
+      };
     });
 
     rows.sort((a, b) => (a.Status.includes('Current') ? -1 : 1));
