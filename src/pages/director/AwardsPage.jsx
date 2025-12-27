@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Auto-save places with visible confirmation toast + all existing features
+// FINAL — Added Export CSV for Awards Pickup Report + all existing features
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -12,6 +12,7 @@ export default function AwardsPage() {
 
   const [finishers, setFinishers] = useState([]);
   const [awardsState, setAwardsState] = useState({});
+  const [eventName, setEventName] = useState('Awards'); // For CSV filename
   const [loading, setLoading] = useState(true);
   const [overallPlaces, setOverallPlaces] = useState(1);
   const [ageGroupPlaces, setAgeGroupPlaces] = useState(3);
@@ -21,7 +22,7 @@ export default function AwardsPage() {
   const [copiedTable, setCopiedTable] = useState(false);
 
   // Auto-save confirmation toast
-  const [saveToast, setSaveToast] = useState(null); // { message: string }
+  const [saveToast, setSaveToast] = useState(null);
 
   // Superadmin visibility
   const [visibilitySettings, setVisibilitySettings] = useState({
@@ -50,6 +51,19 @@ export default function AwardsPage() {
     return null;
   }
 
+  // Load event name for CSV filename
+  useEffect(() => {
+    const fetchEventName = async () => {
+      const { data } = await supabase
+        .from('chronotrack_events')
+        .select('name')
+        .eq('id', selectedEventId)
+        .single();
+      if (data?.name) setEventName(data.name);
+    };
+    fetchEventName();
+  }, [selectedEventId]);
+
   // Load live results
   useEffect(() => {
     const fetchInitial = async () => {
@@ -65,7 +79,7 @@ export default function AwardsPage() {
     fetchInitial();
 
     const channel = supabase
-      .channel(`awards-${selectedEventId}`)
+      .channel(`director-awards-${selectedEventId}`)
       .on(
         'postgres_changes',
         {
@@ -76,7 +90,10 @@ export default function AwardsPage() {
         },
         (payload) => {
           setFinishers((prev) => {
-            const index = prev.findIndex((r) => r.entry_id === payload.new.entry_id);
+            const index = prev.findIndex((r) => r.entry_id === payload.new?.entry_id);
+            if (payload.eventType === 'DELETE') {
+              return prev.filter((r) => r.entry_id !== payload.old.entry_id);
+            }
             if (index >= 0) {
               const updated = [...prev];
               updated[index] = payload.new;
@@ -91,7 +108,7 @@ export default function AwardsPage() {
     return () => supabase.removeChannel(channel);
   }, [selectedEventId]);
 
-  // Load director awards state
+  // Load director awards state (announced + pickedUp)
   useEffect(() => {
     if (!currentUser) return;
     const loadState = async () => {
@@ -113,7 +130,7 @@ export default function AwardsPage() {
     loadState();
   }, [selectedEventId, currentUser]);
 
-  // === AUTO-SAVE AWARD PLACES WITH TOAST CONFIRMATION ===
+  // AUTO-SAVE AWARD PLACES WITH TOAST
   useEffect(() => {
     if (!selectedEventId || !currentUser) return;
 
@@ -140,11 +157,9 @@ export default function AwardsPage() {
               : `Saved: Top ${overallPlaces} overall, Top ${ageGroupPlaces} per age group`;
           setSaveToast({ message });
         }
-
-        // Auto-clear toast after 4 seconds
         setTimeout(() => setSaveToast(null), 4000);
       } catch (err) {
-        console.error('Failed to save award places:', err);
+        console.error('Failed to save:', err);
         setSaveToast({ message: 'Save failed', error: true });
         setTimeout(() => setSaveToast(null), 4000);
       }
@@ -236,7 +251,61 @@ export default function AwardsPage() {
     });
   };
 
-  // Divisions logic (unchanged)
+  // EXPORT CSV FUNCTION
+  const exportAwardsCSV = () => {
+    const divisions = getDivisions();
+    const rows = [];
+
+    divisions.forEach((div) => {
+      const runners = getRunnersInDivision(div);
+      runners.forEach((runner, index) => {
+        const place = div.includes('Overall') ? runner.place : runner.age_group_place || index + 1;
+        const pickedUp = awardsState[div]?.pickedUp?.has(runner.entry_id) || false;
+
+        rows.push({
+          Division: div,
+          Place: place || '',
+          Bib: runner.bib || '',
+          Name: `${runner.first_name} ${runner.last_name}`,
+          Race: runner.race_name || '',
+          Time: runner.chip_time || '',
+          Location: [runner.city, runner.state].filter(Boolean).join(', '),
+          'Picked Up': pickedUp ? 'Yes' : 'No',
+        });
+      });
+    });
+
+    if (rows.length === 0) {
+      alert('No award winners to export.');
+      return;
+    }
+
+    // Convert to CSV
+    const headers = Object.keys(rows[0]);
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) =>
+        headers
+          .map((h) => `"${(row[h] || '').toString().replace(/"/g, '""')}"`)
+          .join(',')
+      ),
+    ].join('\n');
+
+    // Trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const safeEventName = eventName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.setAttribute('download', `Awards_Pickup_Report_${safeEventName}_${dateStr}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Divisions logic
   const getDivisions = () => {
     const ageGroups = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
     const sorted = ageGroups
@@ -323,7 +392,7 @@ export default function AwardsPage() {
               saveToast.error ? 'bg-red-600' : 'bg-green-600'
             }`}
           >
-            {saveToast.error ? '⚠️ ' : '✓ '} {saveToast.message}
+            {saveToast.error ? 'Warning ' : 'Check '} {saveToast.message}
           </div>
         )}
 
@@ -331,7 +400,7 @@ export default function AwardsPage() {
         {isSuperAdmin && (
           <div className="bg-yellow-50 border-2 border-yellow-400 rounded-2xl p-8 mb-12">
             <h2 className="text-3xl font-bold text-brand-dark mb-6">
-              🔐 Superadmin: Awards Visibility Control
+              Lock Superadmin: Awards Visibility Control
             </h2>
             <p className="text-lg text-gray-700 mb-6">
               Hide awards from public views until ready.
@@ -451,7 +520,7 @@ export default function AwardsPage() {
 
         {/* Controls */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-12">
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="grid md:grid-cols-3 gap-6 mb-8 items-end">
             <div>
               <label className="block text-text-dark font-semibold mb-2">Overall Awards (M/F)</label>
               <select
@@ -461,9 +530,7 @@ export default function AwardsPage() {
               >
                 <option value={0}>None</option>
                 {placeOptions.map((n) => (
-                  <option key={n} value={n}>
-                    Top {n}
-                  </option>
+                  <option key={n} value={n}>Top {n}</option>
                 ))}
               </select>
             </div>
@@ -475,9 +542,7 @@ export default function AwardsPage() {
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
               >
                 {placeOptions.map((n) => (
-                  <option key={n} value={n}>
-                    Top {n}
-                  </option>
+                  <option key={n} value={n}>Top {n}</option>
                 ))}
               </select>
             </div>
@@ -503,6 +568,20 @@ export default function AwardsPage() {
               </div>
             </div>
           </div>
+
+          {/* Export Button */}
+          <div className="mb-8 text-center">
+            <button
+              onClick={exportAwardsCSV}
+              className="inline-flex items-center gap-3 px-10 py-5 bg-green-600 text-white text-xl font-bold rounded-full hover:bg-green-700 transition shadow-xl"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export Awards Pickup Report (CSV)
+            </button>
+          </div>
+
           <input
             type="text"
             placeholder="Search by name, city, state..."
@@ -521,7 +600,6 @@ export default function AwardsPage() {
             const announcedCount = awardsState[div]?.announced?.size || 0;
             const onCourse = onCourseInDivision(div);
             const isComplete = announcedCount >= topCount;
-
             return (
               <a
                 key={div}
@@ -543,7 +621,6 @@ export default function AwardsPage() {
             const runners = getRunnersInDivision(div);
             const announcedSet = awardsState[div]?.announced || new Set();
             const onCourse = onCourseInDivision(div);
-
             return (
               <div
                 key={div}
@@ -565,7 +642,6 @@ export default function AwardsPage() {
                     runners.map((r, i) => {
                       const place = div.includes('Overall') ? r.place : r.age_group_place || i + 1;
                       const raceName = r.race_name || '';
-
                       return (
                         <div
                           key={r.entry_id}
@@ -591,7 +667,7 @@ export default function AwardsPage() {
                                 : 'bg-primary text-text-light hover:bg-primary/90'
                             }`}
                           >
-                            {announcedSet.has(r.entry_id) ? 'Announced ✓' : 'Mark Announced'}
+                            {announcedSet.has(r.entry_id) ? 'Announced Check' : 'Mark Announced'}
                           </button>
                         </div>
                       );
