@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Correct gender_place for Overall + smart CSV export with contact info
+// FINAL — Dual award support with separate Overall & AG pickup tracking
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -13,7 +13,7 @@ export default function AwardsPage() {
 
   const [finishers, setFinishers] = useState([]);
   const [announcedState, setAnnouncedState] = useState({});
-  const [pickupStatus, setPickupStatus] = useState({});
+  const [pickupStatus, setPickupStatus] = useState({}); // { entry_id: { picked_up: bool, is_overall_winner: bool, overall_picked_up: bool } }
   const [eventName, setEventName] = useState('Awards');
   const [loading, setLoading] = useState(true);
   const [overallPlaces, setOverallPlaces] = useState(1);
@@ -129,17 +129,21 @@ export default function AwardsPage() {
     loadAnnounced();
   }, [selectedEventId, currentUser]);
 
-  // Load shared pickup status
+  // Load pickup status with new columns
   useEffect(() => {
     const loadPickup = async () => {
       const { data } = await supabase
         .from('awards_pickup_status')
-        .select('entry_id, picked_up')
+        .select('entry_id, picked_up, is_overall_winner, overall_picked_up')
         .eq('event_id', selectedEventId);
 
       const map = {};
       data?.forEach((row) => {
-        map[row.entry_id] = row.picked_up;
+        map[row.entry_id] = {
+          picked_up: row.picked_up || false,
+          is_overall_winner: row.is_overall_winner || false,
+          overall_picked_up: row.overall_picked_up || false,
+        };
       });
       setPickupStatus(map);
     };
@@ -156,17 +160,23 @@ export default function AwardsPage() {
           filter: `event_id=eq.${selectedEventId}`,
         },
         (payload) => {
-          setPickupStatus((prev) => {
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              return { ...prev, [payload.new.entry_id]: payload.new.picked_up };
-            }
-            if (payload.eventType === 'DELETE') {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            setPickupStatus((prev) => ({
+              ...prev,
+              [payload.new.entry_id]: {
+                picked_up: payload.new.picked_up || false,
+                is_overall_winner: payload.new.is_overall_winner || false,
+                overall_picked_up: payload.new.overall_picked_up || false,
+              },
+            }));
+          }
+          if (payload.eventType === 'DELETE') {
+            setPickupStatus((prev) => {
               const next = { ...prev };
               delete next[payload.old.entry_id];
               return next;
-            }
-            return prev;
-          });
+            });
+          }
         }
       )
       .subscribe();
@@ -288,7 +298,86 @@ export default function AwardsPage() {
     });
   };
 
-  // SMART EXPORT with Email & Full Address
+  // Toggle Age Group pickup
+  const toggleAGPickup = async (entryId) => {
+    const current = pickupStatus[entryId]?.picked_up || false;
+    const newStatus = !current;
+
+    const { error } = await supabase
+      .from('awards_pickup_status')
+      .upsert(
+        {
+          event_id: selectedEventId,
+          entry_id: entryId,
+          picked_up: newStatus,
+        },
+        { onConflict: 'event_id,entry_id' }
+      );
+
+    if (!error) {
+      setPickupStatus((prev) => ({
+        ...prev,
+        [entryId]: { ...prev[entryId], picked_up: newStatus },
+      }));
+    }
+  };
+
+  // Toggle Overall pickup
+  const toggleOverallPickup = async (entryId) => {
+    const current = pickupStatus[entryId]?.overall_picked_up || false;
+    const newStatus = !current;
+
+    const { error } = await supabase
+      .from('awards_pickup_status')
+      .upsert(
+        {
+          event_id: selectedEventId,
+          entry_id: entryId,
+          overall_picked_up: newStatus,
+        },
+        { onConflict: 'event_id,entry_id' }
+      );
+
+    if (!error) {
+      setPickupStatus((prev) => ({
+        ...prev,
+        [entryId]: { ...prev[entryId], overall_picked_up: newStatus },
+      }));
+    }
+  };
+
+  // Mark runner as overall winner (used when settings change)
+  const markAsOverallWinner = async (entryId) => {
+    await supabase
+      .from('awards_pickup_status')
+      .upsert(
+        {
+          event_id: selectedEventId,
+          entry_id: entryId,
+          is_overall_winner: true,
+        },
+        { onConflict: 'event_id,entry_id' }
+      );
+  };
+
+  // Auto-mark overall winners when places change
+  useEffect(() => {
+    const markOverallWinners = async () => {
+      const maleOverall = getRunnersInDivision('Male Overall');
+      const femaleOverall = getRunnersInDivision('Female Overall');
+      const overallEntryIds = [...maleOverall, ...femaleOverall].map(r => r.entry_id);
+
+      if (overallEntryIds.length > 0) {
+        await Promise.all(overallEntryIds.map(id => markAsOverallWinner(id)));
+      }
+    };
+
+    if (!loading) {
+      markOverallWinners();
+    }
+  }, [overallPlaces, finishers, loading]);
+
+  // SMART EXPORT with dual award support
   const exportAwardsCSV = async () => {
     const currentDivisions = getDivisions();
     const currentWinners = new Set();
@@ -304,7 +393,7 @@ export default function AwardsPage() {
       .from('awards_pickup_status')
       .select('entry_id')
       .eq('event_id', selectedEventId)
-      .eq('picked_up', true);
+      .or('picked_up.eq.true,overall_picked_up.eq.true');
 
     const historicalIds = new Set(historicalPickedUp?.map(row => row.entry_id) || []);
 
@@ -329,6 +418,7 @@ export default function AwardsPage() {
       runners.forEach((runner) => {
         if (allToInclude.has(runner.entry_id)) {
           const details = contactDetails.get(runner.entry_id) || {};
+          const status = pickupStatus[runner.entry_id] || {};
           const place = div.includes('Overall') ? runner.gender_place : runner.age_group_place;
 
           rows.push({
@@ -347,7 +437,8 @@ export default function AwardsPage() {
               .filter(Boolean)
               .join(', ') || '',
             Phone: details.phone || '',
-            'Picked Up': pickupStatus[runner.entry_id] ? 'Yes' : 'No',
+            'Age Group Picked Up': status.picked_up ? 'Yes' : 'No',
+            'Overall Picked Up': status.overall_picked_up ? 'Yes' : 'No',
             Status: 'Current Winner',
           });
         }
@@ -359,6 +450,7 @@ export default function AwardsPage() {
         const runner = entryIdToRunner[entryId];
         if (runner) {
           const details = contactDetails.get(entryId) || {};
+          const status = pickupStatus[entryId] || {};
           rows.push({
             Division: 'Previous Winner',
             Place: '',
@@ -375,11 +467,12 @@ export default function AwardsPage() {
               .filter(Boolean)
               .join(', ') || '',
             Phone: details.phone || '',
-            'Picked Up': 'Yes',
+            'Age Group Picked Up': status.picked_up ? 'Yes' : 'No',
+            'Overall Picked Up': status.overall_picked_up ? 'Yes' : 'No',
             Status: 'Previously Picked Up (No Longer in Awards)',
           });
         }
-      };
+      });
     });
 
     rows.sort((a, b) => (a.Status.includes('Current') ? -1 : 1));
@@ -398,7 +491,8 @@ export default function AwardsPage() {
       'Email',
       'Mailing Address',
       'Phone',
-      'Picked Up',
+      'Age Group Picked Up',
+      'Overall Picked Up',
       'Status'
     ];
 
@@ -701,7 +795,7 @@ export default function AwardsPage() {
               Export Awards Pickup Report (CSV)
             </button>
             <p className="text-sm text-gray-600 mt-3">
-              Includes email, full address, and pickup status for all winners
+              Includes email, full address, and separate Overall/AG pickup status
             </p>
           </div>
 
@@ -765,6 +859,9 @@ export default function AwardsPage() {
                     runners.map((r, i) => {
                       const place = div.includes('Overall') ? r.gender_place : r.age_group_place || i + 1;
                       const raceName = r.race_name || '';
+                      const status = pickupStatus[r.entry_id] || {};
+                      const isDual = status.is_overall_winner;
+
                       return (
                         <div
                           key={r.entry_id}
@@ -782,6 +879,11 @@ export default function AwardsPage() {
                             {r.city && `${r.city}, `}
                             {r.state}
                           </p>
+                          {isDual && (
+                            <p className="text-xl font-bold text-purple-600 mt-4">
+                              ⭐ Dual Winner (Overall + Age Group)
+                            </p>
+                          )}
                           <button
                             onClick={() => saveAnnounced(div, r.entry_id)}
                             className={`mt-8 px-16 py-6 rounded-full text-3xl font-bold transition ${
@@ -801,7 +903,7 @@ export default function AwardsPage() {
             );
           })}
 
-        {/* Table Mode */}
+        {/* Table Mode — now with dual checkboxes */}
         {mode === 'table' && (
           <div>
             <h2 className="text-3xl font-bold text-text-dark mb-8">Awards Pickup Table</h2>
@@ -815,51 +917,61 @@ export default function AwardsPage() {
                     <th className="px-8 py-6 text-left">Race</th>
                     <th className="px-8 py-6 text-left">Time</th>
                     <th className="px-8 py-6 text-left">Location</th>
-                    <th className="px-8 py-6 text-center">Picked Up</th>
+                    <th className="px-8 py-6 text-center">Age Group Picked Up</th>
+                    <th className="px-8 py-6 text-center">Overall Picked Up</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {visibleDivisions.flatMap((div) => {
                     const runners = getRunnersInDivision(div);
                     return runners.length > 0
-                      ? runners.map((r) => (
-                          <tr key={r.entry_id} className="hover:bg-bg-light transition">
-                            <td className="px-8 py-6 font-medium">{div}</td>
-                            <td className="px-8 py-6 font-bold text-xl text-primary">
-                              #{div.includes('Overall') ? r.gender_place : r.age_group_place || '-'}
-                            </td>
-                            <td className="px-8 py-6 font-semibold">
-                              {r.first_name} {r.last_name}
-                            </td>
-                            <td className="px-8 py-6 text-accent font-medium">{r.race_name || '-'}</td>
-                            <td className="px-8 py-6">{r.chip_time || '-'}</td>
-                            <td className="px-8 py-6">
-                              {r.city && `${r.city}, `}
-                              {r.state}
-                            </td>
-                            <td className="px-8 py-6 text-center">
-                              <input
-                                type="checkbox"
-                                checked={pickupStatus[r.entry_id] || false}
-                                onChange={async () => {
-                                  const current = pickupStatus[r.entry_id] || false;
-                                  const { error } = await supabase
-                                    .from('awards_pickup_status')
-                                    .upsert({
-                                      event_id: selectedEventId,
-                                      entry_id: r.entry_id,
-                                      picked_up: !current,
-                                    });
-                                  if (error) {
-                                    console.error('Failed to update pickup:', error);
-                                    alert('Failed to update pickup status');
-                                  }
-                                }}
-                                className="h-8 w-8 text-primary rounded focus:ring-primary"
-                              />
-                            </td>
-                          </tr>
-                        ))
+                      ? runners.map((r) => {
+                          const place = div.includes('Overall') ? r.gender_place : r.age_group_place || '-';
+                          const status = pickupStatus[r.entry_id] || {};
+                          const isOverall = div.includes('Overall');
+                          const showOverallCheckbox = status.is_overall_winner || isOverall;
+
+                          return (
+                            <tr key={`${r.entry_id}-${div}`} className="hover:bg-bg-light transition">
+                              <td className="px-8 py-6 font-medium">
+                                {div}
+                                {status.is_overall_winner && !isOverall && (
+                                  <span className="block text-sm font-bold text-purple-600">Dual Winner</span>
+                                )}
+                              </td>
+                              <td className="px-8 py-6 font-bold text-xl text-primary">#{place}</td>
+                              <td className="px-8 py-6 font-semibold">
+                                {r.first_name} {r.last_name}
+                              </td>
+                              <td className="px-8 py-6 text-accent font-medium">{r.race_name || '-'}</td>
+                              <td className="px-8 py-6">{r.chip_time || '-'}</td>
+                              <td className="px-8 py-6">
+                                {r.city && `${r.city}, `}
+                                {r.state}
+                              </td>
+                              <td className="px-8 py-6 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={status.picked_up || false}
+                                  onChange={() => toggleAGPickup(r.entry_id)}
+                                  className="h-8 w-8 text-primary rounded focus:ring-primary"
+                                />
+                              </td>
+                              <td className="px-8 py-6 text-center">
+                                {showOverallCheckbox ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={status.overall_picked_up || false}
+                                    onChange={() => toggleOverallPickup(r.entry_id)}
+                                    className="h-8 w-8 text-purple-600 rounded focus:ring-purple-500"
+                                  />
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
                       : [];
                   })}
                 </tbody>

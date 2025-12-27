@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — Fixed realtime: separate channels + listens to place totals changes
+// FINAL — Correct gender_place for Overall + mobile-optimized + dual winner note
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -52,7 +52,7 @@ export default function AwardsAnnouncerView() {
     fetchInfo();
   }, [eventId]);
 
-  // === REALTIME: Separate channels for results + settings ===
+  // Realtime: separate channels
   useEffect(() => {
     if (!eventId) return;
 
@@ -89,7 +89,6 @@ export default function AwardsAnnouncerView() {
     loadResults();
     loadSettings();
 
-    // Channel for results changes
     const resultsChannel = supabase
       .channel(`announcer-results-${eventId}`)
       .on(
@@ -122,7 +121,6 @@ export default function AwardsAnnouncerView() {
       )
       .subscribe();
 
-    // Channel for award settings (place totals) changes
     const settingsChannel = supabase
       .channel(`announcer-settings-${eventId}`)
       .on(
