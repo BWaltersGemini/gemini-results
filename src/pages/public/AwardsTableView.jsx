@@ -1,5 +1,5 @@
 // src/pages/public/AwardsTableView.jsx
-// FINAL — No city/state + Race column + search + dynamic top places
+// FINAL — Dynamic places + race selector + clean table
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -11,7 +11,7 @@ export default function AwardsTableView() {
   const [eventName, setEventName] = useState('Awards Table');
   const [races, setRaces] = useState([]);
   const [selectedRace, setSelectedRace] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [awardSettings, setAwardSettings] = useState({ overall_places: 3, age_group_places: 3 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,16 +28,28 @@ export default function AwardsTableView() {
 
       setEventName(eventData?.name || 'Awards Table');
 
-      const { data } = await supabase
+      const { data: results } = await supabase
         .from('chronotrack_results')
         .select('*')
         .eq('event_id', eventId)
         .order('age_group_place', { ascending: true });
 
-      setFinishers(data || []);
+      setFinishers(results || []);
 
-      const uniqueRaces = ['all', ...new Set(data?.map(r => r.race_name).filter(Boolean))];
+      const uniqueRaces = ['all', ...new Set(results?.map(r => r.race_name).filter(Boolean))];
       setRaces(uniqueRaces);
+
+      // Load settings
+      const { data: settingsData } = await supabase
+        .from('event_results_visibility')
+        .select('overall_places, age_group_places')
+        .eq('event_id', eventId)
+        .single();
+
+      setAwardSettings({
+        overall_places: settingsData?.overall_places || 3,
+        age_group_places: settingsData?.age_group_places || 3,
+      });
 
       setLoading(false);
     };
@@ -61,24 +73,27 @@ export default function AwardsTableView() {
           });
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_results_visibility', filter: `event_id=eq.${eventId}` },
+        (payload) => {
+          setAwardSettings({
+            overall_places: payload.new.overall_places || 3,
+            age_group_places: payload.new.age_group_places || 3,
+          });
+        }
+      )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, [eventId]);
 
-  const filteredByRace = selectedRace === 'all'
+  const filteredFinishers = selectedRace === 'all'
     ? finishers
     : finishers.filter(r => r.race_name === selectedRace);
 
-  const searched = searchTerm
-    ? filteredByRace.filter(r =>
-        String(r.bib).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        `${r.first_name} ${r.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : filteredByRace;
-
   const getDivisions = () => {
-    const ageGroups = [...new Set(searched.map(r => r.age_group_name).filter(Boolean))];
+    const ageGroups = [...new Set(filteredFinishers.map(r => r.age_group_name).filter(Boolean))];
     return ageGroups
       .filter(g => g !== 'Overall')
       .sort((a, b) => {
@@ -91,10 +106,10 @@ export default function AwardsTableView() {
   const divisions = getDivisions();
 
   const getRunnersInDivision = (div) => {
-    return searched
+    return filteredFinishers
       .filter(r => r.age_group_name === div)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
-      .slice(0, 3); // Matches director's typical setting
+      .slice(0, awardSettings.age_group_places);
   };
 
   if (loading) {
@@ -110,40 +125,27 @@ export default function AwardsTableView() {
       <header className="bg-primary text-white py-6 shadow-xl">
         <div className="max-w-6xl mx-auto px-6 text-center">
           <h1 className="text-3xl md:text-4xl font-bold">{eventName}</h1>
-          <p className="text-xl mt-2">Awards Pickup Table • Top 3 Age Group Winners</p>
+          <p className="text-xl mt-2">Awards Pickup Table</p>
         </div>
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
-          <div className="grid md:grid-cols-2 gap-6">
-            {races.length > 1 && (
-              <div>
-                <label className="block text-lg font-bold text-gray-800 mb-3">Select Race</label>
-                <select
-                  value={selectedRace}
-                  onChange={(e) => setSelectedRace(e.target.value)}
-                  className="w-full px-6 py-4 rounded-xl border-2 border-primary text-lg focus:outline-none focus:ring-4 focus:ring-primary/30"
-                >
-                  <option value="all">All Races</option>
-                  {races.filter(r => r !== 'all').map(race => (
-                    <option key={race} value={race}>{race}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-lg font-bold text-gray-800 mb-3">Search by Bib or Name</label>
-              <input
-                type="text"
-                placeholder="e.g. 123 or John"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-6 py-4 rounded-xl border-2 border-primary text-lg focus:outline-none focus:ring-4 focus:ring-primary/30"
-              />
+          {races.length > 1 && (
+            <div className="text-center mb-6">
+              <label className="block text-lg font-bold text-gray-800 mb-3">Select Race</label>
+              <select
+                value={selectedRace}
+                onChange={(e) => setSelectedRace(e.target.value)}
+                className="px-8 py-4 rounded-xl border-2 border-primary text-lg focus:outline-none focus:ring-4 focus:ring-primary/30"
+              >
+                <option value="all">All Races</option>
+                {races.filter(r => r !== 'all').map(race => (
+                  <option key={race} value={race}>{race}</option>
+                ))}
+              </select>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
