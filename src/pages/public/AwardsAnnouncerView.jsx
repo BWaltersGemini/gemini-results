@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — Robust realtime award places + handles INSERT/UPDATE/DELETE + fallback defaults
+// FINAL — Fully fixed realtime: separate channels for results & settings + robust handling
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -59,7 +59,7 @@ export default function AwardsAnnouncerView() {
     fetchInfo();
   }, [eventId]);
 
-  // Combined: Initial results + realtime results + award settings (initial + realtime)
+  // === REALTIME: Separate channels for results and settings (CRITICAL FIX) ===
   useEffect(() => {
     if (!eventId) return;
 
@@ -68,6 +68,7 @@ export default function AwardsAnnouncerView() {
     // Initial load of results
     const loadResults = async () => {
       setLoading(true);
+      console.log('Loading initial results...');
       const { data } = await supabase
         .from('chronotrack_results')
         .select('*')
@@ -80,10 +81,9 @@ export default function AwardsAnnouncerView() {
       }
     };
 
-    loadResults();
-
-    // Initial load of award settings (fallback if no row yet)
+    // Initial load of award settings (fallback if no row exists yet)
     const loadSettings = async () => {
+      console.log('Loading initial award settings...');
       const { data } = await supabase
         .from('event_results_visibility')
         .select('overall_places, age_group_places')
@@ -102,12 +102,12 @@ export default function AwardsAnnouncerView() {
       }
     };
 
+    loadResults();
     loadSettings();
 
-    // Realtime channel for BOTH results and settings
-    const channel = supabase
-      .channel(`announcer-${eventId}`)
-      // Results changes
+    // Channel 1: Results only
+    const resultsChannel = supabase
+      .channel(`announcer-results-${eventId}`)
       .on(
         'postgres_changes',
         {
@@ -122,13 +122,17 @@ export default function AwardsAnnouncerView() {
 
           setFinishers((prev) => {
             const existingIndex = prev.findIndex(
-              (r) => r.entry_id === payload.new.entry_id
+              (r) =>
+                r.entry_id === payload.new?.entry_id ||
+                r.entry_id === payload.old?.entry_id
             );
 
+            // Handle DELETE
             if (payload.eventType === 'DELETE') {
               return prev.filter((r) => r.entry_id !== payload.old.entry_id);
             }
 
+            // Handle INSERT or UPDATE
             if (existingIndex >= 0) {
               const updated = [...prev];
               updated[existingIndex] = payload.new;
@@ -139,7 +143,13 @@ export default function AwardsAnnouncerView() {
           });
         }
       )
-      // Settings changes
+      .subscribe((status) => {
+        console.log('Results channel status:', status);
+      });
+
+    // Channel 2: Settings only
+    const settingsChannel = supabase
+      .channel(`announcer-settings-${eventId}`)
       .on(
         'postgres_changes',
         {
@@ -149,8 +159,7 @@ export default function AwardsAnnouncerView() {
           filter: `event_id=eq.${eventId}`,
         },
         (payload) => {
-          console.log('Settings realtime payload:', payload);
-
+          console.log('Settings realtime update:', payload);
           if (!isMounted) return;
 
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -169,12 +178,13 @@ export default function AwardsAnnouncerView() {
         }
       )
       .subscribe((status) => {
-        console.log('Realtime channel status:', status);
+        console.log('Settings channel status:', status);
       });
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      supabase.removeChannel(resultsChannel);
+      supabase.removeChannel(settingsChannel);
     };
   }, [eventId]);
 
