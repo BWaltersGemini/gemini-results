@@ -1,6 +1,5 @@
 // src/pages/director/LiveTrackingPage.jsx
-// FINAL — Uses cached data from Supabase for instant, reliable live tracking
-// All type annotations removed for .jsx compatibility
+// FINAL — Enhanced with manual trigger, better UX, and robust caching
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -14,96 +13,110 @@ export default function LiveTrackingPage() {
   const [error, setError] = useState('');
   const [lastRefresh, setLastRefresh] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [updating, setUpdating] = useState(false);
 
-  // Extract eventId from URL query param
+  // Extract eventId from URL
   const urlParams = new URLSearchParams(window.location.search);
   const eventId = urlParams.get('eventId');
 
-  // Fetch event name (direct API — only for display name)
-  useEffect(() => {
-    if (!eventId) return;
+  // Helper: Format relative time (e.g., "2 minutes ago")
+  const formatRelativeTime = (date) => {
+    if (!date) return 'never';
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m ago`;
+  };
 
-    const fetchEventName = async () => {
-      try {
-        const response = await fetch(
-          `https://api.chronotrack.com/api/event/${eventId}?format=json&client_id=${import.meta.env.VITE_CHRONOTRACK_CLIENT_ID}&user_id=${import.meta.env.VITE_CHRONOTRACK_USER}&user_pass=${import.meta.env.VITE_CHRONOTRACK_PASS}`
-        );
-        const data = await response.json();
-        const name = data.event?.event_name || `Event ID ${eventId}`;
-        setEventName(name);
-      } catch (err) {
-        console.warn('[LiveTracking] Failed to fetch event name:', err);
-        setEventName(`Event ID ${eventId}`);
-      }
-    };
-
-    fetchEventName();
-  }, [eventId]);
-
-  // Load cached live data from Supabase
+  // Load cached data from Supabase
   const loadData = async () => {
     if (!eventId) return;
-
     setLoading(true);
     setError('');
-
     try {
-      const { data, error: supabaseError } = await supabase
+      const { data, error: sbError } = await supabase
         .from('live_tracking_cache')
         .select('data, last_updated, fetch_status')
         .eq('event_id', eventId)
         .maybeSingle();
 
-      if (supabaseError || !data) {
-        throw supabaseError || new Error('No cached data found');
+      if (sbError && sbError.code !== 'PGRST116') { // Ignore "no rows" error
+        throw sbError;
       }
 
-      if (data.fetch_status === 'in_progress') {
-        setError('Updating live data...');
-      } else if (data.fetch_status === 'failed') {
-        setError('Last update failed — retrying soon');
+      if (!data || !data.data) {
+        setError('No live data available yet — background update in progress...');
+        setTrackingData(null);
+        setLastRefresh(null);
+        setEventName(`Event ID ${eventId}`);
       } else {
-        setError('');
-      }
+        setTrackingData(data.data);
+        setLastRefresh(new Date(data.last_updated));
+        setEventName(data.data.eventName || `Event ID ${eventId}`);
 
-      setTrackingData(data.data);
-      setLastRefresh(new Date(data.last_updated));
+        if (data.fetch_status === 'in_progress') {
+          setError('Updating live data...');
+        } else if (data.fetch_status === 'failed') {
+          setError('Last update failed — will retry automatically');
+        } else {
+          setError('');
+        }
+      }
     } catch (err) {
-      setError('No live data yet — background update in progress...');
-      console.error('[LiveTracking] Cache load error:', err);
+      setError('Failed to load live tracking data');
+      console.error('[LiveTracking] Load error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial load + polling
+  // Manual trigger: Call Edge Function to force update
+  const triggerUpdate = async () => {
+    if (!eventId || updating) return;
+    setUpdating(true);
+    setError('Triggering live update...');
+
+    try {
+      const functionUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_REF}.supabase.co/functions/v1/live-tracking-updater?eventId=${eventId}`;
+      const response = await fetch(functionUrl);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Update failed');
+      }
+
+      const result = await response.json();
+      console.log('[LiveTracking] Manual update triggered:', result);
+      setError('Update triggered — refreshing in 10 seconds...');
+      
+      // Force reload after delay
+      setTimeout(loadData, 10000);
+    } catch (err) {
+      setError(`Failed to trigger update: ${err.message}`);
+      console.error('[LiveTracking] Trigger error:', err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Initial load and auto-refresh
   useEffect(() => {
     if (!eventId) return;
-
     loadData();
 
     if (autoRefresh) {
-      const interval = setInterval(loadData, 15000); // Every 15 seconds
+      const interval = setInterval(loadData, 15000); // Every 15s
       return () => clearInterval(interval);
     }
   }, [eventId, autoRefresh]);
 
-  const formatTime = (date) => {
-    if (!date) return '';
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  // No eventId provided
+  // No eventId
   if (!eventId) {
     return (
       <div className="min-h-screen bg-bg-light flex flex-col items-center justify-center px-6 text-center">
-        <h1 className="text-5xl font-black text-text-dark mb-8">
-          Live Athlete Tracking
-        </h1>
+        <h1 className="text-5xl font-black text-text-dark mb-8">Live Athlete Tracking</h1>
         <p className="text-2xl text-text-muted mb-8 max-w-2xl">
           No event selected. Add <code className="bg-gray-200 px-4 py-2 rounded-lg font-mono text-lg">?eventId=XXXX</code> to the URL.
         </p>
@@ -119,22 +132,23 @@ export default function LiveTrackingPage() {
 
   return (
     <div className="min-h-screen bg-bg-light">
-      {/* Fixed Top Control Bar */}
+      {/* Fixed Top Bar */}
       <div className="fixed top-0 left-0 right-0 bg-accent text-text-dark shadow-2xl z-50">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-          <div className="flex flex-col">
-            <h1 className="text-2xl md:text-4xl font-black flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+          <div>
+            <h1 className="text-3xl md:text-5xl font-black flex items-center gap-4">
               {eventName}
-              <span className="text-primary animate-pulse text-3xl">LIVE</span>
+              <span className="text-primary animate-pulse text-4xl">LIVE</span>
             </h1>
-            <p className="text-lg opacity-80 mt-1">Event ID: {eventId}</p>
+            <p className="text-lg opacity-80 mt-2">Event ID: {eventId}</p>
           </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 text-lg">
+
+          <div className="flex flex-col gap-4 text-lg">
             <div className={loading ? 'animate-pulse' : ''}>
-              Last update: <span className="font-bold">{formatTime(lastRefresh)}</span>
-              {loading && ' (refreshing...)'}
+              Last updated: <span className="font-bold">{lastRefresh ? formatRelativeTime(lastRefresh) : '—'}</span>
             </div>
-            <div className="flex items-center gap-6">
+
+            <div className="flex flex-wrap items-center gap-6">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -144,12 +158,21 @@ export default function LiveTrackingPage() {
                 />
                 <span className="font-medium">Auto-refresh (15s)</span>
               </label>
+
               <button
                 onClick={loadData}
                 disabled={loading}
-                className="px-8 py-3 bg-primary text-text-light rounded-full font-bold hover:bg-brand-red/90 disabled:opacity-50 transition shadow-lg"
+                className="px-6 py-3 bg-gray-700 text-white rounded-full font-bold hover:bg-gray-600 disabled:opacity-50 transition"
               >
-                {loading ? 'Refreshing...' : 'Refresh Now'}
+                {loading ? 'Refreshing...' : 'Refresh'}
+              </button>
+
+              <button
+                onClick={triggerUpdate}
+                disabled={updating}
+                className="px-8 py-3 bg-primary text-white rounded-full font-bold hover:bg-brand-red/90 disabled:opacity-50 transition shadow-lg"
+              >
+                {updating ? 'Triggering...' : 'Force Update Now'}
               </button>
             </div>
           </div>
@@ -164,9 +187,16 @@ export default function LiveTrackingPage() {
           </div>
         )}
 
+        {loading && !trackingData && (
+          <div className="text-center py-20">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary"></div>
+            <p className="text-2xl mt-8 text-text-muted">Loading live tracking data...</p>
+          </div>
+        )}
+
         {trackingData && (
           <>
-            {/* OVERALL PROGRESS */}
+            {/* Overall Progress */}
             <section className="mb-20">
               <h2 className="text-4xl md:text-6xl font-black text-center text-text-dark mb-12">
                 Overall Race Progress
@@ -174,9 +204,9 @@ export default function LiveTrackingPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-10">
                 <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
                   <p className="text-6xl md:text-7xl font-black text-primary">
-                    {trackingData.overall.started.toLocaleString()}
+                    {trackingData.overall.totalParticipants.toLocaleString()}
                   </p>
-                  <p className="text-3xl text-text-muted mt-6 font-bold">Started</p>
+                  <p className="text-3xl text-text-muted mt-6 font-bold">Total Athletes</p>
                 </div>
                 <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
                   <p className="text-6xl md:text-7xl font-black text-green-600">
@@ -191,15 +221,15 @@ export default function LiveTrackingPage() {
                   <p className="text-3xl text-text-muted mt-6 font-bold">On Course</p>
                 </div>
                 <div className="bg-white rounded-3xl shadow-2xl p-10 text-center">
-                  <p className="text-6xl md:text-7xl font-black text-text-muted">
-                    {trackingData.overall.yetToStart.toLocaleString()}
+                  <p className="text-6xl md:text-7xl font-black text-blue-600">
+                    {trackingData.overall.started.toLocaleString()}
                   </p>
-                  <p className="text-3xl text-text-muted mt-6 font-bold">Yet to Start</p>
+                  <p className="text-3xl text-text-muted mt-6 font-bold">Started</p>
                 </div>
               </div>
             </section>
 
-            {/* PER-RACE BREAKDOWN */}
+            {/* Per-Race Breakdown */}
             <section>
               <h2 className="text-4xl md:text-6xl font-black text-center text-text-dark mb-16">
                 Progress by Race
@@ -210,38 +240,37 @@ export default function LiveTrackingPage() {
                     <div className="bg-gradient-to-r from-accent to-brand-turquoise text-text-dark py-8 px-12">
                       <h3 className="text-4xl font-black">{race.raceName}</h3>
                       <p className="text-2xl opacity-90 mt-3">
-                        Total Entrants: {race.total.toLocaleString()}
+                        Total: {race.total.toLocaleString()} athletes
                       </p>
                     </div>
                     <div className="p-12">
-                      <div className="grid grid-cols-2 gap-12 mb-12 text-center">
+                      <div className="grid grid-cols-3 gap-8 mb-12 text-center">
                         <div>
-                          <p className="text-5xl md:text-6xl font-black text-green-600">{race.finished}</p>
-                          <p className="text-2xl text-text-muted mt-4">Finished</p>
+                          <p className="text-5xl font-black text-green-600">{race.finished}</p>
+                          <p className="text-xl text-text-muted mt-4">Finished</p>
                         </div>
                         <div>
-                          <p className="text-5xl md:text-6xl font-black text-orange-600">{race.stillOnCourse}</p>
-                          <p className="text-2xl text-text-muted mt-4">On Course</p>
+                          <p className="text-5xl font-black text-orange-600">{race.stillOnCourse}</p>
+                          <p className="text-xl text-text-muted mt-4">On Course</p>
+                        </div>
+                        <div>
+                          <p className="text-5xl font-black text-blue-600">{race.started}</p>
+                          <p className="text-xl text-text-muted mt-4">Started</p>
                         </div>
                       </div>
 
-                      {/* Split Progress Bars */}
                       {race.splitProgress.length > 0 && (
-                        <div className="space-y-10">
-                          <h4 className="text-3xl font-bold text-text-dark text-center mb-8">
-                            Split Progress
-                          </h4>
+                        <div className="space-y-8">
+                          <h4 className="text-3xl font-bold text-center mb-6">Split Progress</h4>
                           {race.splitProgress.map((split) => (
-                            <div key={split.name} className="space-y-3">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xl font-semibold">{split.name}</span>
-                                <span className="text-xl font-medium text-text-muted">
-                                  {split.passed} / {race.total} ({split.percentage}%)
-                                </span>
+                            <div key={split.name} className="space-y-2">
+                              <div className="flex justify-between text-lg font-medium">
+                                <span>{split.name}</span>
+                                <span>{split.percentage}% ({split.passed}/{race.total})</span>
                               </div>
-                              <div className="w-full bg-gray-200 rounded-full h-14 overflow-hidden shadow-inner">
+                              <div className="w-full bg-gray-200 rounded-full h-12 overflow-hidden">
                                 <div
-                                  className="bg-gradient-to-r from-accent to-brand-turquoise h-full rounded-full transition-all duration-1500 ease-out shadow-lg"
+                                  className="bg-gradient-to-r from-accent to-brand-turquoise h-full rounded-full transition-all duration-1000 ease-out"
                                   style={{ width: `${split.percentage}%` }}
                                 />
                               </div>
@@ -255,14 +284,14 @@ export default function LiveTrackingPage() {
               </div>
             </section>
 
-            {/* Critical Final Push Alert */}
-            {trackingData.overall.stillOnCourse > 0 && trackingData.overall.stillOnCourse <= 20 && (
-              <div className="mt-24 bg-gradient-to-r from-primary to-brand-red text-text-light rounded-3xl shadow-2xl p-16 text-center">
-                <p className="text-7xl md:text-9xl font-black animate-pulse">
-                  ONLY {trackingData.overall.stillOnCourse} ATHLETES REMAIN!
+            {/* Final Push Alert */}
+            {trackingData.overall.stillOnCourse > 0 && trackingData.overall.stillOnCourse <= 30 && (
+              <div className="mt-24 bg-gradient-to-r from-red-600 to-brand-red text-white rounded-3xl shadow-2xl p-16 text-center animate-pulse">
+                <p className="text-7xl md:text-9xl font-black">
+                  ONLY {trackingData.overall.stillOnCourse} LEFT ON COURSE!
                 </p>
                 <p className="text-4xl md:text-5xl mt-8 font-bold">
-                  Prepare awards, announcer, and finish line crew!
+                  Final push — prepare awards and finish line!
                 </p>
               </div>
             )}
