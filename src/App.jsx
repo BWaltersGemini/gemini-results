@@ -13,18 +13,18 @@ import Products from './pages/Products';
 import ResultsPage from './pages/ResultsPage';
 import Contact from './pages/Contact';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import ParticipantPage from './pages/participant/ParticipantPage'; 
+import ParticipantPage from './pages/participant/ParticipantPage';
 import MasterEvents from './pages/MasterEvents';
 import ResultsKiosk from './pages/ResultsKiosk';
 
-// Director Pages (protected)
+// Director Pages
 import DirectorLogin from './pages/director/DirectorLogin';
 import RaceDirectorsHub from './pages/director/RaceDirectorsHub';
-import LiveTrackingPage from './pages/director/LiveTrackingPage';
+import LiveTrackingPage from './pages/director/LiveTrackingPage'; // Reusable for both contexts
 import AwardsPage from './pages/director/AwardsPage';
 import AnalyticsPage from './pages/director/AnalyticsPage';
 
-// Public Awards Views (no login required)
+// Public Awards Views
 import AwardsAnnouncerView from './pages/public/AwardsAnnouncerView';
 import AwardsTableView from './pages/public/AwardsTableView';
 
@@ -33,7 +33,7 @@ import ReactGA from 'react-ga4';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 60 * 1000,
+      staleTime: 60 * 60 * 1000, // 1 hour
       cacheTime: Infinity,
       retry: 3,
     },
@@ -54,23 +54,25 @@ function AnalyticsTracker() {
   return null;
 }
 
-// Layout wrapper to hide Navbar & Footer on kiosk, director, and public awards routes
+// Layout wrapper: hides Navbar & Footer on specific routes
 function Layout({ children }) {
   const location = useLocation();
+
   const isKiosk = location.pathname.startsWith('/kiosk');
   const isDirectorArea = location.pathname.startsWith('/race-directors-hub');
   const isPublicAwards =
     location.pathname.startsWith('/awards-announcer') ||
     location.pathname.startsWith('/awards-table');
+  const isLiveTrackingPublic = location.pathname.startsWith('/live-tracking');
 
-  const hideNavFooter = isKiosk || isDirectorArea || isPublicAwards;
+  const hideNavFooter = isKiosk || isDirectorArea || isPublicAwards || isLiveTrackingPublic;
 
   return (
     <>
       {!hideNavFooter && <Navbar />}
       <ScrollToTop />
       <AnalyticsTracker />
-      <main className="flex-grow">{children}</main>
+      <main className="flex-grow min-h-screen">{children}</main>
       {!hideNavFooter && <Footer />}
     </>
   );
@@ -84,7 +86,7 @@ export default function App() {
           <div className="min-h-screen flex flex-col">
             <Layout>
               <Routes>
-                {/* Public Pages */}
+                {/* === PUBLIC PAGES === */}
                 <Route path="/" element={<Home />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/products" element={<Products />} />
@@ -92,7 +94,7 @@ export default function App() {
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/master-events" element={<MasterEvents />} />
 
-                {/* Standard Results Pages */}
+                {/* === RESULTS PAGES === */}
                 <Route path="/results" element={<ResultsPage />} />
                 <Route path="/results/:masterKey/:year" element={<ResultsPage />} />
                 <Route path="/results/:masterKey/:year/:raceSlug" element={<ResultsPage />} />
@@ -102,10 +104,14 @@ export default function App() {
                 />
                 <Route path="/participant" element={<ParticipantPage />} />
 
-                {/* Kiosk Mode */}
+                {/* === KIOSK MODE === */}
                 <Route path="/kiosk" element={<ResultsKiosk />} />
 
-                {/* Director Login (public) */}
+                {/* === PUBLIC LIVE TRACKING (No Login Required) === */}
+                <Route path="/live-tracking" element={<LiveTrackingPage />} />
+                <Route path="/live-tracking/:masterKey/:year" element={<LiveTrackingPage />} />
+
+                {/* === DIRECTOR LOGIN (Public Access) === */}
                 <Route path="/director-login" element={<DirectorLogin />} />
 
                 {/* === PROTECTED DIRECTOR HUB === */}
@@ -118,7 +124,7 @@ export default function App() {
                         <Route path="live-tracking" element={<LiveTrackingPage />} />
                         <Route path="awards" element={<AwardsPage />} />
                         <Route path="analytics" element={<AnalyticsPage />} />
-                        {/* Add more director sub-routes here in the future */}
+                        {/* Add more protected director routes here */}
                       </Routes>
                     </DirectorProvider>
                   }

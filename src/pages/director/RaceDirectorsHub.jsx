@@ -1,5 +1,5 @@
 // src/pages/director/RaceDirectorsHub.jsx
-// FINAL — Superadmin Awards Visibility Panel added
+// FINAL — Live Tracking Shareable Link + Superadmin Awards Visibility
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -30,6 +30,9 @@ export default function RaceDirectorsHub() {
   const [races, setRaces] = useState([]); // Unique race names for current event
   const [loadingSettings, setLoadingSettings] = useState(true);
 
+  // Live Tracking Link Copy Feedback
+  const [copySuccess, setCopySuccess] = useState(false);
+
   useEffect(() => {
     if (!currentUser) {
       setLoading(false);
@@ -41,7 +44,6 @@ export default function RaceDirectorsHub() {
       setError('');
       try {
         let eventIdsToShow = [];
-
         if (expandedAssignedEvents.length > 0) {
           eventIdsToShow = expandedAssignedEvents;
         } else if (assignedEvents.length > 0) {
@@ -135,6 +137,19 @@ export default function RaceDirectorsHub() {
     }
   };
 
+  // Copy Live Tracking Link to Clipboard
+  const copyLiveTrackingLink = () => {
+    if (!selectedEventId) return;
+
+    const liveUrl = `${window.location.origin}/live-tracking?eventId=${selectedEventId}`;
+    navigator.clipboard.writeText(liveUrl).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 3000);
+    }).catch(() => {
+      alert('Failed to copy link. Please copy manually:\n' + liveUrl);
+    });
+  };
+
   if (loading) {
     return (
       <DirectorLayout>
@@ -143,8 +158,8 @@ export default function RaceDirectorsHub() {
             <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary mb-8"></div>
             <p className="text-2xl text-brand-dark">Loading your hub...</p>
           </div>
-        </div>
-      </DirectorLayout>
+        </DirectorLayout>
+      );
     );
   }
 
@@ -192,16 +207,46 @@ export default function RaceDirectorsHub() {
               </div>
             )}
 
+            {/* LIVE TRACKING SHAREABLE LINK CARD */}
+            {selectedEventId && (
+              <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-3xl shadow-2xl p-10 mb-12 text-center">
+                <h3 className="text-3xl font-black mb-6 flex items-center justify-center gap-4">
+                  Live Tracking Ready
+                </h3>
+                <p className="text-xl mb-8 max-w-3xl mx-auto opacity-90">
+                  Share this link with your timing team, announcer, finish line crew, or project it on a screen.
+                </p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                  <button
+                    onClick={copyLiveTrackingLink}
+                    className="px-10 py-5 bg-white text-red-600 text-xl font-bold rounded-full hover:bg-gray-100 transition shadow-xl transform hover:scale-105"
+                  >
+                    {copySuccess ? 'Copied!' : 'Copy Live Tracking Link'}
+                  </button>
+                  <button
+                    onClick={() => window.open(`/live-tracking?eventId=${selectedEventId}`, '_blank')}
+                    className="px-10 py-5 bg-white/20 text-white text-xl font-bold rounded-full hover:bg-white/30 transition backdrop-blur shadow-xl"
+                  >
+                    Open in New Tab →
+                  </button>
+                </div>
+                {copySuccess && (
+                  <p className="mt-6 text-lg opacity-90">
+                    Link copied! Send it to your team.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Superadmin Awards Visibility Panel */}
             {isSuperAdmin && selectedEvent && (
               <div className="bg-yellow-50 border-2 border-yellow-400 rounded-2xl p-8 mb-12">
                 <h2 className="text-3xl font-bold text-brand-dark mb-6">
-                  🔐 Superadmin: Awards Visibility Control
+                  Superadmin: Awards Visibility Control
                 </h2>
                 <p className="text-lg text-gray-700 mb-6">
                   Hide awards until ready. Regular directors cannot see this panel.
                 </p>
-
                 {loadingSettings ? (
                   <p>Loading settings...</p>
                 ) : (
