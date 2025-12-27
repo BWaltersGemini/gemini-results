@@ -1,5 +1,5 @@
 // src/pages/public/AwardsTableView.jsx
-// FINAL — Searchable pickup table with persistent "Picked Up" status + robust realtime
+// FINAL — Mobile-optimized, clean UX pickup table with responsive cards
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -9,7 +9,7 @@ export default function AwardsTableView() {
   const { eventId } = useParams();
 
   const [finishers, setFinishers] = useState([]);
-  const [pickupStatus, setPickupStatus] = useState({}); // { entry_id: true/false }
+  const [pickupStatus, setPickupStatus] = useState({});
   const [eventName, setEventName] = useState('Awards Pickup Table');
   const [races, setRaces] = useState([]);
   const [selectedRace, setSelectedRace] = useState('all');
@@ -47,13 +47,12 @@ export default function AwardsTableView() {
       if (isMounted) {
         setFinishers(results || []);
 
-        // Races
         const uniqueRaces = [
           'all',
           ...new Set(results?.map((r) => r.race_name).filter(Boolean)),
         ];
         setRaces(uniqueRaces);
-        if (uniqueRaces.includes('all')) setSelectedRace('all');
+        setSelectedRace('all');
       }
 
       // Award settings
@@ -89,7 +88,7 @@ export default function AwardsTableView() {
 
     loadData();
 
-    // === REALTIME: Separate channels ===
+    // Realtime channels
     const resultsChannel = supabase
       .channel(`table-results-${eventId}`)
       .on(
@@ -177,7 +176,6 @@ export default function AwardsTableView() {
     };
   }, [eventId]);
 
-  // Toggle pickup and save to Supabase
   const togglePickup = async (entryId) => {
     const current = pickupStatus[entryId] || false;
     const newStatus = !current;
@@ -201,7 +199,7 @@ export default function AwardsTableView() {
     }
   };
 
-  // Filtered data
+  // Filtered winners
   const filteredFinishers = selectedRace === 'all'
     ? finishers
     : finishers.filter((r) => r.race_name === selectedRace);
@@ -217,7 +215,7 @@ export default function AwardsTableView() {
       )
     : filteredFinishers;
 
-  // Divisions including Overall
+  // Divisions
   const getDivisions = () => {
     const ageGroups = [
       ...new Set(searchFiltered.map((r) => r.age_group_name).filter(Boolean)),
@@ -284,34 +282,39 @@ export default function AwardsTableView() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-primary text-white py-8 shadow-2xl">
-        <div className="max-w-6xl mx-auto px-6 text-center">
-          <h1 className="text-4xl md:text-5xl font-black mb-2">{eventName}</h1>
-          <p className="text-2xl">Awards Pickup Table</p>
-          <p className="text-xl mt-4">
-            Progress: {pickedUpCount} / {totalAwards} picked up ({Math.round(progress)}%)
-          </p>
-          <div className="w-full max-w-md mx-auto mt-4 bg-gray-300 rounded-full h-6 overflow-hidden">
-            <div
-              className="bg-green-400 h-full transition-all duration-700"
-              style={{ width: `${progress}%` }}
-            />
+    <div className="min-h-screen bg-gray-50 pb-20">
+      {/* Sticky Header */}
+      <header className="fixed top-0 left-0 right-0 bg-primary text-white shadow-2xl z-50">
+        <div className="px-6 py-6 text-center">
+          <h1 className="text-3xl md:text-4xl font-black mb-2">{eventName}</h1>
+          <p className="text-xl md:text-2xl font-bold">Awards Pickup</p>
+          <div className="mt-4 max-w-md mx-auto">
+            <p className="text-lg mb-2">
+              {pickedUpCount} / {totalAwards} picked up
+            </p>
+            <div className="bg-white/30 rounded-full h-10 overflow-hidden">
+              <div
+                className="bg-green-400 h-full transition-all duration-1000 ease-out rounded-full"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-sm mt-2">{Math.round(progress)}% Complete</p>
           </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Controls */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-10">
-          <div className="grid md:grid-cols-2 gap-6">
+      {/* Main Content - starts below header */}
+      <div className="pt-48 px-4 md:px-6 max-w-5xl mx-auto">
+        {/* Filters */}
+        <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
+          <div className="space-y-6">
             {races.length > 1 && (
               <div>
-                <label className="block text-lg font-bold text-gray-800 mb-3">Filter by Race</label>
+                <label className="block text-lg font-bold text-gray-800 mb-3">Race</label>
                 <select
                   value={selectedRace}
                   onChange={(e) => setSelectedRace(e.target.value)}
-                  className="w-full px-6 py-4 rounded-xl border-2 border-primary text-lg focus:ring-4 focus:ring-primary/30"
+                  className="w-full px-5 py-4 rounded-xl border-2 border-primary text-lg focus:ring-4 focus:ring-primary/30"
                 >
                   <option value="all">All Races</option>
                   {races
@@ -324,78 +327,132 @@ export default function AwardsTableView() {
                 </select>
               </div>
             )}
+
             <div>
-              <label className="block text-lg font-bold text-gray-800 mb-3">Search Winners</label>
+              <label className="block text-lg font-bold text-gray-800 mb-3">Search</label>
               <input
                 type="text"
                 placeholder="Name, bib, city..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-6 py-4 rounded-xl border-2 border-primary text-lg focus:ring-4 focus:ring-primary/30"
+                className="w-full px-5 py-4 rounded-xl border-2 border-primary text-lg focus:ring-4 focus:ring-primary/30"
               />
             </div>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-primary text-white">
-                <tr>
-                  <th className="px-8 py-6 text-left text-lg font-bold">Division</th>
-                  <th className="px-8 py-6 text-left text-lg font-bold">Place</th>
-                  <th className="px-8 py-6 text-left text-lg font-bold">Bib</th>
-                  <th className="px-8 py-6 text-left text-lg font-bold">Name</th>
-                  <th className="px-8 py-6 text-left text-lg font-bold">Race</th>
-                  <th className="px-8 py-6 text-left text-lg font-bold">Time</th>
-                  <th className="px-8 py-6 text-center text-lg font-bold">Picked Up</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {divisions.flatMap((div) => {
-                  const runners = getRunnersInDivision(div);
-                  return runners.length > 0
-                    ? runners.map((r) => {
-                        const place =
-                          div.includes('Overall') || div === 'Overall'
-                            ? r.place
-                            : r.age_group_place;
+        {/* Winners List - Mobile Cards + Desktop Table */}
+        <div className="space-y-8">
+          {divisions.map((div) => {
+            const runners = getRunnersInDivision(div);
+            if (runners.length === 0) return null;
+
+            return (
+              <div key={div} className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                <div className="bg-primary text-white px-6 py-4">
+                  <h2 className="text-2xl font-bold">{div}</h2>
+                </div>
+
+                {/* Mobile: Cards */}
+                <div className="md:hidden divide-y divide-gray-200">
+                  {runners.map((r) => {
+                    const place = div.includes('Overall') ? r.place : r.age_group_place;
+                    const isPickedUp = pickupStatus[r.entry_id] || false;
+
+                    return (
+                      <div
+                        key={r.entry_id}
+                        className={`p-6 ${isPickedUp ? 'bg-green-50' : ''}`}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <div className="text-3xl font-black text-primary">#{place || '-'}</div>
+                            <div className="text-xl font-bold mt-1">
+                              {r.first_name} {r.last_name}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">Bib: {r.bib || '-'}</div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isPickedUp}
+                            onChange={() => togglePickup(r.entry_id)}
+                            className="h-10 w-10 text-green-600 rounded focus:ring-green-500"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="font-medium">Race:</span>
+                            <br />
+                            {r.race_name || '-'}
+                          </div>
+                          <div>
+                            <span className="font-medium">Time:</span>
+                            <br />
+                            {formatChronoTime(r.chip_time)}
+                          </div>
+                          <div className="col-span-2">
+                            <span className="font-medium">Location:</span>
+                            <br />
+                            {r.city && `${r.city}, `}{r.state}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop: Table */}
+                <div className="hidden md:block">
+                  <table className="w-full">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Place</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Bib</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Name</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Race</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Time</th>
+                        <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Picked Up</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {runners.map((r) => {
+                        const place = div.includes('Overall') ? r.place : r.age_group_place;
+                        const isPickedUp = pickupStatus[r.entry_id] || false;
+
                         return (
                           <tr
                             key={r.entry_id}
-                            className={`hover:bg-green-50 transition ${
-                              pickupStatus[r.entry_id] ? 'bg-green-100' : ''
-                            }`}
+                            className={`hover:bg-gray-50 transition ${isPickedUp ? 'bg-green-50' : ''}`}
                           >
-                            <td className="px-8 py-6 font-medium text-lg">{div}</td>
-                            <td className="px-8 py-6 font-bold text-xl text-primary">#{place || '-'}</td>
-                            <td className="px-8 py-6 font-bold text-lg">{r.bib || '-'}</td>
-                            <td className="px-8 py-6 font-semibold text-lg">
+                            <td className="px-6 py-4 font-bold text-xl text-primary">#{place || '-'}</td>
+                            <td className="px-6 py-4 font-bold">{r.bib || '-'}</td>
+                            <td className="px-6 py-4 font-semibold">
                               {r.first_name} {r.last_name}
                             </td>
-                            <td className="px-8 py-6 text-lg">{r.race_name || '-'}</td>
-                            <td className="px-8 py-6 text-lg">{formatChronoTime(r.chip_time)}</td>
-                            <td className="px-8 py-6 text-center">
+                            <td className="px-6 py-4">{r.race_name || '-'}</td>
+                            <td className="px-6 py-4">{formatChronoTime(r.chip_time)}</td>
+                            <td className="px-6 py-4 text-center">
                               <input
                                 type="checkbox"
-                                checked={pickupStatus[r.entry_id] || false}
+                                checked={isPickedUp}
                                 onChange={() => togglePickup(r.entry_id)}
-                                className="h-8 w-8 text-green-600 rounded focus:ring-green-500 cursor-pointer"
+                                className="h-7 w-7 text-green-600 rounded focus:ring-green-500 cursor-pointer"
                               />
                             </td>
                           </tr>
                         );
-                      })
-                    : [];
-                })}
-              </tbody>
-            </table>
-          </div>
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        <footer className="text-center py-16 text-gray-600">
-          <p className="text-xl">Live awards pickup table by Gemini Timing</p>
+        {/* Footer */}
+        <footer className="text-center py-12 text-gray-600 mt-12">
+          <p className="text-lg">Live awards pickup by Gemini Timing</p>
         </footer>
       </div>
     </div>
