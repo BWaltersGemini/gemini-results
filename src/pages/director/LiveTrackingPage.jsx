@@ -1,39 +1,34 @@
 // src/pages/director/LiveTrackingPage.jsx
+// UPDATED: Uses cached data from Supabase for instant, reliable load
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchLiveTrackingData } from '../../api/director/rd_chronotrackapi';
-import axios from 'axios';
+import { supabase } from '../../supabaseClient'; // ← Your existing client
 
 export default function LiveTrackingPage() {
   const navigate = useNavigate();
-  const [trackingData, setTrackingData] = useState(null);
+  const [trackingData, setTrackingData] = useState<any>(null);
   const [eventName, setEventName] = useState('Loading event...');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [lastRefresh, setLastRefresh] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Extract eventId from URL query param
   const urlParams = new URLSearchParams(window.location.search);
   const eventId = urlParams.get('eventId');
 
-  // Fetch event name from ChronoTrack API
+  // Fetch event name (unchanged — still direct API for name only)
   useEffect(() => {
     if (!eventId) return;
 
     const fetchEventName = async () => {
       try {
-        const response = await axios.get(`https://api.chronotrack.com/api/event/${eventId}`, {
-          params: {
-            format: 'json',
-            client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID,
-            user_id: import.meta.env.VITE_CHRONOTRACK_USER,
-            user_pass: import.meta.env.VITE_CHRONOTRACK_PASS,
-          },
-          timeout: 10000,
-        });
-
-        const name = response.data.event?.event_name || `Event ID ${eventId}`;
+        const response = await fetch(
+          `https://api.chronotrack.com/api/event/${eventId}?format=json&client_id=${import.meta.env.VITE_CHRONOTRACK_CLIENT_ID}&user_id=${import.meta.env.VITE_CHRONOTRACK_USER}&user_pass=${import.meta.env.VITE_CHRONOTRACK_PASS}`
+        );
+        const data = await response.json();
+        const name = data.event?.event_name || `Event ID ${eventId}`;
         setEventName(name);
       } catch (err) {
         console.warn('[LiveTracking] Failed to fetch event name:', err);
@@ -44,19 +39,37 @@ export default function LiveTrackingPage() {
     fetchEventName();
   }, [eventId]);
 
-  // Load live tracking data
+  // Load cached live data from Supabase
   const loadData = async () => {
     if (!eventId) return;
 
     setLoading(true);
     setError('');
+
     try {
-      const data = await fetchLiveTrackingData(eventId);
-      setTrackingData(data);
-      setLastRefresh(new Date());
-    } catch (err) {
-      setError('Failed to load live data — retrying in 30s...');
-      console.error('[Live Tracking] Data fetch error:', err);
+      const { data, error: supabaseError } = await supabase
+        .from('live_tracking_cache')
+        .select('data, last_updated, fetch_status')
+        .eq('event_id', eventId)
+        .single();
+
+      if (supabaseError || !data) {
+        throw supabaseError || new Error('No cached data found');
+      }
+
+      if (data.fetch_status === 'in_progress') {
+        setError('Updating live data...');
+      } else if (data.fetch_status === 'failed') {
+        setError('Last update failed — retrying soon');
+      } else {
+        setError('');
+      }
+
+      setTrackingData(data.data);
+      setLastRefresh(new Date(data.last_updated));
+    } catch (err: any) {
+      setError('No live data yet — background update in progress...');
+      console.error('[LiveTracking] Cache load error:', err);
     } finally {
       setLoading(false);
     }
@@ -69,12 +82,12 @@ export default function LiveTrackingPage() {
     loadData();
 
     if (autoRefresh) {
-      const interval = setInterval(loadData, 30000); // Every 30 seconds
+      const interval = setInterval(loadData, 15000); // Every 15 seconds — feels real-time
       return () => clearInterval(interval);
     }
   }, [eventId, autoRefresh]);
 
-  const formatTime = (date) => {
+  const formatTime = (date: Date | null) => {
     if (!date) return '';
     return date.toLocaleTimeString([], {
       hour: '2-digit',
@@ -93,9 +106,6 @@ export default function LiveTrackingPage() {
         <p className="text-2xl text-text-muted mb-8 max-w-2xl">
           No event selected. Add <code className="bg-gray-200 px-4 py-2 rounded-lg font-mono text-lg">?eventId=XXXX</code> to the URL.
         </p>
-        <p className="text-lg text-text-muted mb-12">
-          Example: <span className="font-mono bg-gray-200 px-3 py-1 rounded">/live-tracking?eventId=12345</span>
-        </p>
         <button
           onClick={() => navigate('/race-directors-hub')}
           className="px-10 py-5 bg-primary text-text-light text-xl font-bold rounded-full hover:bg-brand-red/90 transition shadow-xl"
@@ -108,7 +118,7 @@ export default function LiveTrackingPage() {
 
   return (
     <div className="min-h-screen bg-bg-light">
-      {/* Fixed Top Control Bar – Turquoise Accent */}
+      {/* Fixed Top Control Bar */}
       <div className="fixed top-0 left-0 right-0 bg-accent text-text-dark shadow-2xl z-50">
         <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
           <div className="flex flex-col">
@@ -118,13 +128,11 @@ export default function LiveTrackingPage() {
             </h1>
             <p className="text-lg opacity-80 mt-1">Event ID: {eventId}</p>
           </div>
-
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 text-lg">
             <div className={loading ? 'animate-pulse' : ''}>
               Last update: <span className="font-bold">{formatTime(lastRefresh)}</span>
               {loading && ' (refreshing...)'}
             </div>
-
             <div className="flex items-center gap-6">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -133,9 +141,8 @@ export default function LiveTrackingPage() {
                   onChange={(e) => setAutoRefresh(e.target.checked)}
                   className="w-6 h-6 text-primary rounded focus:ring-primary"
                 />
-                <span className="font-medium">Auto-refresh (30s)</span>
+                <span className="font-medium">Auto-refresh (15s)</span>
               </label>
-
               <button
                 onClick={loadData}
                 disabled={loading}
@@ -151,7 +158,7 @@ export default function LiveTrackingPage() {
       {/* Main Content */}
       <div className="pt-40 pb-20 px-6 max-w-7xl mx-auto">
         {error && (
-          <div className="bg-red-100 border-2 border-red-500 text-red-800 px-10 py-6 rounded-3xl text-center text-xl font-bold mb-10 shadow-xl">
+          <div className="bg-yellow-100 border-2 border-yellow-500 text-yellow-800 px-10 py-6 rounded-3xl text-center text-xl font-bold mb-10 shadow-xl">
             {error}
           </div>
         )}
@@ -197,7 +204,7 @@ export default function LiveTrackingPage() {
                 Progress by Race
               </h2>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-                {trackingData.races.map((race) => (
+                {trackingData.races.map((race: any) => (
                   <div key={race.raceId} className="bg-white rounded-3xl shadow-2xl overflow-hidden">
                     <div className="bg-gradient-to-r from-accent to-brand-turquoise text-text-dark py-8 px-12">
                       <h3 className="text-4xl font-black">{race.raceName}</h3>
@@ -223,7 +230,7 @@ export default function LiveTrackingPage() {
                           <h4 className="text-3xl font-bold text-text-dark text-center mb-8">
                             Split Progress
                           </h4>
-                          {race.splitProgress.map((split) => (
+                          {race.splitProgress.map((split: any) => (
                             <div key={split.name} className="space-y-3">
                               <div className="flex justify-between items-center">
                                 <span className="text-xl font-semibold">{split.name}</span>
