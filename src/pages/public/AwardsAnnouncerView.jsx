@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — Clean start + realtime places update + full features
+// FINAL + FULL DEBUG LOGGING — To diagnose realtime places update
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -10,62 +10,95 @@ export default function AwardsAnnouncerView() {
   const [finishers, setFinishers] = useState([]);
   const [eventName, setEventName] = useState('Loading Event...');
   const [races, setRaces] = useState([]);
-  const [selectedRace, setSelectedRace] = useState(''); // Start empty — nothing shown
+  const [selectedRace, setSelectedRace] = useState('');
   const [announced, setAnnounced] = useState(new Set());
   const [awardSettings, setAwardSettings] = useState({ overall_places: 3, age_group_places: 3 });
   const [loading, setLoading] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Fetch event name and initial settings
+  console.log('🔄 AwardsAnnouncerView mounted with eventId:', eventId);
+
+  // Fetch event name, races, and initial award settings
   useEffect(() => {
     if (!eventId) return;
 
+    console.log('📡 Fetching initial event info for eventId:', eventId);
+
     const fetchInfo = async () => {
-      const { data: eventData } = await supabase
-        .from('chronotrack_events')
-        .select('name')
-        .eq('id', eventId)
-        .single();
+      try {
+        // Event name
+        const { data: eventData } = await supabase
+          .from('chronotrack_events')
+          .select('name')
+          .eq('id', eventId)
+          .single();
 
-      setEventName(eventData?.name || 'Awards Ceremony');
+        console.log('🏆 Event name:', eventData?.name);
+        setEventName(eventData?.name || 'Awards Ceremony');
 
-      // Load current award settings
-      const { data: settingsData } = await supabase
-        .from('event_results_visibility')
-        .select('overall_places, age_group_places')
-        .eq('event_id', eventId)
-        .single();
+        // Current award settings
+        const { data: settingsData, error: settingsError } = await supabase
+          .from('event_results_visibility')
+          .select('overall_places, age_group_places')
+          .eq('event_id', eventId)
+          .single();
 
-      setAwardSettings({
-        overall_places: settingsData?.overall_places || 3,
-        age_group_places: settingsData?.age_group_places || 3,
-      });
+        if (settingsError) {
+          console.warn('⚠️ Settings error (likely no row yet):', settingsError.message);
+          console.log('Using defaults: overall=3, age_group=3');
+        } else {
+          console.log('✅ Initial award settings loaded:', settingsData);
+        }
 
-      // Load races
-      const { data: results } = await supabase
-        .from('chronotrack_results')
-        .select('race_name')
-        .eq('event_id', eventId);
+        const initialSettings = {
+          overall_places: settingsData?.overall_places || 3,
+          age_group_places: settingsData?.age_group_places || 3,
+        };
+        setAwardSettings(initialSettings);
+        console.log('🎯 Initial awardSettings set to:', initialSettings);
 
-      const uniqueRaces = ['all', ...new Set(results?.map(r => r.race_name).filter(Boolean))];
-      setRaces(uniqueRaces);
+        // Races
+        const { data: results } = await supabase
+          .from('chronotrack_results')
+          .select('race_name')
+          .eq('event_id', eventId);
+
+        const uniqueRaces = ['all', ...new Set(results?.map(r => r.race_name).filter(Boolean))];
+        console.log('🏁 Unique races found:', uniqueRaces);
+        setRaces(uniqueRaces);
+
+        // Auto-select first race or 'all'
+        if (uniqueRaces.length > 1) {
+          setSelectedRace(uniqueRaces[0]);
+          console.log('Default race selected:', uniqueRaces[0]);
+        } else {
+          setSelectedRace('all');
+          console.log('Default: All Races');
+        }
+      } catch (err) {
+        console.error('💥 Error in initial fetch:', err);
+      }
     };
 
     fetchInfo();
   }, [eventId]);
 
-  // Load results + realtime for results AND settings
+  // Load results + Realtime subscriptions
   useEffect(() => {
     if (!eventId) return;
 
+    console.log('🔗 Setting up Realtime channel for eventId:', eventId);
+
     const fetchResults = async () => {
       setLoading(true);
+      console.log('Fetching initial results...');
       const { data } = await supabase
         .from('chronotrack_results')
         .select('*')
         .eq('event_id', eventId)
         .order('place', { ascending: true });
 
+      console.log(`Fetched ${data?.length || 0} finishers`);
       setFinishers(data || []);
       setLoading(false);
     };
@@ -78,6 +111,7 @@ export default function AwardsAnnouncerView() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'chronotrack_results', filter: `event_id=eq.${Number(eventId)}` },
         (payload) => {
+          console.log('🏃 Results realtime update:', payload);
           setFinishers((prev) => {
             const index = prev.findIndex(r => r.entry_id === payload.new.entry_id);
             if (index >= 0) {
@@ -93,15 +127,27 @@ export default function AwardsAnnouncerView() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'event_results_visibility', filter: `event_id=eq.${Number(eventId)}` },
         (payload) => {
-          setAwardSettings({
+          console.log('⚙️ SETTINGS REALTIME PAYLOAD RECEIVED:', payload);
+          console.log('New overall_places:', payload.new.overall_places);
+          console.log('New age_group_places:', payload.new.age_group_places);
+
+          const newSettings = {
             overall_places: payload.new.overall_places || 3,
             age_group_places: payload.new.age_group_places || 3,
-          });
+          };
+          console.log('🎯 Updating awardSettings to:', newSettings);
+          setAwardSettings(newSettings);
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('Channel status:', status);
+        if (err) console.error('Channel error:', err);
+      });
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      console.log('🧹 Cleaning up Realtime channel');
+      supabase.removeChannel(channel);
+    };
   }, [eventId]);
 
   // Back to top
@@ -114,6 +160,7 @@ export default function AwardsAnnouncerView() {
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   const markAnnounced = (entryId) => {
+    console.log('Marking announced:', entryId);
     setAnnounced(prev => {
       const newSet = new Set(prev);
       newSet.has(entryId) ? newSet.delete(entryId) : newSet.add(entryId);
@@ -126,10 +173,12 @@ export default function AwardsAnnouncerView() {
     ? (selectedRace === 'all' ? finishers : finishers.filter(r => r.race_name === selectedRace))
     : [];
 
-  // Divisions — only when race selected
+  console.log('Filtered finishers count:', filteredFinishers.length);
+  console.log('Current awardSettings:', awardSettings);
+
+  // Divisions
   const getDivisions = () => {
     if (!selectedRace) return [];
-
     const ageGroups = [...new Set(filteredFinishers.map(r => r.age_group_name).filter(Boolean))];
     const sorted = ageGroups
       .filter(g => g !== 'Overall')
@@ -144,6 +193,7 @@ export default function AwardsAnnouncerView() {
       divisions.push('Male Overall', 'Female Overall');
     }
     divisions.push(...sorted);
+    console.log('Divisions:', divisions);
     return divisions;
   };
 
@@ -151,23 +201,30 @@ export default function AwardsAnnouncerView() {
 
   const getRunnersInDivision = (div) => {
     const places = div.includes('Overall') ? awardSettings.overall_places : awardSettings.age_group_places;
+    console.log(`Calculating ${div} with ${places} places`);
 
     if (div === 'Male Overall') {
-      return filteredFinishers
+      const runners = filteredFinishers
         .filter(r => r.gender === 'M')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
+      console.log(`Male Overall runners: ${runners.length}`);
+      return runners;
     }
     if (div === 'Female Overall') {
-      return filteredFinishers
+      const runners = filteredFinishers
         .filter(r => r.gender === 'F')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
+      console.log(`Female Overall runners: ${runners.length}`);
+      return runners;
     }
-    return filteredFinishers
+    const runners = filteredFinishers
       .filter(r => r.age_group_name === div)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
       .slice(0, places);
+    console.log(`${div} runners: ${runners.length}`);
+    return runners;
   };
 
   const onCourseInDivision = (div) => {
@@ -184,6 +241,8 @@ export default function AwardsAnnouncerView() {
     return sum + runners.filter(r => announced.has(r.entry_id)).length;
   }, 0);
   const progress = totalToAnnounce > 0 ? (announcedCount / totalToAnnounce) * 100 : 0;
+
+  console.log('Progress:', announcedCount, '/', totalToAnnounce, `(${Math.round(progress)}%)`);
 
   if (loading) {
     return (
@@ -203,14 +262,16 @@ export default function AwardsAnnouncerView() {
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-8">
-        {/* Race Selector + Progress */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-12 text-center">
           <label className="block text-2xl font-bold text-gray-800 mb-6">
             Select Race to Begin Awards
           </label>
           <select
             value={selectedRace}
-            onChange={(e) => setSelectedRace(e.target.value)}
+            onChange={(e) => {
+              console.log('Race selected:', e.target.value);
+              setSelectedRace(e.target.value);
+            }}
             className="px-10 py-6 rounded-2xl border-4 border-primary text-2xl font-bold focus:outline-none focus:ring-8 focus:ring-primary/30"
           >
             <option value="">Choose a race...</option>
@@ -236,10 +297,8 @@ export default function AwardsAnnouncerView() {
           )}
         </div>
 
-        {/* Only show content when race selected */}
         {selectedRace ? (
           <>
-            {/* Jump Links */}
             <div className="flex flex-wrap justify-center gap-4 mb-16">
               {divisions.map((div) => {
                 const onCourse = onCourseInDivision(div);
@@ -256,7 +315,6 @@ export default function AwardsAnnouncerView() {
               })}
             </div>
 
-            {/* Divisions */}
             {divisions.map((div) => {
               const runners = getRunnersInDivision(div);
 
@@ -336,7 +394,6 @@ export default function AwardsAnnouncerView() {
         )}
       </div>
 
-      {/* Back to Top */}
       {showBackToTop && (
         <button
           onClick={scrollToTop}
