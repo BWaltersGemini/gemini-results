@@ -1,5 +1,7 @@
 // src/api/director/rd_chronotrackapi.js
 // FINAL — Full featured: Live Tracking + Participant Contact Details + Detailed Debug Logging
+// UPDATED: Dec 26, 2025 — Now correctly counts starters on races WITHOUT a start mat
+
 import axios from 'axios';
 
 const PROXY_BASE = '/chrono-api';
@@ -12,14 +14,17 @@ const fetchAccessToken = async () => {
     const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
     const username = import.meta.env.VITE_CHRONOTRACK_USER;
     const password = import.meta.env.VITE_CHRONOTRACK_PASS;
+
     if (!clientId || !clientSecret || !username || !password) {
       throw new Error('Missing ChronoTrack credentials');
     }
+
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     const response = await axios.get(`${PROXY_BASE}/oauth2/token`, {
       headers: { Authorization: `Basic ${basicAuth}` },
       params: { grant_type: 'password', username, password },
     });
+
     const { access_token, expires_in } = response.data;
     accessToken = access_token;
     tokenExpiration = Date.now() + (expires_in || 3600) * 1000;
@@ -45,6 +50,7 @@ const getAuthHeader = async () => {
  */
 export const fetchParticipantContactDetails = async (eventId, entryIds = []) => {
   if (entryIds.length === 0) return new Map();
+
   const authHeader = await getAuthHeader();
   const details = new Map();
   const batchSize = 50;
@@ -78,15 +84,7 @@ export const fetchParticipantContactDetails = async (eventId, entryIds = []) => 
         } catch (err) {
           console.warn(`[RD ChronoTrack] Failed entry ${entryId}:`, err.response?.status || err.message);
           details.set(entryId, {
-            email: '',
-            street: '',
-            street2: '',
-            city: '',
-            state: '',
-            zip: '',
-            country: '',
-            phone: '',
-            birthdate: '',
+            email: '', street: '', street2: '', city: '', state: '', zip: '', country: '', phone: '', birthdate: '',
           });
         }
       })
@@ -99,6 +97,7 @@ export const fetchParticipantContactDetails = async (eventId, entryIds = []) => 
 
 /**
  * Enhanced live tracking with per-race breakdown + detailed debug logging
+ * Now correctly detects starters on races WITHOUT a start mat
  */
 export const fetchLiveTrackingData = async (eventId) => {
   const authHeader = await getAuthHeader();
@@ -121,13 +120,16 @@ export const fetchLiveTrackingData = async (eventId) => {
         },
         timeout: 20000,
       });
+
       const results = res.data.event_results || [];
       if (results.length === 0) {
         console.log(`[LiveTracking] Page ${page}: No more results — end of data`);
         break;
       }
+
       rawResults.push(...results);
       console.log(`[LiveTracking] Page ${page}: Fetched ${results.length} interval records (total: ${rawResults.length})`);
+
       if (results.length < pageSize) {
         console.log('[LiveTracking] Last page reached');
         break;
@@ -147,6 +149,7 @@ export const fetchLiveTrackingData = async (eventId) => {
     const entryId = row.results_entry_id;
     const raceId = row.results_race_id || 'unknown';
     const raceName = row.results_race_name || `Race ${raceId}`;
+
     const hasStart = !!row.results_begin_chip_time;
     const isFullInterval = row.results_interval_full === '1';
     const hasFinish = isFullInterval && !!row.results_end_chip_time;
@@ -165,7 +168,7 @@ export const fetchLiveTrackingData = async (eventId) => {
     }
     const race = races.get(raceId);
 
-    // New participant
+    // New participant (first time we see this entryId)
     if (!participantsByEntry.has(entryId)) {
       participantsByEntry.set(entryId, {
         raceId,
@@ -178,15 +181,19 @@ export const fetchLiveTrackingData = async (eventId) => {
 
     const participant = participantsByEntry.get(entryId);
 
-    // Start detected
-    if (hasStart && !participant.hasStarted) {
+    // START DETECTION — NOW WORKS WITH OR WITHOUT START MAT
+    // Any timing read on course (start mat, split, or finish) counts as "started"
+    const hasAnyRead = hasStart || !!row.results_end_chip_time;
+    if (hasAnyRead && !participant.hasStarted) {
       participant.hasStarted = true;
       race.started++;
       race.stillOnCourse++;
-      console.log(`[Participant ${entryId}] STARTED → ${raceName} | Started: ${race.started} | On Course: ${race.stillOnCourse}`);
+
+      const detectionMethod = hasStart ? 'start mat' : 'split/finish read';
+      console.log(`[Participant ${entryId}] STARTED via ${detectionMethod} → ${raceName} | Started: ${race.started} | On Course: ${race.stillOnCourse}`);
     }
 
-    // Finish detected
+    // FINISH DETECTION
     if (hasFinish && !participant.hasFinished) {
       participant.hasFinished = true;
       race.finished++;
@@ -194,12 +201,13 @@ export const fetchLiveTrackingData = async (eventId) => {
       console.log(`[Participant ${entryId}] FINISHED → ${raceName} | Finished: ${race.finished} | On Course: ${race.stillOnCourse}`);
     }
 
-    // Split passage
+    // SPLIT PASSAGE TRACKING
     if (row.results_interval_name && row.results_end_chip_time) {
       const splitName = row.results_interval_name;
       const current = race.splits.get(splitName) || 0;
       race.splits.set(splitName, current + 1);
-      if (current < 5) { // Log first few to avoid spam
+
+      if (current < 5) { // Log only first few to reduce noise
         console.log(`[Split] ${splitName} passed by participant ${entryId}`);
       }
     }
