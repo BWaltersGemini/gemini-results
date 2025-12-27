@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Separate Overall (1 or 3) and Age Group (3/5/10) award controls
+// FINAL — Full control: Overall (0-10) + Age Groups (1-10) + all features
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -13,8 +13,8 @@ export default function AwardsPage() {
   const [finishers, setFinishers] = useState([]);
   const [awardsState, setAwardsState] = useState({});
   const [loading, setLoading] = useState(true);
-  const [overallPlaces, setOverallPlaces] = useState(1); // 0 = none, 1 = 1st, 3 = top 3
-  const [ageGroupPlaces, setAgeGroupPlaces] = useState(3); // 3, 5, or 10
+  const [overallPlaces, setOverallPlaces] = useState(1); // 0=none, 1-10
+  const [ageGroupPlaces, setAgeGroupPlaces] = useState(3); // 1-10
   const [mode, setMode] = useState('announcer');
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
@@ -134,7 +134,7 @@ export default function AwardsPage() {
     });
   };
 
-  // Division ordering
+  // Divisions: Overall (if enabled) + age groups
   const getDivisions = () => {
     const ageGroups = [...new Set(finishers.map(r => r.age_group_name).filter(Boolean))];
     const sorted = ageGroups
@@ -156,22 +156,24 @@ export default function AwardsPage() {
   const divisions = getDivisions();
 
   const getRunnersInDivision = (div) => {
+    const places = div.includes('Overall') ? overallPlaces : ageGroupPlaces;
+
     if (div === 'Male Overall') {
       return finishers
         .filter(r => r.gender === 'M')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
-        .slice(0, overallPlaces);
+        .slice(0, places);
     }
     if (div === 'Female Overall') {
       return finishers
         .filter(r => r.gender === 'F')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
-        .slice(0, overallPlaces);
+        .slice(0, places);
     }
     return finishers
       .filter(r => r.age_group_name === div)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
-      .slice(0, ageGroupPlaces);
+      .slice(0, places);
   };
 
   const onCourseInDivision = (div) => {
@@ -206,6 +208,9 @@ export default function AwardsPage() {
     }
   };
 
+  // Options 1-10
+  const placeOptions = Array.from({ length: 10 }, (_, i) => i + 1);
+
   return (
     <DirectorLayout>
       <div className="max-w-7xl mx-auto">
@@ -217,7 +222,7 @@ export default function AwardsPage() {
           <div className="grid md:grid-cols-2 gap-8">
             <div className="bg-white rounded-2xl shadow-xl p-8">
               <h3 className="text-2xl font-bold text-primary mb-4">Announcer View</h3>
-              <p className="text-text-muted mb-6">Large cards — perfect for reading during ceremony.</p>
+              <p className="text-text-muted mb-6">Large cards for reading during ceremony.</p>
               <div className="flex gap-4 mb-4">
                 <input type="text" value={announcerUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
                 <button onClick={() => handleCopy(announcerUrl, 'announcer')} className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90">
@@ -228,9 +233,10 @@ export default function AwardsPage() {
                 Open Announcer View
               </a>
             </div>
+
             <div className="bg-white rounded-2xl shadow-xl p-8">
               <h3 className="text-2xl font-bold text-primary mb-4">Awards Table View</h3>
-              <p className="text-text-muted mb-6">Full table for pickup tracking.</p>
+              <p className="text-text-muted mb-6">Table for volunteer pickup tracking.</p>
               <div className="flex gap-4 mb-4">
                 <input type="text" value={tableUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
                 <button onClick={() => handleCopy(tableUrl, 'table')} className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90">
@@ -249,15 +255,16 @@ export default function AwardsPage() {
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             {/* Overall Awards */}
             <div>
-              <label className="block text-text-dark font-semibold mb-2">Overall Awards</label>
+              <label className="block text-text-dark font-semibold mb-2">Overall Awards (M/F)</label>
               <select
                 value={overallPlaces}
                 onChange={(e) => setOverallPlaces(Number(e.target.value))}
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
               >
                 <option value={0}>None</option>
-                <option value={1}>1st Place Only</option>
-                <option value={3}>Top 3</option>
+                {placeOptions.map(n => (
+                  <option key={n} value={n}>Top {n}</option>
+                ))}
               </select>
             </div>
 
@@ -269,9 +276,9 @@ export default function AwardsPage() {
                 onChange={(e) => setAgeGroupPlaces(Number(e.target.value))}
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
               >
-                <option value={3}>Top 3</option>
-                <option value={5}>Top 5</option>
-                <option value={10}>Top 10</option>
+                {placeOptions.map(n => (
+                  <option key={n} value={n}>Top {n}</option>
+                ))}
               </select>
             </div>
 
