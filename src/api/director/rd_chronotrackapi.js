@@ -1,5 +1,5 @@
 // src/api/director/rd_chronotrackapi.js
-// Enhanced ChronoTrack API client with participant details (email, address, chip start)
+// FINAL — Full featured: Live Tracking + Participant Contact Details + Detailed Debug Logging
 import axios from 'axios';
 
 const PROXY_BASE = '/chrono-api';
@@ -12,17 +12,14 @@ const fetchAccessToken = async () => {
     const clientSecret = import.meta.env.VITE_CHRONOTRACK_SECRET;
     const username = import.meta.env.VITE_CHRONOTRACK_USER;
     const password = import.meta.env.VITE_CHRONOTRACK_PASS;
-
     if (!clientId || !clientSecret || !username || !password) {
       throw new Error('Missing ChronoTrack credentials');
     }
-
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     const response = await axios.get(`${PROXY_BASE}/oauth2/token`, {
       headers: { Authorization: `Basic ${basicAuth}` },
       params: { grant_type: 'password', username, password },
     });
-
     const { access_token, expires_in } = response.data;
     accessToken = access_token;
     tokenExpiration = Date.now() + (expires_in || 3600) * 1000;
@@ -42,19 +39,20 @@ const getAuthHeader = async () => {
 };
 
 /**
- * Fetch detailed participant contact info (email, address, phone, etc.)
+ * Fetch detailed participant contact info (email, address, phone, birthdate, etc.)
+ * Used for Year-over-Year Analytics
  * Returns Map<entry_id, details>
  */
 export const fetchParticipantContactDetails = async (eventId, entryIds = []) => {
   if (entryIds.length === 0) return new Map();
-
   const authHeader = await getAuthHeader();
   const details = new Map();
-
   const batchSize = 50;
+
+  console.log(`[Contact Details] Fetching details for ${entryIds.length} participants in event ${eventId}`);
+
   for (let i = 0; i < entryIds.length; i += batchSize) {
     const batch = entryIds.slice(i, i + batchSize);
-
     await Promise.all(
       batch.map(async (entryId) => {
         try {
@@ -63,7 +61,6 @@ export const fetchParticipantContactDetails = async (eventId, entryIds = []) => 
             params: { client_id: import.meta.env.VITE_CHRONOTRACK_CLIENT_ID },
             timeout: 15000,
           });
-
           const entry = res.data.entry;
           if (entry) {
             details.set(entryId, {
@@ -96,12 +93,12 @@ export const fetchParticipantContactDetails = async (eventId, entryIds = []) => 
     );
   }
 
-  console.log(`[RD ChronoTrack] Fetched contact details for ${details.size} participants`);
+  console.log(`[Contact Details] Successfully fetched details for ${details.size} participants`);
   return details;
 };
 
 /**
- * Enhanced live tracking with per-race breakdown
+ * Enhanced live tracking with per-race breakdown + detailed debug logging
  */
 export const fetchLiveTrackingData = async (eventId) => {
   const authHeader = await getAuthHeader();
@@ -109,6 +106,8 @@ export const fetchLiveTrackingData = async (eventId) => {
   let page = 1;
   const pageSize = 500;
   const maxPages = 40;
+
+  console.log(`[LiveTracking] Starting data fetch for event ${eventId}`);
 
   try {
     while (page <= maxPages) {
@@ -122,16 +121,22 @@ export const fetchLiveTrackingData = async (eventId) => {
         },
         timeout: 20000,
       });
-
       const results = res.data.event_results || [];
-      if (results.length === 0) break;
+      if (results.length === 0) {
+        console.log(`[LiveTracking] Page ${page}: No more results — end of data`);
+        break;
+      }
       rawResults.push(...results);
-      if (results.length < pageSize) break;
+      console.log(`[LiveTracking] Page ${page}: Fetched ${results.length} interval records (total: ${rawResults.length})`);
+      if (results.length < pageSize) {
+        console.log('[LiveTracking] Last page reached');
+        break;
+      }
       page++;
     }
-    console.log(`[RD Live] Fetched ${rawResults.length} interval results`);
+    console.log(`[LiveTracking] Completed fetch — Total interval records: ${rawResults.length}`);
   } catch (err) {
-    console.error('[RD Live] Failed to fetch results:', err);
+    console.error('[LiveTracking] Failed to fetch results:', err.response?.data || err.message);
     throw new Error('Failed to load live tracking data');
   }
 
@@ -142,10 +147,11 @@ export const fetchLiveTrackingData = async (eventId) => {
     const entryId = row.results_entry_id;
     const raceId = row.results_race_id || 'unknown';
     const raceName = row.results_race_name || `Race ${raceId}`;
-    const isFullInterval = row.results_interval_full === '1';
     const hasStart = !!row.results_begin_chip_time;
+    const isFullInterval = row.results_interval_full === '1';
     const hasFinish = isFullInterval && !!row.results_end_chip_time;
 
+    // Initialize race
     if (!races.has(raceId)) {
       races.set(raceId, {
         raceId,
@@ -159,6 +165,7 @@ export const fetchLiveTrackingData = async (eventId) => {
     }
     const race = races.get(raceId);
 
+    // New participant
     if (!participantsByEntry.has(entryId)) {
       participantsByEntry.set(entryId, {
         raceId,
@@ -166,27 +173,39 @@ export const fetchLiveTrackingData = async (eventId) => {
         hasFinished: false,
       });
       race.total++;
+      console.log(`[Participant ${entryId}] New entrant → ${raceName} (Total: ${race.total})`);
     }
 
     const participant = participantsByEntry.get(entryId);
 
+    // Start detected
     if (hasStart && !participant.hasStarted) {
       participant.hasStarted = true;
       race.started++;
       race.stillOnCourse++;
+      console.log(`[Participant ${entryId}] STARTED → ${raceName} | Started: ${race.started} | On Course: ${race.stillOnCourse}`);
     }
+
+    // Finish detected
     if (hasFinish && !participant.hasFinished) {
       participant.hasFinished = true;
       race.finished++;
       race.stillOnCourse--;
+      console.log(`[Participant ${entryId}] FINISHED → ${raceName} | Finished: ${race.finished} | On Course: ${race.stillOnCourse}`);
     }
 
+    // Split passage
     if (row.results_interval_name && row.results_end_chip_time) {
       const splitName = row.results_interval_name;
-      race.splits.set(splitName, (race.splits.get(splitName) || 0) + 1);
+      const current = race.splits.get(splitName) || 0;
+      race.splits.set(splitName, current + 1);
+      if (current < 5) { // Log first few to avoid spam
+        console.log(`[Split] ${splitName} passed by participant ${entryId}`);
+      }
     }
   });
 
+  // Build race list with summaries
   const raceList = Array.from(races.values()).map((race) => {
     const total = race.total;
     const splitProgress = Array.from(race.splits.entries())
@@ -196,6 +215,8 @@ export const fetchLiveTrackingData = async (eventId) => {
         percentage: total ? Math.round((passed / total) * 100) : 0,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+
+    console.log(`[Race Summary] ${race.raceName}: Total=${total} | Started=${race.started} | Finished=${race.finished} | On Course=${race.stillOnCourse}`);
 
     return {
       raceId: race.raceId,
@@ -209,6 +230,7 @@ export const fetchLiveTrackingData = async (eventId) => {
     };
   });
 
+  // Overall totals
   const overall = raceList.reduce(
     (acc, race) => ({
       totalParticipants: acc.totalParticipants + race.total,
@@ -225,6 +247,14 @@ export const fetchLiveTrackingData = async (eventId) => {
       yetToStart: 0,
     }
   );
+
+  console.log('[LiveTracking] FINAL OVERALL TOTALS:', {
+    totalParticipants: overall.totalParticipants,
+    started: overall.started,
+    finished: overall.finished,
+    stillOnCourse: overall.stillOnCourse,
+    yetToStart: overall.yetToStart,
+  });
 
   return {
     overall,
