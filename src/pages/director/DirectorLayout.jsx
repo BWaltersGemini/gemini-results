@@ -1,4 +1,5 @@
 // src/pages/director/DirectorLayout.jsx
+// FINAL — Fixed stuck "Authenticating..." + all features preserved
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDirector } from '../../context/DirectorContext';
@@ -12,46 +13,41 @@ export default function DirectorLayout({ children }) {
     selectedEventId,
     assignedEvents,
     setSelectedEvent,
+    selectedEventName = 'No Event Selected',
+    loading: directorLoading = false,
   } = useDirector();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [eventOptions, setEventOptions] = useState([]); // { id, name }
+  const [eventOptions, setEventOptions] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [currentEventDisplay, setCurrentEventDisplay] = useState('No Event Selected');
 
-  // Fetch current event name from chronotrack_events
-  useEffect(() => {
-    if (!selectedEventId) {
-      setCurrentEventDisplay('No Event Selected');
-      return;
-    }
-    const fetchCurrentEventName = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('chronotrack_events')
-          .select('name')
-          .eq('id', selectedEventId)
-          .single();
-        if (error || !data) {
-          setCurrentEventDisplay(`Event ${selectedEventId}`);
-        } else {
-          setCurrentEventDisplay(data.name.trim() || `Event ${selectedEventId}`);
-        }
-      } catch (err) {
-        console.error('Failed to fetch current event name:', err);
-        setCurrentEventDisplay(`Event ${selectedEventId}`);
-      }
-    };
-    fetchCurrentEventName();
-  }, [selectedEventId]);
+  // === CRITICAL AUTH FIX ===
+  // currentUser: undefined = loading, null = logged out, object = logged in
+  if (currentUser === undefined || directorLoading) {
+    return (
+      <div className="min-h-screen bg-bg-light flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary mb-8"></div>
+          <p className="text-2xl text-brand-dark">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Fetch all assigned event names for dropdown
+  if (currentUser === null) {
+    navigate('/director-login', { replace: true });
+    return null;
+  }
+
+  // === Fetch event options for dropdown ===
   useEffect(() => {
     if (assignedEvents.length === 0) {
       setEventOptions([]);
       setLoadingEvents(false);
       return;
     }
+
     const fetchEventNames = async () => {
       setLoadingEvents(true);
       try {
@@ -59,31 +55,41 @@ export default function DirectorLayout({ children }) {
           .from('chronotrack_events')
           .select('id, name')
           .in('id', assignedEvents);
+
         if (error) throw error;
-        const options = data
+
+        const options = (data || [])
           .map(row => ({
-            id: row.id.toString(),
-            name: row.name.trim() || `Event ${row.id}`,
+            id: String(row.id),
+            name: row.name?.trim() || `Event ${row.id}`,
           }))
           .sort((a, b) => a.name.localeCompare(b.name));
-        // Add any missing (fallback)
+
+        // Fallback for any missing events
         const fetchedIds = options.map(o => o.id);
-        const missing = assignedEvents.filter(id => !fetchedIds.includes(id.toString()));
-        missing.forEach(id => options.push({ id, name: `Event ${id}` }));
+        const missing = assignedEvents.filter(id => !fetchedIds.includes(String(id)));
+        missing.forEach(id => options.push({ id: String(id), name: `Event ${id}` }));
+
         setEventOptions(options);
       } catch (err) {
         console.error('Failed to fetch event options:', err);
-        setEventOptions(assignedEvents.map(id => ({ id, name: `Event ${id}` })));
+        setEventOptions(assignedEvents.map(id => ({ id: String(id), name: `Event ${id}` })));
       } finally {
         setLoadingEvents(false);
       }
     };
+
     fetchEventNames();
   }, [assignedEvents]);
 
-  // Relative paths — works with /race-directors-hub/* nesting
+  // Update current display name
+  useEffect(() => {
+    setCurrentEventDisplay(selectedEventName);
+  }, [selectedEventName]);
+
+  // Navigation items with relative paths
   const navItems = [
-    { path: '.', label: 'Dashboard', icon: '🏠' }, // '.' = current base (hub)
+    { path: '.', label: 'Dashboard', icon: '🏠' },
     {
       path: 'live-tracking',
       label: 'Live Tracking',
@@ -100,18 +106,11 @@ export default function DirectorLayout({ children }) {
   };
 
   const isActive = (path) => {
-    // For relative paths, compare against current pathname
-    if (path === '.') return location.pathname.endsWith('/race-directors-hub') || location.pathname === '/race-directors-hub';
+    if (path === '.') {
+      return location.pathname.endsWith('/race-directors-hub') || location.pathname === '/race-directors-hub';
+    }
     return location.pathname.includes(path);
   };
-
-  if (currentUser === null) {
-    return (
-      <div className="min-h-screen bg-bg-light flex items-center justify-center">
-        <p className="text-2xl text-text-muted">Authenticating...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-bg-light flex">
@@ -120,13 +119,14 @@ export default function DirectorLayout({ children }) {
         <div className="p-8 border-b border-white/10">
           <h1 className="text-3xl font-bold">Director Hub</h1>
           <p className="mt-2 text-gray-300">
-            {currentUser?.profile?.full_name || currentUser?.email || 'Director'}
+            {currentUser?.user_metadata?.full_name || currentUser?.email || 'Director'}
           </p>
           <div className="mt-6 bg-primary/20 px-4 py-3 rounded-xl">
             <p className="text-sm opacity-80">Current Event</p>
             <p className="text-lg font-semibold truncate">{currentEventDisplay}</p>
           </div>
-          {/* Event Selector Dropdown - Desktop */}
+
+          {/* Event Selector - Desktop */}
           <div className="mt-6">
             <label className="text-sm opacity-80 block mb-2">Switch Event</label>
             {loadingEvents ? (
@@ -152,6 +152,7 @@ export default function DirectorLayout({ children }) {
             )}
           </div>
         </div>
+
         <nav className="flex-1 p-6">
           <ul className="space-y-3">
             {navItems.map((item) => (
@@ -178,6 +179,7 @@ export default function DirectorLayout({ children }) {
             ))}
           </ul>
         </nav>
+
         <div className="p-6 border-t border-white/10">
           <button
             onClick={handleSignOut}
@@ -188,7 +190,7 @@ export default function DirectorLayout({ children }) {
         </div>
       </aside>
 
-      {/* Mobile Version */}
+      {/* Mobile Layout */}
       <div className="flex-1 flex flex-col">
         <header className="md:hidden bg-text-dark text-text-light p-4 flex justify-between items-center shadow-lg">
           <div>
@@ -202,6 +204,7 @@ export default function DirectorLayout({ children }) {
             ☰
           </button>
         </header>
+
         {mobileMenuOpen && (
           <>
             <div
@@ -213,7 +216,7 @@ export default function DirectorLayout({ children }) {
                 <div>
                   <h1 className="text-3xl font-bold">Director Hub</h1>
                   <p className="mt-2 text-gray-300 text-sm">
-                    {currentUser?.profile?.full_name || currentUser?.email}
+                    {currentUser?.user_metadata?.full_name || currentUser?.email}
                   </p>
                 </div>
                 <button
@@ -223,11 +226,13 @@ export default function DirectorLayout({ children }) {
                   ✕
                 </button>
               </div>
+
               <div className="p-6">
                 <div className="bg-primary/20 px-4 py-3 rounded-xl mb-6">
                   <p className="text-sm opacity-80">Current Event</p>
                   <p className="text-lg font-semibold truncate">{currentEventDisplay}</p>
                 </div>
+
                 {/* Mobile Event Selector */}
                 <div className="mb-6">
                   <label className="text-sm opacity-80 block mb-2">Switch Event</label>
@@ -254,6 +259,7 @@ export default function DirectorLayout({ children }) {
                   )}
                 </div>
               </div>
+
               <nav className="flex-1 px-6">
                 <ul className="space-y-3">
                   {navItems.map((item) => (
@@ -281,6 +287,7 @@ export default function DirectorLayout({ children }) {
                   ))}
                 </ul>
               </nav>
+
               <div className="p-6 border-t border-white/10">
                 <button
                   onClick={handleSignOut}
@@ -292,6 +299,7 @@ export default function DirectorLayout({ children }) {
             </aside>
           </>
         )}
+
         <main className="flex-1 p-6 md:p-12 overflow-y-auto bg-bg-light">
           {children}
         </main>
