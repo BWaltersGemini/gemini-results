@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Fixed hooks + better UX + race name + on course counts
+// FINAL — Top 3 Overall Male/Female only + full topPlaces for age groups
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -10,7 +10,6 @@ export default function AwardsPage() {
   const navigate = useNavigate();
   const { selectedEventId, currentUser, loading: directorLoading } = useDirector();
 
-  // === ALL HOOKS AT TOP LEVEL ===
   const [finishers, setFinishers] = useState([]);
   const [awardsState, setAwardsState] = useState({});
   const [loading, setLoading] = useState(true);
@@ -20,7 +19,7 @@ export default function AwardsPage() {
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
   const [copiedTable, setCopiedTable] = useState(false);
 
-  // === AUTH & LOADING GUARD AFTER HOOKS ===
+  // Auth guard
   if (currentUser === undefined || directorLoading) {
     return (
       <DirectorLayout>
@@ -39,7 +38,6 @@ export default function AwardsPage() {
     return null;
   }
 
-  // Load live results
   useEffect(() => {
     const fetchInitial = async () => {
       setLoading(true);
@@ -82,7 +80,6 @@ export default function AwardsPage() {
     return () => supabase.removeChannel(channel);
   }, [selectedEventId]);
 
-  // Load awards state
   useEffect(() => {
     if (!currentUser) return;
 
@@ -134,23 +131,35 @@ export default function AwardsPage() {
     });
   };
 
-  // Division ordering
+  // Division ordering: Male Overall → Female Overall → age groups
   const getDivisions = () => {
     const ageGroups = [...new Set(finishers.map(r => r.age_group_name).filter(Boolean))];
-    const sorted = ageGroups.sort((a, b) => {
-      const ageA = parseInt(a.match(/\d+/)?.[0] || 99);
-      const ageB = parseInt(b.match(/\d+/)?.[0] || 99);
-      return ageA - ageB;
-    });
+    const sorted = ageGroups
+      .filter(g => g !== 'Overall')
+      .sort((a, b) => {
+        const ageA = parseInt(a.match(/\d+/)?.[0] || 99);
+        const ageB = parseInt(b.match(/\d+/)?.[0] || 99);
+        return ageA - ageB;
+      });
     return ['Male Overall', 'Female Overall', ...sorted];
   };
 
   const divisions = getDivisions();
 
   const getRunnersInDivision = (div) => {
-    if (div === 'Male Overall') return finishers.filter(r => r.gender === 'M');
-    if (div === 'Female Overall') return finishers.filter(r => r.gender === 'F');
-    return finishers.filter(r => r.age_group_name === div);
+    if (div === 'Male Overall') {
+      return finishers
+        .filter(r => r.gender === 'M')
+        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+    }
+    if (div === 'Female Overall') {
+      return finishers
+        .filter(r => r.gender === 'F')
+        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+    }
+    return finishers
+      .filter(r => r.age_group_name === div)
+      .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity));
   };
 
   const onCourseInDivision = (div) => {
@@ -168,7 +177,6 @@ export default function AwardsPage() {
     );
   });
 
-  // Share URLs
   const announcerUrl = `${window.location.origin}/awards-announcer/${selectedEventId}`;
   const tableUrl = `${window.location.origin}/awards-table/${selectedEventId}`;
 
@@ -232,7 +240,7 @@ export default function AwardsPage() {
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-12">
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             <div>
-              <label className="block text-text-dark font-semibold mb-2">Top Places to Award</label>
+              <label className="block text-text-dark font-semibold mb-2">Top Places (Age Groups)</label>
               <select
                 value={topPlaces}
                 onChange={(e) => setTopPlaces(Number(e.target.value))}
@@ -242,6 +250,7 @@ export default function AwardsPage() {
                 <option value={5}>Top 5</option>
                 <option value={10}>Top 10</option>
               </select>
+              <p className="text-sm text-gray-600 mt-2">Overall awards fixed at top 3</p>
             </div>
             <div>
               <label className="block text-text-dark font-semibold mb-2">View Mode</label>
@@ -277,11 +286,12 @@ export default function AwardsPage() {
           </div>
         </div>
 
-        {/* Division Jump Links */}
+        {/* Division Jump Links — Includes Overall Male/Female */}
         <div className="flex flex-wrap justify-center gap-4 mb-12">
-          {visibleDivisions.map((div) => {
+          {divisions.map((div) => {
             const runners = getRunnersInDivision(div);
-            const topCount = Math.min(topPlaces, runners.length);
+            const maxPlaces = div.includes('Overall') ? 3 : topPlaces; // Force 3 for overall
+            const topCount = Math.min(maxPlaces, runners.length);
             const announcedCount = awardsState[div]?.announced?.size || 0;
             const onCourse = onCourseInDivision(div);
             const isComplete = announcedCount >= topCount;
@@ -305,7 +315,8 @@ export default function AwardsPage() {
 
         {/* Announcer Mode */}
         {mode === 'announcer' && visibleDivisions.map((div) => {
-          const top = getRunnersInDivision(div).slice(0, topPlaces);
+          const maxPlaces = div.includes('Overall') ? 3 : topPlaces;
+          const top = getRunnersInDivision(div).slice(0, maxPlaces);
           const announcedSet = awardsState[div]?.announced || new Set();
           const onCourse = onCourseInDivision(div);
 
@@ -386,7 +397,8 @@ export default function AwardsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {visibleDivisions.map((div) => {
-                    const runners = getRunnersInDivision(div);
+                    const maxPlaces = div.includes('Overall') ? 3 : topPlaces;
+                    const runners = getRunnersInDivision(div).slice(0, maxPlaces);
                     return runners.length > 0
                       ? runners.map((r) => (
                           <tr key={r.entry_id} className="hover:bg-bg-light transition">
