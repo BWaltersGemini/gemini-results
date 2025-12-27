@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Unified pickup tracking + Export CSV correctly reflects volunteer marks
+// FINAL — Smart CSV export: Current winners + previously picked up (even if no longer winners)
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -11,8 +11,8 @@ export default function AwardsPage() {
   const { selectedEventId, currentUser, loading: directorLoading, isSuperAdmin } = useDirector();
 
   const [finishers, setFinishers] = useState([]);
-  const [announcedState, setAnnouncedState] = useState({}); // Director-only announced marks
-  const [pickupStatus, setPickupStatus] = useState({});     // Shared pickup status (volunteers + director)
+  const [announcedState, setAnnouncedState] = useState({});
+  const [pickupStatus, setPickupStatus] = useState({});
   const [eventName, setEventName] = useState('Awards');
   const [loading, setLoading] = useState(true);
   const [overallPlaces, setOverallPlaces] = useState(1);
@@ -22,10 +22,8 @@ export default function AwardsPage() {
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
   const [copiedTable, setCopiedTable] = useState(false);
 
-  // Auto-save toast
   const [saveToast, setSaveToast] = useState(null);
 
-  // Superadmin visibility
   const [visibilitySettings, setVisibilitySettings] = useState({
     event_visible: true,
     race_visibility: {},
@@ -267,7 +265,6 @@ export default function AwardsPage() {
     }
   };
 
-  // Save announced (director only)
   const saveAnnounced = async (division, entryId) => {
     const current = announcedState[division]?.has(entryId) || false;
 
@@ -292,36 +289,93 @@ export default function AwardsPage() {
     });
   };
 
-  // Export CSV using shared pickup status
-  const exportAwardsCSV = () => {
-    const divisions = getDivisions();
-    const rows = [];
+  // SMART EXPORT: Current winners + anyone previously picked up
+  const exportAwardsCSV = async () => {
+    const currentDivisions = getDivisions();
+    const currentWinners = new Set();
 
-    divisions.forEach((div) => {
+    // Collect all current winners' entry_ids
+    currentDivisions.forEach((div) => {
       const runners = getRunnersInDivision(div);
       runners.forEach((runner) => {
-        const place = div.includes('Overall') ? runner.place : runner.age_group_place;
-        const pickedUp = pickupStatus[runner.entry_id] || false;
-
-        rows.push({
-          Division: div,
-          Place: place || '',
-          Bib: runner.bib || '',
-          Name: `${runner.first_name} ${runner.last_name}`,
-          Race: runner.race_name || '',
-          Time: runner.chip_time || '',
-          Location: [runner.city, runner.state].filter(Boolean).join(', '),
-          'Picked Up': pickedUp ? 'Yes' : 'No',
-        });
+        currentWinners.add(runner.entry_id);
       });
     });
 
-    if (rows.length === 0) {
-      alert('No award winners to export.');
+    // Get all historical picked-up entry_ids
+    const { data: historicalPickedUp } = await supabase
+      .from('awards_pickup_status')
+      .select('entry_id')
+      .eq('event_id', selectedEventId)
+      .eq('picked_up', true);
+
+    const historicalIds = new Set(historicalPickedUp?.map(row => row.entry_id) || []);
+
+    // Combine: current winners + previously picked up
+    const allToInclude = new Set([...currentWinners, ...historicalIds]);
+
+    if (allToInclude.size === 0) {
+      alert('No award winners or picked-up awards to export.');
       return;
     }
 
-    const headers = Object.keys(rows[0]);
+    // Map entry_id → runner data
+    const entryIdToRunner = {};
+    finishers.forEach((r) => {
+      entryIdToRunner[r.entry_id] = r;
+    });
+
+    const rows = [];
+
+    // Current winners
+    currentDivisions.forEach((div) => {
+      const runners = getRunnersInDivision(div);
+      runners.forEach((runner) => {
+        if (allToInclude.has(runner.entry_id)) {
+          const place = div.includes('Overall') ? runner.place : runner.age_group_place;
+          rows.push({
+            Division: div,
+            Place: place || '',
+            Bib: runner.bib || '',
+            Name: `${runner.first_name} ${runner.last_name}`,
+            Race: runner.race_name || '',
+            Time: runner.chip_time || '',
+            Location: [runner.city, runner.state].filter(Boolean).join(', '),
+            'Picked Up': pickupStatus[runner.entry_id] ? 'Yes' : 'No',
+            Status: 'Current Winner',
+          });
+        }
+      });
+    });
+
+    // Historical picked-up (no longer current winners)
+    historicalIds.forEach((entryId) => {
+      if (!currentWinners.has(entryId)) {
+        const runner = entryIdToRunner[entryId];
+        if (runner) {
+          rows.push({
+            Division: 'Previous Winner',
+            Place: '',
+            Bib: runner.bib || '',
+            Name: `${runner.first_name} ${runner.last_name}`,
+            Race: runner.race_name || '',
+            Time: runner.chip_time || '',
+            Location: [runner.city, runner.state].filter(Boolean).join(', '),
+            'Picked Up': 'Yes',
+            Status: 'Previously Picked Up (No Longer in Awards)',
+          });
+        }
+      });
+    });
+
+    // Sort: current winners first
+    rows.sort((a, b) => {
+      if (a.Status === b.Status) return 0;
+      return a.Status.includes('Current') ? -1 : 1;
+    });
+
+    // CSV generation
+    const headers = ['Division', 'Place', 'Bib', 'Name', 'Race', 'Time', 'Location', 'Picked Up', 'Status'];
     const csvContent = [
       headers.join(','),
       ...rows.map((row) =>
@@ -344,7 +398,7 @@ export default function AwardsPage() {
     document.body.removeChild(link);
   };
 
-  // Divisions
+  // Divisions logic
   const getDivisions = () => {
     const ageGroups = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
     const sorted = ageGroups
@@ -619,6 +673,9 @@ export default function AwardsPage() {
               </svg>
               Export Awards Pickup Report (CSV)
             </button>
+            <p className="text-sm text-gray-600 mt-3">
+              Includes current winners + anyone previously marked as picked up
+            </p>
           </div>
 
           <input
@@ -717,7 +774,7 @@ export default function AwardsPage() {
             );
           })}
 
-        {/* Table Mode — now uses shared pickupStatus */}
+        {/* Table Mode */}
         {mode === 'table' && (
           <div>
             <h2 className="text-3xl font-bold text-text-dark mb-8">Awards Pickup Table</h2>
