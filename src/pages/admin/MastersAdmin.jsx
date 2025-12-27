@@ -1,5 +1,5 @@
 // src/pages/admin/MastersAdmin.jsx
-// ENHANCED — Now includes Director Assignment per Master Series (Superadmin only)
+// FINAL — Director assignments + Remove individual linked events
 import { useState, useContext, useMemo, useEffect } from 'react';
 import { RaceContext } from '../../context/RaceContext';
 import { createAdminSupabaseClient } from '../../supabaseClient';
@@ -17,30 +17,29 @@ export default function MastersAdmin({
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadingLogoFor, setUploadingLogoFor] = useState(null);
   const [deletingMaster, setDeletingMaster] = useState(null);
+  const [unlinkingEvent, setUnlinkingEvent] = useState(null); // { masterKey, eventId }
 
   // Director assignment state
-  const [directors, setDirectors] = useState([]); // All directors: { id, email, name }
-  const [assignments, setAssignments] = useState({}); // { masterKey: [user_id] }
+  const [directors, setDirectors] = useState([]);
+  const [assignments, setAssignments] = useState({});
   const [loadingDirectors, setLoadingDirectors] = useState(true);
-  const [assigningTo, setAssigningTo] = useState(null); // masterKey currently being modified
+  const [assigningTo, setAssigningTo] = useState(null);
 
   const adminSupabase = createAdminSupabaseClient();
 
-  // Load directors and current assignments
+  // Load directors and assignments
   useEffect(() => {
     const loadDirectorsAndAssignments = async () => {
       setLoadingDirectors(true);
       try {
-        // Fetch all users with director role (assuming you have a profiles table)
         const { data: profiles } = await adminSupabase
-          .from('director_profiles') // Adjust if your table name is different
+          .from('director_profiles')
           .select('user_id, full_name, email')
           .order('full_name');
 
-        // Fallback: if no profiles table, get from auth.users (limited info)
         if (!profiles || profiles.length === 0) {
           const { data: users } = await adminSupabase.auth.admin.listUsers();
-          const directorUsers = users.filter(u => u.email?.includes('@') && u.email_confirmed_at); // crude filter
+          const directorUsers = users.filter(u => u.email?.includes('@') && u.email_confirmed_at);
           setDirectors(directorUsers.map(u => ({
             id: u.id,
             email: u.email,
@@ -54,7 +53,6 @@ export default function MastersAdmin({
           })));
         }
 
-        // Load current assignments
         const { data: assigns } = await adminSupabase
           .from('director_master_assignments')
           .select('director_user_id, master_key');
@@ -96,6 +94,7 @@ export default function MastersAdmin({
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
+  // === Logo Handling ===
   const handleLogoUpload = async (e, masterKey) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -139,6 +138,7 @@ export default function MastersAdmin({
     }
   };
 
+  // === Master Series Delete ===
   const handleDeleteMaster = async (masterKey) => {
     const linkedCount = getLinkedEvents(masterKey).length;
     if (!confirm(`Delete "${masterKey}"? ${linkedCount > 0 ? `This will unlink ${linkedCount} events.` : ''}`)) return;
@@ -149,7 +149,6 @@ export default function MastersAdmin({
       setMasterGroups(updated);
       await autoSaveConfig('masterGroups', updated);
       await handleRemoveLogo(masterKey);
-      // Also remove assignments
       await adminSupabase
         .from('director_master_assignments')
         .delete()
@@ -162,13 +161,30 @@ export default function MastersAdmin({
     }
   };
 
-  // Assign/unassign director to master
+  // === Remove Individual Linked Event ===
+  const handleUnlinkEvent = async (masterKey, eventId) => {
+    if (!confirm('Remove this event from the series?')) return;
+    setUnlinkingEvent({ masterKey, eventId });
+    try {
+      const updatedGroups = { ...masterGroups };
+      updatedGroups[masterKey] = updatedGroups[masterKey].filter(id => id !== String(eventId));
+      // If no events left, optionally delete the master — here we keep it
+      setMasterGroups(updatedGroups);
+      await autoSaveConfig('masterGroups', updatedGroups);
+    } catch (err) {
+      console.error('Failed to unlink event:', err);
+      alert('Failed to remove event from series.');
+    } finally {
+      setUnlinkingEvent(null);
+    }
+  };
+
+  // === Director Assignment ===
   const toggleDirectorAssignment = async (masterKey, directorId) => {
     setAssigningTo(masterKey);
     try {
       const current = assignments[masterKey] || [];
       if (current.includes(directorId)) {
-        // Remove
         await adminSupabase
           .from('director_master_assignments')
           .delete()
@@ -179,7 +195,6 @@ export default function MastersAdmin({
           [masterKey]: prev[masterKey].filter(id => id !== directorId)
         }));
       } else {
-        // Add
         await adminSupabase
           .from('director_master_assignments')
           .insert({ director_user_id: directorId, master_key: masterKey });
@@ -252,7 +267,7 @@ export default function MastersAdmin({
                     disabled={deletingMaster === masterKey}
                     className="text-red-600 hover:text-red-700 font-bold text-sm transition disabled:opacity-50"
                   >
-                    {deletingMaster === masterKey ? 'Deleting...' : 'Delete'}
+                    {deletingMaster === masterKey ? 'Deleting...' : 'Delete Series'}
                   </button>
                 </div>
 
@@ -268,7 +283,7 @@ export default function MastersAdmin({
                   ) : (
                     <div>
                       <label className="block text-xl font-bold text-brand-dark mb-4 cursor-pointer">
-                        Upload Logo
+                        Upload Series Logo
                       </label>
                       <input
                         type="file"
@@ -301,7 +316,9 @@ export default function MastersAdmin({
 
                 {/* Director Assignments */}
                 <div className="mb-10">
-                  <h4 className="text-xl font-bold text-brand-dark mb-4">Assigned Directors ({assigned.length})</h4>
+                  <h4 className="text-xl font-bold text-brand-dark mb-4">
+                    Assigned Directors ({assigned.length})
+                  </h4>
                   {assigned.length > 0 ? (
                     <div className="space-y-3">
                       {assigned.map(dir => (
@@ -323,7 +340,6 @@ export default function MastersAdmin({
                   ) : (
                     <p className="text-gray-500 italic">No directors assigned</p>
                   )}
-
                   {unassigned.length > 0 && (
                     <div className="mt-6">
                       <select
@@ -347,18 +363,30 @@ export default function MastersAdmin({
                   )}
                 </div>
 
-                {/* Linked Events */}
+                {/* Linked Events with Remove Button */}
                 <div>
                   <p className="text-xl font-bold text-brand-dark mb-4">
                     Linked Events ({linkedEvents.length})
                   </p>
                   {linkedEvents.length > 0 ? (
                     <ul className="text-base space-y-3 max-h-80 overflow-y-auto border-2 border-primary/10 rounded-2xl p-5 bg-brand-light/30">
-                      {linkedEvents.map((event) => (
-                        <li key={event.id} className="text-brand-dark font-medium">
-                          {formatDate(event.start_time)} — {event.name}
-                        </li>
-                      ))}
+                      {linkedEvents.map((event) => {
+                        const isUnlinking = unlinkingEvent?.masterKey === masterKey && unlinkingEvent?.eventId === event.id;
+                        return (
+                          <li key={event.id} className="flex justify-between items-center text-brand-dark font-medium">
+                            <span>
+                              {formatDate(event.start_time)} — {event.name}
+                            </span>
+                            <button
+                              onClick={() => handleUnlinkEvent(masterKey, event.id)}
+                              disabled={isUnlinking}
+                              className="text-red-600 hover:text-red-700 text-sm font-bold disabled:opacity-50"
+                            >
+                              {isUnlinking ? 'Removing...' : 'Remove'}
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic text-lg">No events linked yet.</p>
