@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Added Export CSV for Awards Pickup Report + all existing features
+// FINAL — Unified pickup tracking + Export CSV correctly reflects volunteer marks
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -11,8 +11,9 @@ export default function AwardsPage() {
   const { selectedEventId, currentUser, loading: directorLoading, isSuperAdmin } = useDirector();
 
   const [finishers, setFinishers] = useState([]);
-  const [awardsState, setAwardsState] = useState({});
-  const [eventName, setEventName] = useState('Awards'); // For CSV filename
+  const [announcedState, setAnnouncedState] = useState({}); // Director-only announced marks
+  const [pickupStatus, setPickupStatus] = useState({});     // Shared pickup status (volunteers + director)
+  const [eventName, setEventName] = useState('Awards');
   const [loading, setLoading] = useState(true);
   const [overallPlaces, setOverallPlaces] = useState(1);
   const [ageGroupPlaces, setAgeGroupPlaces] = useState(3);
@@ -21,7 +22,7 @@ export default function AwardsPage() {
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
   const [copiedTable, setCopiedTable] = useState(false);
 
-  // Auto-save confirmation toast
+  // Auto-save toast
   const [saveToast, setSaveToast] = useState(null);
 
   // Superadmin visibility
@@ -51,7 +52,7 @@ export default function AwardsPage() {
     return null;
   }
 
-  // Load event name for CSV filename
+  // Load event name for CSV
   useEffect(() => {
     const fetchEventName = async () => {
       const { data } = await supabase
@@ -79,7 +80,7 @@ export default function AwardsPage() {
     fetchInitial();
 
     const channel = supabase
-      .channel(`director-awards-${selectedEventId}`)
+      .channel(`director-awards-results-${selectedEventId}`)
       .on(
         'postgres_changes',
         {
@@ -90,7 +91,7 @@ export default function AwardsPage() {
         },
         (payload) => {
           setFinishers((prev) => {
-            const index = prev.findIndex((r) => r.entry_id === payload.new?.entry_id);
+            const index = prev.findIndex((r) => r.entry_id === payload.new?.entry_id || r.entry_id === payload.old?.entry_id);
             if (payload.eventType === 'DELETE') {
               return prev.filter((r) => r.entry_id !== payload.old.entry_id);
             }
@@ -108,31 +109,75 @@ export default function AwardsPage() {
     return () => supabase.removeChannel(channel);
   }, [selectedEventId]);
 
-  // Load director awards state (announced + pickedUp)
+  // Load director's announced marks (private)
   useEffect(() => {
     if (!currentUser) return;
-    const loadState = async () => {
+    const loadAnnounced = async () => {
       const { data } = await supabase
         .from('director_awards_state')
-        .select('*')
+        .select('division, entry_id')
         .eq('event_id', selectedEventId)
-        .eq('user_id', currentUser.id);
+        .eq('user_id', currentUser.id)
+        .eq('announced', true);
 
       const state = {};
       data?.forEach((row) => {
-        const div = row.division;
-        if (!state[div]) state[div] = { announced: new Set(), pickedUp: new Set() };
-        if (row.announced) state[div].announced.add(row.entry_id);
-        if (row.picked_up) state[div].pickedUp.add(row.entry_id);
+        if (!state[row.division]) state[row.division] = new Set();
+        state[row.division].add(row.entry_id);
       });
-      setAwardsState(state);
+      setAnnouncedState(state);
     };
-    loadState();
+    loadAnnounced();
   }, [selectedEventId, currentUser]);
 
-  // AUTO-SAVE AWARD PLACES WITH TOAST
+  // Load shared pickup status (used by volunteers and director)
   useEffect(() => {
-    if (!selectedEventId || !currentUser) return;
+    const loadPickup = async () => {
+      const { data } = await supabase
+        .from('awards_pickup_status')
+        .select('entry_id, picked_up')
+        .eq('event_id', selectedEventId);
+
+      const map = {};
+      data?.forEach((row) => {
+        map[row.entry_id] = row.picked_up;
+      });
+      setPickupStatus(map);
+    };
+    loadPickup();
+
+    const channel = supabase
+      .channel(`director-awards-pickup-${selectedEventId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'awards_pickup_status',
+          filter: `event_id=eq.${selectedEventId}`,
+        },
+        (payload) => {
+          setPickupStatus((prev) => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              return { ...prev, [payload.new.entry_id]: payload.new.picked_up };
+            }
+            if (payload.eventType === 'DELETE') {
+              const next = { ...prev };
+              delete next[payload.old.entry_id];
+              return next;
+            }
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [selectedEventId]);
+
+  // Auto-save award places
+  useEffect(() => {
+    if (!selectedEventId) return;
 
     const savePlaces = async () => {
       try {
@@ -167,9 +212,9 @@ export default function AwardsPage() {
 
     const timeoutId = setTimeout(savePlaces, 500);
     return () => clearTimeout(timeoutId);
-  }, [selectedEventId, overallPlaces, ageGroupPlaces, currentUser]);
+  }, [selectedEventId, overallPlaces, ageGroupPlaces]);
 
-  // Superadmin: Load visibility + races
+  // Superadmin visibility
   useEffect(() => {
     if (!isSuperAdmin || !selectedEventId) {
       setLoadingVisibility(false);
@@ -222,12 +267,9 @@ export default function AwardsPage() {
     }
   };
 
-  const saveState = async (division, entryId, type) => {
-    const field = type === 'announced' ? 'announced' : 'picked_up';
-    const current =
-      type === 'announced'
-        ? awardsState[division]?.announced?.has(entryId) || false
-        : awardsState[division]?.pickedUp?.has(entryId) || false;
+  // Save announced (director only)
+  const saveAnnounced = async (division, entryId) => {
+    const current = announcedState[division]?.has(entryId) || false;
 
     await supabase
       .from('director_awards_state')
@@ -237,30 +279,29 @@ export default function AwardsPage() {
           user_id: currentUser.id,
           division,
           entry_id: entryId,
-          [field]: !current,
+          announced: !current,
         },
         { onConflict: 'event_id,user_id,division,entry_id' }
       );
 
-    setAwardsState((prev) => {
-      const divState = prev[division] || { announced: new Set(), pickedUp: new Set() };
-      const set = type === 'announced' ? divState.announced : divState.pickedUp;
-      if (!current) set.add(entryId);
-      else set.delete(entryId);
-      return { ...prev, [division]: divState };
+    setAnnouncedState((prev) => {
+      const divSet = new Set(prev[division] || []);
+      if (!current) divSet.add(entryId);
+      else divSet.delete(entryId);
+      return { ...prev, [division]: divSet };
     });
   };
 
-  // EXPORT CSV FUNCTION
+  // Export CSV using shared pickup status
   const exportAwardsCSV = () => {
     const divisions = getDivisions();
     const rows = [];
 
     divisions.forEach((div) => {
       const runners = getRunnersInDivision(div);
-      runners.forEach((runner, index) => {
-        const place = div.includes('Overall') ? runner.place : runner.age_group_place || index + 1;
-        const pickedUp = awardsState[div]?.pickedUp?.has(runner.entry_id) || false;
+      runners.forEach((runner) => {
+        const place = div.includes('Overall') ? runner.place : runner.age_group_place;
+        const pickedUp = pickupStatus[runner.entry_id] || false;
 
         rows.push({
           Division: div,
@@ -280,7 +321,6 @@ export default function AwardsPage() {
       return;
     }
 
-    // Convert to CSV
     const headers = Object.keys(rows[0]);
     const csvContent = [
       headers.join(','),
@@ -291,7 +331,6 @@ export default function AwardsPage() {
       ),
     ].join('\n');
 
-    // Trigger download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -305,7 +344,7 @@ export default function AwardsPage() {
     document.body.removeChild(link);
   };
 
-  // Divisions logic
+  // Divisions
   const getDivisions = () => {
     const ageGroups = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
     const sorted = ageGroups
@@ -392,7 +431,7 @@ export default function AwardsPage() {
               saveToast.error ? 'bg-red-600' : 'bg-green-600'
             }`}
           >
-            {saveToast.error ? 'Warning ' : 'Check '} {saveToast.message}
+            {saveToast.error ? '⚠️ ' : '✓ '} {saveToast.message}
           </div>
         )}
 
@@ -400,7 +439,7 @@ export default function AwardsPage() {
         {isSuperAdmin && (
           <div className="bg-yellow-50 border-2 border-yellow-400 rounded-2xl p-8 mb-12">
             <h2 className="text-3xl font-bold text-brand-dark mb-6">
-              Lock Superadmin: Awards Visibility Control
+              🔐 Superadmin: Awards Visibility Control
             </h2>
             <p className="text-lg text-gray-700 mb-6">
               Hide awards from public views until ready.
@@ -597,7 +636,7 @@ export default function AwardsPage() {
             const runners = getRunnersInDivision(div);
             const maxPlaces = div.includes('Overall') ? overallPlaces : ageGroupPlaces;
             const topCount = Math.min(maxPlaces, runners.length);
-            const announcedCount = awardsState[div]?.announced?.size || 0;
+            const announcedCount = announcedState[div]?.size || 0;
             const onCourse = onCourseInDivision(div);
             const isComplete = announcedCount >= topCount;
             return (
@@ -619,7 +658,7 @@ export default function AwardsPage() {
         {mode === 'announcer' &&
           visibleDivisions.map((div) => {
             const runners = getRunnersInDivision(div);
-            const announcedSet = awardsState[div]?.announced || new Set();
+            const announcedSet = announcedState[div] || new Set();
             const onCourse = onCourseInDivision(div);
             return (
               <div
@@ -660,14 +699,14 @@ export default function AwardsPage() {
                             {r.state}
                           </p>
                           <button
-                            onClick={() => saveState(div, r.entry_id, 'announced')}
+                            onClick={() => saveAnnounced(div, r.entry_id)}
                             className={`mt-8 px-16 py-6 rounded-full text-3xl font-bold transition ${
                               announcedSet.has(r.entry_id)
                                 ? 'bg-gray-500 text-white'
                                 : 'bg-primary text-text-light hover:bg-primary/90'
                             }`}
                           >
-                            {announcedSet.has(r.entry_id) ? 'Announced Check' : 'Mark Announced'}
+                            {announcedSet.has(r.entry_id) ? 'Announced ✓' : 'Mark Announced'}
                           </button>
                         </div>
                       );
@@ -678,7 +717,7 @@ export default function AwardsPage() {
             );
           })}
 
-        {/* Table Mode */}
+        {/* Table Mode — now uses shared pickupStatus */}
         {mode === 'table' && (
           <div>
             <h2 className="text-3xl font-bold text-text-dark mb-8">Awards Pickup Table</h2>
@@ -717,8 +756,21 @@ export default function AwardsPage() {
                             <td className="px-8 py-6 text-center">
                               <input
                                 type="checkbox"
-                                checked={awardsState[div]?.pickedUp?.has(r.entry_id) || false}
-                                onChange={() => saveState(div, r.entry_id, 'pickedUp')}
+                                checked={pickupStatus[r.entry_id] || false}
+                                onChange={async () => {
+                                  const current = pickupStatus[r.entry_id] || false;
+                                  const { error } = await supabase
+                                    .from('awards_pickup_status')
+                                    .upsert({
+                                      event_id: selectedEventId,
+                                      entry_id: r.entry_id,
+                                      picked_up: !current,
+                                    });
+                                  if (error) {
+                                    console.error('Failed to update pickup:', error);
+                                    alert('Failed to update pickup status');
+                                  }
+                                }}
                                 className="h-8 w-8 text-primary rounded focus:ring-primary"
                               />
                             </td>
