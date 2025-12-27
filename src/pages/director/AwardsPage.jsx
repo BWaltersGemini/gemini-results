@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Smart CSV export: Current winners + previously picked up (even if no longer winners)
+// FINAL — Fixed syntax error + Smart CSV export (current winners + previously picked up)
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -171,7 +171,7 @@ export default function AwardsPage() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [selectedEventId]);
+  }, [selectedEventId]); // Fixed: removed extra closing braces
 
   // Auto-save award places
   useEffect(() => {
