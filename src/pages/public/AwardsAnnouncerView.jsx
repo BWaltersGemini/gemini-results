@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — No refresh needed + hide until race selected + dynamic per-race divisions
+// FINAL — Clean start + realtime places update + full features
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -16,7 +16,7 @@ export default function AwardsAnnouncerView() {
   const [loading, setLoading] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Fetch event name, races, and initial settings
+  // Fetch event name and initial settings
   useEffect(() => {
     if (!eventId) return;
 
@@ -54,7 +54,7 @@ export default function AwardsAnnouncerView() {
     fetchInfo();
   }, [eventId]);
 
-  // Load results + Realtime for results AND settings
+  // Load results + realtime for results AND settings
   useEffect(() => {
     if (!eventId) return;
 
@@ -76,7 +76,7 @@ export default function AwardsAnnouncerView() {
       .channel(`announcer-${eventId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'chronotrack_results', filter: `event_id=eq.${eventId}` },
+        { event: '*', schema: 'public', table: 'chronotrack_results', filter: `event_id=eq.${Number(eventId)}` },
         (payload) => {
           setFinishers((prev) => {
             const index = prev.findIndex(r => r.entry_id === payload.new.entry_id);
@@ -91,9 +91,8 @@ export default function AwardsAnnouncerView() {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_results_visibility', filter: `event_id=eq.${eventId}` },
+        { event: '*', schema: 'public', table: 'event_results_visibility', filter: `event_id=eq.${Number(eventId)}` },
         (payload) => {
-          // INSTANT update when director changes places
           setAwardSettings({
             overall_places: payload.new.overall_places || 3,
             age_group_places: payload.new.age_group_places || 3,
@@ -105,6 +104,7 @@ export default function AwardsAnnouncerView() {
     return () => supabase.removeChannel(channel);
   }, [eventId]);
 
+  // Back to top
   useEffect(() => {
     const handleScroll = () => setShowBackToTop(window.scrollY > 500);
     window.addEventListener('scroll', handleScroll);
@@ -121,11 +121,9 @@ export default function AwardsAnnouncerView() {
     });
   };
 
-  // Filter by selected race
+  // Filter by race
   const filteredFinishers = selectedRace
-    ? (selectedRace === 'all'
-        ? finishers
-        : finishers.filter(r => r.race_name === selectedRace))
+    ? (selectedRace === 'all' ? finishers : finishers.filter(r => r.race_name === selectedRace))
     : [];
 
   // Divisions — only when race selected
@@ -238,7 +236,7 @@ export default function AwardsAnnouncerView() {
           )}
         </div>
 
-        {/* Only show content when race is selected */}
+        {/* Only show content when race selected */}
         {selectedRace ? (
           <>
             {/* Jump Links */}
@@ -338,6 +336,7 @@ export default function AwardsAnnouncerView() {
         )}
       </div>
 
+      {/* Back to Top */}
       {showBackToTop && (
         <button
           onClick={scrollToTop}
