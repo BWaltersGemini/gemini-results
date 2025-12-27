@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — Fully fixed realtime: separate channels for results & settings + robust handling
+// FINAL — Correct gender_place for Overall + mobile-optimized
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -20,10 +20,6 @@ export default function AwardsAnnouncerView() {
   const [loading, setLoading] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  console.log('AwardsAnnouncerView rendered → eventId:', eventId);
-  console.log('Current selectedRace:', selectedRace);
-  console.log('Current awardSettings:', awardSettings);
-
   // Fetch event name and races
   useEffect(() => {
     if (!eventId) return;
@@ -35,7 +31,6 @@ export default function AwardsAnnouncerView() {
           .select('name')
           .eq('id', eventId)
           .single();
-
         setEventName(eventData?.name || 'Awards Ceremony');
 
         const { data: results } = await supabase
@@ -48,8 +43,6 @@ export default function AwardsAnnouncerView() {
           ...new Set(results?.map((r) => r.race_name).filter(Boolean)),
         ];
         setRaces(uniqueRaces);
-
-        // Auto-select first option
         setSelectedRace(uniqueRaces[0] || 'all');
       } catch (err) {
         console.error('Error fetching event info:', err);
@@ -59,16 +52,14 @@ export default function AwardsAnnouncerView() {
     fetchInfo();
   }, [eventId]);
 
-  // === REALTIME: Separate channels for results and settings (CRITICAL FIX) ===
+  // Realtime: separate channels
   useEffect(() => {
     if (!eventId) return;
 
     let isMounted = true;
 
-    // Initial load of results
     const loadResults = async () => {
       setLoading(true);
-      console.log('Loading initial results...');
       const { data } = await supabase
         .from('chronotrack_results')
         .select('*')
@@ -81,9 +72,7 @@ export default function AwardsAnnouncerView() {
       }
     };
 
-    // Initial load of award settings (fallback if no row exists yet)
     const loadSettings = async () => {
-      console.log('Loading initial award settings...');
       const { data } = await supabase
         .from('event_results_visibility')
         .select('overall_places, age_group_places')
@@ -105,7 +94,6 @@ export default function AwardsAnnouncerView() {
     loadResults();
     loadSettings();
 
-    // Channel 1: Results only
     const resultsChannel = supabase
       .channel(`announcer-results-${eventId}`)
       .on(
@@ -117,37 +105,27 @@ export default function AwardsAnnouncerView() {
           filter: `event_id=eq.${eventId}`,
         },
         (payload) => {
-          console.log('Results realtime update:', payload);
           if (!isMounted) return;
-
           setFinishers((prev) => {
             const existingIndex = prev.findIndex(
               (r) =>
                 r.entry_id === payload.new?.entry_id ||
                 r.entry_id === payload.old?.entry_id
             );
-
-            // Handle DELETE
             if (payload.eventType === 'DELETE') {
               return prev.filter((r) => r.entry_id !== payload.old.entry_id);
             }
-
-            // Handle INSERT or UPDATE
             if (existingIndex >= 0) {
               const updated = [...prev];
               updated[existingIndex] = payload.new;
               return updated;
             }
-
             return [...prev, payload.new];
           });
         }
       )
-      .subscribe((status) => {
-        console.log('Results channel status:', status);
-      });
+      .subscribe();
 
-    // Channel 2: Settings only
     const settingsChannel = supabase
       .channel(`announcer-settings-${eventId}`)
       .on(
@@ -159,27 +137,20 @@ export default function AwardsAnnouncerView() {
           filter: `event_id=eq.${eventId}`,
         },
         (payload) => {
-          console.log('Settings realtime update:', payload);
           if (!isMounted) return;
-
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const newSettings = {
               overall_places: payload.new.overall_places ?? 3,
               age_group_places: payload.new.age_group_places ?? 3,
             };
-            console.log('Applying new award settings:', newSettings);
             setAwardSettings(newSettings);
           }
-
           if (payload.eventType === 'DELETE') {
-            console.log('Settings row deleted → reverting to defaults');
             setAwardSettings({ overall_places: 3, age_group_places: 3 });
           }
         }
       )
-      .subscribe((status) => {
-        console.log('Settings channel status:', status);
-      });
+      .subscribe();
 
     return () => {
       isMounted = false;
@@ -188,7 +159,6 @@ export default function AwardsAnnouncerView() {
     };
   }, [eventId]);
 
-  // Back to top button visibility
   useEffect(() => {
     const handleScroll = () => setShowBackToTop(window.scrollY > 500);
     window.addEventListener('scroll', handleScroll);
@@ -238,21 +208,20 @@ export default function AwardsAnnouncerView() {
   const divisions = getDivisions();
 
   const getRunnersInDivision = (div) => {
-    const places =
-      div.includes('Overall')
-        ? awardSettings.overall_places
-        : awardSettings.age_group_places;
+    const places = div.includes('Overall')
+      ? awardSettings.overall_places
+      : awardSettings.age_group_places;
 
     if (div === 'Male Overall') {
       return filteredFinishers
-        .filter((r) => r.gender === 'M')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
+        .filter((r) => r.gender === 'M' && r.gender_place !== null)
+        .sort((a, b) => (a.gender_place || Infinity) - (b.gender_place || Infinity))
         .slice(0, places);
     }
     if (div === 'Female Overall') {
       return filteredFinishers
-        .filter((r) => r.gender === 'F')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
+        .filter((r) => r.gender === 'F' && r.gender_place !== null)
+        .sort((a, b) => (a.gender_place || Infinity) - (b.gender_place || Infinity))
         .slice(0, places);
     }
 
@@ -388,47 +357,51 @@ export default function AwardsAnnouncerView() {
                         No finishers yet
                       </p>
                     ) : (
-                      runners.map((runner, i) => (
-                        <div
-                          key={runner.entry_id}
-                          className={`bg-white rounded-3xl shadow-2xl p-12 text-center transition-all duration-500 ${
-                            announced.has(runner.entry_id)
-                              ? 'opacity-40 grayscale'
-                              : ''
-                          }`}
-                        >
-                          <p className="text-8xl md:text-9xl font-black text-primary mb-8">
-                            #{i + 1}
-                          </p>
-                          <h3 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6">
-                            {runner.first_name} {runner.last_name}
-                          </h3>
-                          {runner.race_name && (
-                            <p className="text-2xl md:text-3xl text-primary mb-6 font-medium">
-                              {runner.race_name}
-                            </p>
-                          )}
-                          <p className="text-4xl md:text-5xl text-gray-700 mb-10">
-                            {formatChronoTime(runner.chip_time)}
-                          </p>
-                          <p className="text-xl md:text-2xl text-gray-600 mb-12">
-                            {runner.city && `${runner.city}, `}
-                            {runner.state}
-                          </p>
-                          <button
-                            onClick={() => markAnnounced(runner.entry_id)}
-                            className={`w-full max-w-md mx-auto px-16 py-8 rounded-full text-3xl md:text-4xl font-bold transition ${
+                      runners.map((runner) => {
+                        const place = div.includes('Overall') ? runner.gender_place : runner.age_group_place;
+
+                        return (
+                          <div
+                            key={runner.entry_id}
+                            className={`bg-white rounded-3xl shadow-2xl p-12 text-center transition-all duration-500 ${
                               announced.has(runner.entry_id)
-                                ? 'bg-gray-500 text-white'
-                                : 'bg-primary text-white hover:bg-primary/90'
+                                ? 'opacity-40 grayscale'
+                                : ''
                             }`}
                           >
-                            {announced.has(runner.entry_id)
-                              ? 'Announced ✓'
-                              : 'Mark Announced'}
-                          </button>
-                        </div>
-                      ))
+                            <p className="text-8xl md:text-9xl font-black text-primary mb-8">
+                              #{place || '-'}
+                            </p>
+                            <h3 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6">
+                              {runner.first_name} {runner.last_name}
+                            </h3>
+                            {runner.race_name && (
+                              <p className="text-2xl md:text-3xl text-primary mb-6 font-medium">
+                                {runner.race_name}
+                              </p>
+                            )}
+                            <p className="text-4xl md:text-5xl text-gray-700 mb-10">
+                              {formatChronoTime(runner.chip_time)}
+                            </p>
+                            <p className="text-xl md:text-2xl text-gray-600 mb-12">
+                              {runner.city && `${runner.city}, `}
+                              {runner.state}
+                            </p>
+                            <button
+                              onClick={() => markAnnounced(runner.entry_id)}
+                              className={`w-full max-w-md mx-auto px-16 py-8 rounded-full text-3xl md:text-4xl font-bold transition ${
+                                announced.has(runner.entry_id)
+                                  ? 'bg-gray-500 text-white'
+                                  : 'bg-primary text-white hover:bg-primary/90'
+                              }`}
+                            >
+                              {announced.has(runner.entry_id)
+                                ? 'Announced ✓'
+                                : 'Mark Announced'}
+                            </button>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>

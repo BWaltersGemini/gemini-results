@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Smart CSV export with email & full address + current + previously picked up
+// FINAL — Correct gender_place for Overall + smart CSV export with contact info
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -51,7 +51,7 @@ export default function AwardsPage() {
     return null;
   }
 
-  // Load event name for CSV
+  // Load event name
   useEffect(() => {
     const fetchEventName = async () => {
       const { data } = await supabase
@@ -64,7 +64,7 @@ export default function AwardsPage() {
     fetchEventName();
   }, [selectedEventId]);
 
-  // Load live results
+  // Load results
   useEffect(() => {
     const fetchInitial = async () => {
       setLoading(true);
@@ -108,7 +108,7 @@ export default function AwardsPage() {
     return () => supabase.removeChannel(channel);
   }, [selectedEventId]);
 
-  // Load director's announced marks (private)
+  // Load director announced marks
   useEffect(() => {
     if (!currentUser) return;
     const loadAnnounced = async () => {
@@ -129,7 +129,7 @@ export default function AwardsPage() {
     loadAnnounced();
   }, [selectedEventId, currentUser]);
 
-  // Load shared pickup status (used by volunteers and director)
+  // Load shared pickup status
   useEffect(() => {
     const loadPickup = async () => {
       const { data } = await supabase
@@ -174,7 +174,7 @@ export default function AwardsPage() {
     return () => supabase.removeChannel(channel);
   }, [selectedEventId]);
 
-  // Auto-save award places
+  // Auto-save places
   useEffect(() => {
     if (!selectedEventId) return;
 
@@ -192,7 +192,6 @@ export default function AwardsPage() {
           );
 
         if (error) {
-          console.error('Save error:', error);
           setSaveToast({ message: 'Failed to save award settings', error: true });
         } else {
           const message =
@@ -203,7 +202,6 @@ export default function AwardsPage() {
         }
         setTimeout(() => setSaveToast(null), 4000);
       } catch (err) {
-        console.error('Failed to save:', err);
         setSaveToast({ message: 'Save failed', error: true });
         setTimeout(() => setSaveToast(null), 4000);
       }
@@ -317,7 +315,6 @@ export default function AwardsPage() {
       return;
     }
 
-    // Fetch email + address
     const contactDetails = await fetchParticipantContactDetails(selectedEventId, Array.from(allToInclude));
 
     const entryIdToRunner = {};
@@ -332,7 +329,7 @@ export default function AwardsPage() {
       runners.forEach((runner) => {
         if (allToInclude.has(runner.entry_id)) {
           const details = contactDetails.get(runner.entry_id) || {};
-          const place = div.includes('Overall') ? runner.place : runner.age_group_place;
+          const place = div.includes('Overall') ? runner.gender_place : runner.age_group_place;
 
           rows.push({
             Division: div,
@@ -382,7 +379,7 @@ export default function AwardsPage() {
             Status: 'Previously Picked Up (No Longer in Awards)',
           });
         }
-      };
+      });
     });
 
     rows.sort((a, b) => (a.Status.includes('Current') ? -1 : 1));
@@ -449,18 +446,20 @@ export default function AwardsPage() {
 
   const getRunnersInDivision = (div) => {
     const places = div.includes('Overall') ? overallPlaces : ageGroupPlaces;
+
     if (div === 'Male Overall') {
       return finishers
-        .filter((r) => r.gender === 'M')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
+        .filter((r) => r.gender === 'M' && r.gender_place !== null)
+        .sort((a, b) => (a.gender_place || Infinity) - (b.gender_place || Infinity))
         .slice(0, places);
     }
     if (div === 'Female Overall') {
       return finishers
-        .filter((r) => r.gender === 'F')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
+        .filter((r) => r.gender === 'F' && r.gender_place !== null)
+        .sort((a, b) => (a.gender_place || Infinity) - (b.gender_place || Infinity))
         .slice(0, places);
     }
+
     return finishers
       .filter((r) => r.age_group_name === div)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
@@ -507,7 +506,6 @@ export default function AwardsPage() {
       <div className="max-w-7xl mx-auto relative">
         <h1 className="text-4xl font-bold text-text-dark mb-8">Awards Management</h1>
 
-        {/* Auto-save Toast */}
         {saveToast && (
           <div
             className={`fixed bottom-8 right-8 px-8 py-5 rounded-2xl shadow-2xl text-white font-bold text-lg z-50 transition-all duration-500 ${
@@ -765,7 +763,7 @@ export default function AwardsPage() {
                     </p>
                   ) : (
                     runners.map((r, i) => {
-                      const place = div.includes('Overall') ? r.place : r.age_group_place || i + 1;
+                      const place = div.includes('Overall') ? r.gender_place : r.age_group_place || i + 1;
                       const raceName = r.race_name || '';
                       return (
                         <div
@@ -828,7 +826,7 @@ export default function AwardsPage() {
                           <tr key={r.entry_id} className="hover:bg-bg-light transition">
                             <td className="px-8 py-6 font-medium">{div}</td>
                             <td className="px-8 py-6 font-bold text-xl text-primary">
-                              {div.includes('Overall') ? r.place || '-' : r.age_group_place || '-'}
+                              #{div.includes('Overall') ? r.gender_place : r.age_group_place || '-'}
                             </td>
                             <td className="px-8 py-6 font-semibold">
                               {r.first_name} {r.last_name}
