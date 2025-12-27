@@ -1,5 +1,5 @@
 // src/pages/public/AwardsTableView.jsx
-// FINAL — Mobile-optimized + correct gender_place for Overall
+// FINAL — Fixed realtime + correct gender_place + mobile UX
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -83,6 +83,7 @@ export default function AwardsTableView() {
 
     loadData();
 
+    // Realtime: results
     const resultsChannel = supabase
       .channel(`table-results-${eventId}`)
       .on(
@@ -111,6 +112,7 @@ export default function AwardsTableView() {
       )
       .subscribe();
 
+    // Realtime: settings (place totals)
     const settingsChannel = supabase
       .channel(`table-settings-${eventId}`)
       .on(
@@ -133,6 +135,7 @@ export default function AwardsTableView() {
       )
       .subscribe();
 
+    // Realtime: pickup status
     const pickupChannel = supabase
       .channel(`table-pickup-${eventId}`)
       .on(
@@ -188,8 +191,6 @@ export default function AwardsTableView() {
     if (error) {
       console.error('Failed to save pickup status:', error);
       alert('Failed to update pickup status');
-    } else {
-      setPickupStatus((prev) => ({ ...prev, [entryId]: newStatus }));
     }
   };
 

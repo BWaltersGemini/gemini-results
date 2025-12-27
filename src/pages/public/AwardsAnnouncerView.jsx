@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — Correct gender_place for Overall + mobile-optimized
+// FINAL — Fixed realtime: separate channels + listens to place totals changes
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -52,7 +52,7 @@ export default function AwardsAnnouncerView() {
     fetchInfo();
   }, [eventId]);
 
-  // Realtime: separate channels
+  // === REALTIME: Separate channels for results + settings ===
   useEffect(() => {
     if (!eventId) return;
 
@@ -68,7 +68,6 @@ export default function AwardsAnnouncerView() {
 
       if (isMounted) {
         setFinishers(data || []);
-        setLoading(false);
       }
     };
 
@@ -80,20 +79,17 @@ export default function AwardsAnnouncerView() {
         .maybeSingle();
 
       if (isMounted) {
-        if (data) {
-          setAwardSettings({
-            overall_places: data.overall_places ?? 3,
-            age_group_places: data.age_group_places ?? 3,
-          });
-        } else {
-          setAwardSettings({ overall_places: 3, age_group_places: 3 });
-        }
+        setAwardSettings({
+          overall_places: data?.overall_places ?? 3,
+          age_group_places: data?.age_group_places ?? 3,
+        });
       }
     };
 
     loadResults();
     loadSettings();
 
+    // Channel for results changes
     const resultsChannel = supabase
       .channel(`announcer-results-${eventId}`)
       .on(
@@ -126,6 +122,7 @@ export default function AwardsAnnouncerView() {
       )
       .subscribe();
 
+    // Channel for award settings (place totals) changes
     const settingsChannel = supabase
       .channel(`announcer-settings-${eventId}`)
       .on(
@@ -139,11 +136,10 @@ export default function AwardsAnnouncerView() {
         (payload) => {
           if (!isMounted) return;
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const newSettings = {
+            setAwardSettings({
               overall_places: payload.new.overall_places ?? 3,
               age_group_places: payload.new.age_group_places ?? 3,
-            };
-            setAwardSettings(newSettings);
+            });
           }
           if (payload.eventType === 'DELETE') {
             setAwardSettings({ overall_places: 3, age_group_places: 3 });
@@ -151,6 +147,8 @@ export default function AwardsAnnouncerView() {
         }
       )
       .subscribe();
+
+    setLoading(false);
 
     return () => {
       isMounted = false;
