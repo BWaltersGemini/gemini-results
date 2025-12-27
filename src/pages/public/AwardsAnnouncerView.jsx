@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — Fixed "Mark Announced" button text size for mobile fit
+// FINAL — Mobile-optimized + correct gender_place + fixed button text size
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -383,14 +383,14 @@ export default function AwardsAnnouncerView() {
                               {runner.city && `${runner.city}, `}
                               {runner.state}
                             </p>
-                            {/* FIXED: Smaller text + better mobile fit */}
+                            {/* FIXED: Proper className syntax + smaller mobile text */}
                             <button
                               onClick={() => markAnnounced(runner.entry_id)}
-                              className={`w-full max-w-md mx-auto px-12 py-6 rounded-full font-bold transition ${
+                              className={`w-full max-w-md mx-auto px-12 py-6 rounded-full font-bold transition text-xl md:text-3xl ${
                                 announced.has(runner.entry_id)
                                   ? 'bg-gray-500 text-white'
                                   : 'bg-primary text-white hover:bg-primary/90'
-                              } text-xl md:text-3xl`} {/* Reduced base size, larger on desktop */}
+                              }`}
                             >
                               {announced.has(runner.entry_id)
                                 ? 'Announced ✓'
