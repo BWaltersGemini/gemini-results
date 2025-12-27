@@ -1,5 +1,5 @@
 // src/pages/director/RaceDirectorsHub.jsx
-// FINAL — Live Tracking Shareable Link + Superadmin Awards Visibility
+// FINAL — Live Tracking Shareable Link + Superadmin Awards Visibility (Build-Fixed)
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -150,32 +150,7 @@ export default function RaceDirectorsHub() {
     });
   };
 
-  if (loading) {
-    return (
-      <DirectorLayout>
-        <div className="flex items-center justify-center min-h-[70vh]">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary mb-8"></div>
-            <p className="text-2xl text-brand-dark">Loading your hub...</p>
-          </div>
-        </DirectorLayout>
-      );
-    );
-  }
-
-  if (error) {
-    return (
-      <DirectorLayout>
-        <div className="max-w-4xl mx-auto text-center py-20">
-          <p className="text-2xl text-red-600 mb-8">{error}</p>
-          <button onClick={() => window.location.reload()} className="px-8 py-4 bg-primary text-white rounded-full font-bold hover:bg-primary/90">
-            Retry
-          </button>
-        </div>
-      </DirectorLayout>
-    );
-  }
-
+  // Selected event for display
   const selectedEvent = allEvents.find(e => String(e.id) === String(selectedEventId));
 
   return (
@@ -185,12 +160,38 @@ export default function RaceDirectorsHub() {
           Welcome back!
         </h1>
 
-        {allEvents.length === 0 ? (
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center min-h-[70vh]">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary mb-8"></div>
+              <p className="text-2xl text-brand-dark">Loading your hub...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {!loading && error && (
+          <div className="max-w-4xl mx-auto text-center py-20">
+            <p className="text-2xl text-red-600 mb-8">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-8 py-4 bg-primary text-white rounded-full font-bold hover:bg-primary/90"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Main Content */}
+        {!loading && !error && allEvents.length === 0 && (
           <div className="text-center py-20 bg-white rounded-3xl shadow-2xl">
             <p className="text-3xl text-brand-dark mb-6">No Events Assigned</p>
             <p className="text-xl text-gray-600">Contact the admin for access.</p>
           </div>
-        ) : (
+        )}
+
+        {!loading && !error && allEvents.length > 0 && (
           <>
             {selectedEvent && (
               <div className="bg-white rounded-3xl shadow-2xl p-10 mb-12 text-center">
