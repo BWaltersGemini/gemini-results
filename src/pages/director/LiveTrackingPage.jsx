@@ -1,5 +1,5 @@
 // src/pages/director/LiveTrackingPage.jsx
-// FINAL — Enhanced with manual trigger, better UX, and robust caching
+// FINAL PRODUCTION VERSION — Robust live tracking with manual trigger
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -19,7 +19,7 @@ export default function LiveTrackingPage() {
   const urlParams = new URLSearchParams(window.location.search);
   const eventId = urlParams.get('eventId');
 
-  // Helper: Format relative time (e.g., "2 minutes ago")
+  // Format relative time (e.g., "2m ago")
   const formatRelativeTime = (date) => {
     if (!date) return 'never';
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -42,7 +42,7 @@ export default function LiveTrackingPage() {
         .eq('event_id', eventId)
         .maybeSingle();
 
-      if (sbError && sbError.code !== 'PGRST116') { // Ignore "no rows" error
+      if (sbError && sbError.code !== 'PGRST116') {
         throw sbError;
       }
 
@@ -54,7 +54,6 @@ export default function LiveTrackingPage() {
       } else {
         setTrackingData(data.data);
         setLastRefresh(new Date(data.last_updated));
-        setEventName(data.data.eventName || `Event ID ${eventId}`);
 
         if (data.fetch_status === 'in_progress') {
           setError('Updating live data...');
@@ -65,33 +64,35 @@ export default function LiveTrackingPage() {
         }
       }
     } catch (err) {
-      setError('Failed to load live tracking data');
+      setError('Failed to load live data');
       console.error('[LiveTracking] Load error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Manual trigger: Call Edge Function to force update
+  // Manual trigger: Call Edge Function
   const triggerUpdate = async () => {
     if (!eventId || updating) return;
     setUpdating(true);
     setError('Triggering live update...');
 
     try {
-      const functionUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_REF}.supabase.co/functions/v1/live-tracking-updater?eventId=${eventId}`;
-      const response = await fetch(functionUrl);
+      // Use env var with fallback to your known project ref
+      const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_REF || 'frurvzrazckqqtyqsdmy';
+      const functionUrl = `https://${projectRef}.supabase.co/functions/v1/live-tracking-updater?eventId=${eventId}`;
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Update failed');
+      const res = await fetch(functionUrl);
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Update request failed');
       }
 
-      const result = await response.json();
+      const result = await res.json();
       console.log('[LiveTracking] Manual update triggered:', result);
+
       setError('Update triggered — refreshing in 10 seconds...');
-      
-      // Force reload after delay
       setTimeout(loadData, 10000);
     } catch (err) {
       setError(`Failed to trigger update: ${err.message}`);
@@ -101,13 +102,13 @@ export default function LiveTrackingPage() {
     }
   };
 
-  // Initial load and auto-refresh
+  // Initial load + polling
   useEffect(() => {
     if (!eventId) return;
     loadData();
 
     if (autoRefresh) {
-      const interval = setInterval(loadData, 15000); // Every 15s
+      const interval = setInterval(loadData, 15000); // Every 15 seconds
       return () => clearInterval(interval);
     }
   }, [eventId, autoRefresh]);
@@ -137,7 +138,7 @@ export default function LiveTrackingPage() {
         <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div>
             <h1 className="text-3xl md:text-5xl font-black flex items-center gap-4">
-              {eventName}
+              {eventName || `Event ID ${eventId}`}
               <span className="text-primary animate-pulse text-4xl">LIVE</span>
             </h1>
             <p className="text-lg opacity-80 mt-2">Event ID: {eventId}</p>
