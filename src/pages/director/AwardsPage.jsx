@@ -1,10 +1,11 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Fixed syntax error + Smart CSV export (current winners + previously picked up)
+// FINAL — Smart CSV export with email & full address + current + previously picked up
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
 import { useDirector } from '../../context/DirectorContext';
 import { supabase } from '../../supabaseClient';
+import { fetchParticipantContactDetails } from '../../api/director/rd_chronotrackapi';
 
 export default function AwardsPage() {
   const navigate = useNavigate();
@@ -171,7 +172,7 @@ export default function AwardsPage() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [selectedEventId]); // Fixed: removed extra closing braces
+  }, [selectedEventId]);
 
   // Auto-save award places
   useEffect(() => {
@@ -289,12 +290,11 @@ export default function AwardsPage() {
     });
   };
 
-  // SMART EXPORT: Current winners + anyone previously picked up
+  // SMART EXPORT with Email & Full Address
   const exportAwardsCSV = async () => {
     const currentDivisions = getDivisions();
     const currentWinners = new Set();
 
-    // Collect all current winners' entry_ids
     currentDivisions.forEach((div) => {
       const runners = getRunnersInDivision(div);
       runners.forEach((runner) => {
@@ -302,7 +302,6 @@ export default function AwardsPage() {
       });
     });
 
-    // Get all historical picked-up entry_ids
     const { data: historicalPickedUp } = await supabase
       .from('awards_pickup_status')
       .select('entry_id')
@@ -311,7 +310,6 @@ export default function AwardsPage() {
 
     const historicalIds = new Set(historicalPickedUp?.map(row => row.entry_id) || []);
 
-    // Combine: current winners + previously picked up
     const allToInclude = new Set([...currentWinners, ...historicalIds]);
 
     if (allToInclude.size === 0) {
@@ -319,7 +317,9 @@ export default function AwardsPage() {
       return;
     }
 
-    // Map entry_id → runner data
+    // Fetch email + address
+    const contactDetails = await fetchParticipantContactDetails(selectedEventId, Array.from(allToInclude));
+
     const entryIdToRunner = {};
     finishers.forEach((r) => {
       entryIdToRunner[r.entry_id] = r;
@@ -327,20 +327,29 @@ export default function AwardsPage() {
 
     const rows = [];
 
-    // Current winners
     currentDivisions.forEach((div) => {
       const runners = getRunnersInDivision(div);
       runners.forEach((runner) => {
         if (allToInclude.has(runner.entry_id)) {
+          const details = contactDetails.get(runner.entry_id) || {};
           const place = div.includes('Overall') ? runner.place : runner.age_group_place;
+
           rows.push({
             Division: div,
             Place: place || '',
             Bib: runner.bib || '',
-            Name: `${runner.first_name} ${runner.last_name}`,
+            Name: `${runner.first_name || ''} ${runner.last_name || ''}`.trim(),
             Race: runner.race_name || '',
             Time: runner.chip_time || '',
-            Location: [runner.city, runner.state].filter(Boolean).join(', '),
+            City: details.city || '',
+            State: details.state || '',
+            ZIP: details.zip || '',
+            Country: details.country || '',
+            Email: details.email || '',
+            'Mailing Address': [details.street, details.street2, details.city, details.state, details.zip]
+              .filter(Boolean)
+              .join(', ') || '',
+            Phone: details.phone || '',
             'Picked Up': pickupStatus[runner.entry_id] ? 'Yes' : 'No',
             Status: 'Current Winner',
           });
@@ -348,34 +357,54 @@ export default function AwardsPage() {
       });
     });
 
-    // Historical picked-up (no longer current winners)
     historicalIds.forEach((entryId) => {
       if (!currentWinners.has(entryId)) {
         const runner = entryIdToRunner[entryId];
         if (runner) {
+          const details = contactDetails.get(entryId) || {};
           rows.push({
             Division: 'Previous Winner',
             Place: '',
             Bib: runner.bib || '',
-            Name: `${runner.first_name} ${runner.last_name}`,
+            Name: `${runner.first_name || ''} ${runner.last_name || ''}`.trim(),
             Race: runner.race_name || '',
             Time: runner.chip_time || '',
-            Location: [runner.city, runner.state].filter(Boolean).join(', '),
+            City: details.city || '',
+            State: details.state || '',
+            ZIP: details.zip || '',
+            Country: details.country || '',
+            Email: details.email || '',
+            'Mailing Address': [details.street, details.street2, details.city, details.state, details.zip]
+              .filter(Boolean)
+              .join(', ') || '',
+            Phone: details.phone || '',
             'Picked Up': 'Yes',
             Status: 'Previously Picked Up (No Longer in Awards)',
           });
         }
-      };
+      });
     });
 
-    // Sort: current winners first
-    rows.sort((a, b) => {
-      if (a.Status === b.Status) return 0;
-      return a.Status.includes('Current') ? -1 : 1;
-    });
+    rows.sort((a, b) => (a.Status.includes('Current') ? -1 : 1));
 
-    // CSV generation
-    const headers = ['Division', 'Place', 'Bib', 'Name', 'Race', 'Time', 'Location', 'Picked Up', 'Status'];
+    const headers = [
+      'Division',
+      'Place',
+      'Bib',
+      'Name',
+      'Race',
+      'Time',
+      'City',
+      'State',
+      'ZIP',
+      'Country',
+      'Email',
+      'Mailing Address',
+      'Phone',
+      'Picked Up',
+      'Status'
+    ];
+
     const csvContent = [
       headers.join(','),
       ...rows.map((row) =>
@@ -674,7 +703,7 @@ export default function AwardsPage() {
               Export Awards Pickup Report (CSV)
             </button>
             <p className="text-sm text-gray-600 mt-3">
-              Includes current winners + anyone previously marked as picked up
+              Includes email, full address, and pickup status for all winners
             </p>
           </div>
 
