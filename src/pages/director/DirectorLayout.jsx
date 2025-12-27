@@ -1,5 +1,5 @@
 // src/pages/director/DirectorLayout.jsx
-// FINAL — Fixed stuck "Authenticating..." + all features preserved
+// FINAL — Fixed hook order + stuck authenticating + all original features preserved
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDirector } from '../../context/DirectorContext';
@@ -17,30 +17,13 @@ export default function DirectorLayout({ children }) {
     loading: directorLoading = false,
   } = useDirector();
 
+  // === ALL HOOKS AT THE TOP LEVEL ===
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [eventOptions, setEventOptions] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [currentEventDisplay, setCurrentEventDisplay] = useState('No Event Selected');
 
-  // === CRITICAL AUTH FIX ===
-  // currentUser: undefined = loading, null = logged out, object = logged in
-  if (currentUser === undefined || directorLoading) {
-    return (
-      <div className="min-h-screen bg-bg-light flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary mb-8"></div>
-          <p className="text-2xl text-brand-dark">Authenticating...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (currentUser === null) {
-    navigate('/director-login', { replace: true });
-    return null;
-  }
-
-  // === Fetch event options for dropdown ===
+  // Fetch assigned event names for dropdown
   useEffect(() => {
     if (assignedEvents.length === 0) {
       setEventOptions([]);
@@ -82,12 +65,29 @@ export default function DirectorLayout({ children }) {
     fetchEventNames();
   }, [assignedEvents]);
 
-  // Update current display name
+  // Update current display name from context
   useEffect(() => {
     setCurrentEventDisplay(selectedEventName);
   }, [selectedEventName]);
 
-  // Navigation items with relative paths
+  // === AUTH GUARD — AFTER ALL HOOKS ===
+  if (currentUser === undefined || directorLoading) {
+    return (
+      <div className="min-h-screen bg-bg-light flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary mb-8"></div>
+          <p className="text-2xl text-brand-dark">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentUser === null) {
+    navigate('/director-login', { replace: true });
+    return null;
+  }
+
+  // === Navigation Items ===
   const navItems = [
     { path: '.', label: 'Dashboard', icon: '🏠' },
     {
@@ -126,7 +126,7 @@ export default function DirectorLayout({ children }) {
             <p className="text-lg font-semibold truncate">{currentEventDisplay}</p>
           </div>
 
-          {/* Event Selector - Desktop */}
+          {/* Desktop Event Selector */}
           <div className="mt-6">
             <label className="text-sm opacity-80 block mb-2">Switch Event</label>
             {loadingEvents ? (
