@@ -67,7 +67,7 @@ export default function LiveTrackingPage() {
 
       setTrackingData(data.data);
       setLastRefresh(new Date(data.last_updated));
-    } catch (err: any) {
+    } catch (err) {
       setError('No live data yet — background update in progress...');
       console.error('[LiveTracking] Cache load error:', err);
     } finally {
