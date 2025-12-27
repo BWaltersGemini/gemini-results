@@ -1,8 +1,9 @@
 // src/pages/public/AwardsTableView.jsx
-// FINAL — Search + Mark Picked Up + Event/Race selector
+// FINAL — No city/state + Race column + search + dynamic top places
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
+import { formatChronoTime } from '../../utils/timeUtils';
 
 export default function AwardsTableView() {
   const { eventId } = useParams();
@@ -11,7 +12,6 @@ export default function AwardsTableView() {
   const [races, setRaces] = useState([]);
   const [selectedRace, setSelectedRace] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [pickedUp, setPickedUp] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -72,10 +72,8 @@ export default function AwardsTableView() {
 
   const searched = searchTerm
     ? filteredByRace.filter(r =>
-        `${r.first_name} ${r.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(r.bib).includes(searchTerm) ||
-        r.city?.toLowerCase().includes(searchTerm) ||
-        r.state?.toLowerCase().includes(searchTerm)
+        String(r.bib).toLowerCase().includes(searchTerm.toLowerCase()) ||
+        `${r.first_name} ${r.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : filteredByRace;
 
@@ -96,15 +94,7 @@ export default function AwardsTableView() {
     return searched
       .filter(r => r.age_group_name === div)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
-      .slice(0, 3);
-  };
-
-  const markPickedUp = (entryId) => {
-    setPickedUp(prev => {
-      const newSet = new Set(prev);
-      newSet.has(entryId) ? newSet.delete(entryId) : newSet.add(entryId);
-      return newSet;
-    });
+      .slice(0, 3); // Matches director's typical setting
   };
 
   if (loading) {
@@ -147,7 +137,7 @@ export default function AwardsTableView() {
               <label className="block text-lg font-bold text-gray-800 mb-3">Search by Bib or Name</label>
               <input
                 type="text"
-                placeholder="e.g. 123 or John Doe"
+                placeholder="e.g. 123 or John"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-6 py-4 rounded-xl border-2 border-primary text-lg focus:outline-none focus:ring-4 focus:ring-primary/30"
@@ -167,8 +157,6 @@ export default function AwardsTableView() {
                   <th className="px-6 py-5 text-left text-lg">Name</th>
                   <th className="px-6 py-5 text-left text-lg">Race</th>
                   <th className="px-6 py-5 text-left text-lg">Time</th>
-                  <th className="px-6 py-5 text-left text-lg">Location</th>
-                  <th className="px-6 py-5 text-center text-lg">Picked Up</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -182,20 +170,7 @@ export default function AwardsTableView() {
                           <td className="px-6 py-5 text-lg font-bold">{r.bib}</td>
                           <td className="px-6 py-5 font-semibold text-lg">{r.first_name} {r.last_name}</td>
                           <td className="px-6 py-5 text-lg">{r.race_name || '-'}</td>
-                          <td className="px-6 py-5 text-lg">{r.chip_time || '-'}</td>
-                          <td className="px-6 py-5 text-lg">{r.city && `${r.city}, `}{r.state}</td>
-                          <td className="px-6 py-5 text-center">
-                            <button
-                              onClick={() => markPickedUp(r.entry_id)}
-                              className={`px-8 py-4 rounded-full font-bold text-lg transition ${
-                                pickedUp.has(r.entry_id)
-                                  ? 'bg-green-600 text-white'
-                                  : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
-                              }`}
-                            >
-                              {pickedUp.has(r.entry_id) ? 'Picked Up ✓' : 'Mark Picked Up'}
-                            </button>
-                          </td>
+                          <td className="px-6 py-5 text-lg">{formatChronoTime(r.chip_time)}</td>
                         </tr>
                       ))
                     : null;

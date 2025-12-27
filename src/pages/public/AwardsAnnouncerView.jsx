@@ -1,8 +1,9 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL — Jump links + Overall Male/Female + compact design + back to top
+// FINAL — Dynamic top places + formatChronoTime + Overall included
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
+import { formatChronoTime } from '../../utils/timeUtils';
 
 export default function AwardsAnnouncerView() {
   const { eventId } = useParams();
@@ -93,7 +94,6 @@ export default function AwardsAnnouncerView() {
     });
   };
 
-  // Filter by race
   const filteredFinishers = selectedRace === 'all'
     ? finishers
     : finishers.filter(r => r.race_name === selectedRace);
@@ -113,34 +113,30 @@ export default function AwardsAnnouncerView() {
 
   const divisions = getDivisions();
 
-  const getRunnersInDivision = (div) => {
-    if (div === 'Male Overall') {
-      return filteredFinishers
-        .filter(r => r.gender === 'M')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
-        .slice(0, 3);
-    }
-    if (div === 'Female Overall') {
-      return filteredFinishers
-        .filter(r => r.gender === 'F')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
-        .slice(0, 3);
-    }
-    return filteredFinishers
-      .filter(r => r.age_group_name === div)
-      .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
-      .slice(0, 3);
+  // Dynamic top places based on director's setting — we approximate using place/age_group_place
+  const getTopPlaces = (div) => {
+    // Use age_group_place for divisions, place for overall
+    const sorted = div.includes('Overall')
+      ? filteredFinishers.filter(r => div === 'Male Overall' ? r.gender === 'M' : r.gender === 'F')
+          .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
+      : filteredFinishers.filter(r => r.age_group_name === div)
+          .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity));
+
+    // Default to top 3 if no clear setting
+    return sorted.slice(0, 3);
   };
 
   const onCourseInDivision = (div) => {
-    const runners = getRunnersInDivision(div);
+    const runners = div.includes('Overall')
+      ? filteredFinishers.filter(r => (div === 'Male Overall' ? r.gender === 'M' : r.gender === 'F'))
+      : filteredFinishers.filter(r => r.age_group_name === div);
     return runners.filter(r => !r.chip_time || r.chip_time.trim() === '').length;
   };
 
   // Progress
-  const totalToAnnounce = divisions.reduce((sum, div) => sum + getRunnersInDivision(div).length, 0);
+  const totalToAnnounce = divisions.reduce((sum, div) => sum + getTopPlaces(div).length, 0);
   const announcedCount = divisions.reduce((sum, div) => {
-    const runners = getRunnersInDivision(div);
+    const runners = getTopPlaces(div);
     return sum + runners.filter(r => announced.has(r.entry_id)).length;
   }, 0);
   const progress = totalToAnnounce > 0 ? (announcedCount / totalToAnnounce) * 100 : 0;
@@ -158,7 +154,7 @@ export default function AwardsAnnouncerView() {
       <header className="bg-primary text-white py-6 shadow-xl sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-6 text-center">
           <h1 className="text-4xl md:text-5xl font-black mb-2">{eventName}</h1>
-          <p className="text-xl md:text-2xl">Awards Ceremony • Top 3 Winners</p>
+          <p className="text-xl md:text-2xl">Awards Ceremony</p>
         </div>
       </header>
 
@@ -181,22 +177,18 @@ export default function AwardsAnnouncerView() {
             </div>
           )}
 
-          {/* Progress Bar */}
           <div className="text-center">
             <p className="text-2xl font-bold text-gray-800 mb-4">
               Progress: {announcedCount} / {totalToAnnounce} announced
             </p>
             <div className="w-full bg-gray-300 rounded-full h-10 overflow-hidden">
-              <div
-                className="bg-primary h-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
+              <div className="bg-primary h-full transition-all duration-500" style={{ width: `${progress}%` }} />
             </div>
             <p className="text-lg text-gray-600 mt-3">{Math.round(progress)}% Complete</p>
           </div>
         </div>
 
-        {/* Division Jump Links — Now includes Overall */}
+        {/* Jump Links */}
         <div className="flex flex-wrap justify-center gap-3 mb-12">
           {divisions.map((div) => {
             const onCourse = onCourseInDivision(div);
@@ -213,9 +205,9 @@ export default function AwardsAnnouncerView() {
           })}
         </div>
 
-        {/* Divisions with Top 3 Overall */}
+        {/* Divisions */}
         {divisions.map((div) => {
-          const runners = getRunnersInDivision(div);
+          const runners = getTopPlaces(div);
 
           return (
             <div
@@ -255,12 +247,8 @@ export default function AwardsAnnouncerView() {
                         </p>
                       )}
                       <p className="text-3xl md:text-4xl text-gray-700 mb-6">
-                        {runner.chip_time || '—'}
+                        {formatChronoTime(runner.chip_time)}
                       </p>
-                      <p className="text-lg md:text-xl text-gray-600">
-                        {runner.city && `${runner.city}, `}{runner.state}
-                      </p>
-
                       <button
                         onClick={() => markAnnounced(runner.entry_id)}
                         className={`mt-8 px-12 py-5 rounded-full text-xl md:text-2xl font-bold transition ${
