@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL + CONSOLE LOGGING — Realtime places update + hide until race selected
+// FINAL — Robust realtime award places + handles INSERT/UPDATE/DELETE + fallback defaults
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -7,24 +7,26 @@ import { formatChronoTime } from '../../utils/timeUtils';
 
 export default function AwardsAnnouncerView() {
   const { eventId } = useParams();
+
   const [finishers, setFinishers] = useState([]);
   const [eventName, setEventName] = useState('Loading Event...');
   const [races, setRaces] = useState([]);
   const [selectedRace, setSelectedRace] = useState('');
   const [announced, setAnnounced] = useState(new Set());
-  const [awardSettings, setAwardSettings] = useState({ overall_places: 3, age_group_places: 3 });
+  const [awardSettings, setAwardSettings] = useState({
+    overall_places: 3,
+    age_group_places: 3,
+  });
   const [loading, setLoading] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  console.log('🔄 AwardsAnnouncerView rendered with eventId:', eventId);
+  console.log('AwardsAnnouncerView rendered → eventId:', eventId);
   console.log('Current selectedRace:', selectedRace);
   console.log('Current awardSettings:', awardSettings);
 
   // Fetch event name and races
   useEffect(() => {
     if (!eventId) return;
-
-    console.log('📡 Fetching event name and races for eventId:', eventId);
 
     const fetchInfo = async () => {
       try {
@@ -34,7 +36,6 @@ export default function AwardsAnnouncerView() {
           .eq('id', eventId)
           .single();
 
-        console.log('🏆 Event name fetched:', eventData?.name);
         setEventName(eventData?.name || 'Awards Ceremony');
 
         const { data: results } = await supabase
@@ -42,119 +43,142 @@ export default function AwardsAnnouncerView() {
           .select('race_name')
           .eq('event_id', eventId);
 
-        const uniqueRaces = ['all', ...new Set(results?.map(r => r.race_name).filter(Boolean))];
-        console.log('🏁 Unique races found:', uniqueRaces);
+        const uniqueRaces = [
+          'all',
+          ...new Set(results?.map((r) => r.race_name).filter(Boolean)),
+        ];
         setRaces(uniqueRaces);
 
-        // Default selection
-        if (uniqueRaces.length > 1) {
-          setSelectedRace(uniqueRaces[0]);
-          console.log('Default race selected:', uniqueRaces[0]);
-        } else {
-          setSelectedRace('all');
-          console.log('Default: All Races');
-        }
+        // Auto-select first option
+        setSelectedRace(uniqueRaces[0] || 'all');
       } catch (err) {
-        console.error('💥 Error fetching event info:', err);
+        console.error('Error fetching event info:', err);
       }
     };
 
     fetchInfo();
   }, [eventId]);
 
-  // Load results + realtime for results AND settings
+  // Combined: Initial results + realtime results + award settings (initial + realtime)
   useEffect(() => {
     if (!eventId) return;
 
-    console.log('🔗 Setting up Realtime channel for eventId:', eventId);
+    let isMounted = true;
 
-    const fetchResults = async () => {
+    // Initial load of results
+    const loadResults = async () => {
       setLoading(true);
-      console.log('Fetching initial results...');
       const { data } = await supabase
         .from('chronotrack_results')
         .select('*')
         .eq('event_id', eventId)
         .order('place', { ascending: true });
 
-      console.log(`Fetched ${data?.length || 0} finishers`);
-      setFinishers(data || []);
-      setLoading(false);
+      if (isMounted) {
+        setFinishers(data || []);
+        setLoading(false);
+      }
     };
 
-    fetchResults();
+    loadResults();
 
-    const channel = supabase
-      .channel(`announcer-${eventId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'chronotrack_results', filter: `event_id=eq.${Number(eventId)}` },
-        (payload) => {
-          console.log('🏃 Results realtime update received:', payload);
-          setFinishers((prev) => {
-            const index = prev.findIndex(r => r.entry_id === payload.new.entry_id);
-            if (index >= 0) {
-              const updated = [...prev];
-              updated[index] = payload.new;
-              return updated;
-            }
-            return [...prev, payload.new];
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_results_visibility', filter: `event_id=eq.${Number(eventId)}` },
-        (payload) => {
-          console.log('⚙️ SETTINGS REALTIME PAYLOAD RECEIVED:', payload);
-          console.log('New overall_places:', payload.new.overall_places);
-          console.log('New age_group_places:', payload.new.age_group_places);
-
-          const newSettings = {
-            overall_places: payload.new.overall_places || 3,
-            age_group_places: payload.new.age_group_places || 3,
-          };
-          console.log('🎯 Updating awardSettings to:', newSettings);
-          setAwardSettings(newSettings);
-        }
-      )
-      .subscribe((status) => {
-        console.log('Channel status:', status);
-      });
-
-    return () => {
-      console.log('🧹 Cleaning up Realtime channel');
-      supabase.removeChannel(channel);
-    };
-  }, [eventId]);
-
-  // Initial settings load (fallback)
-  useEffect(() => {
-    if (!eventId) return;
-
-    console.log('Loading initial award settings...');
-    const loadInitial = async () => {
+    // Initial load of award settings (fallback if no row yet)
+    const loadSettings = async () => {
       const { data } = await supabase
         .from('event_results_visibility')
         .select('overall_places, age_group_places')
         .eq('event_id', eventId)
-        .single();
+        .maybeSingle();
 
-      if (data) {
-        console.log('Initial settings loaded:', data);
-        setAwardSettings({
-          overall_places: data.overall_places || 3,
-          age_group_places: data.age_group_places || 3,
-        });
-      } else {
-        console.log('No settings row — using defaults');
+      if (isMounted) {
+        if (data) {
+          setAwardSettings({
+            overall_places: data.overall_places ?? 3,
+            age_group_places: data.age_group_places ?? 3,
+          });
+        } else {
+          setAwardSettings({ overall_places: 3, age_group_places: 3 });
+        }
       }
     };
 
-    loadInitial();
+    loadSettings();
+
+    // Realtime channel for BOTH results and settings
+    const channel = supabase
+      .channel(`announcer-${eventId}`)
+      // Results changes
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'chronotrack_results',
+          filter: `event_id=eq.${eventId}`,
+        },
+        (payload) => {
+          console.log('Results realtime update:', payload);
+          if (!isMounted) return;
+
+          setFinishers((prev) => {
+            const existingIndex = prev.findIndex(
+              (r) => r.entry_id === payload.new.entry_id
+            );
+
+            if (payload.eventType === 'DELETE') {
+              return prev.filter((r) => r.entry_id !== payload.old.entry_id);
+            }
+
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = payload.new;
+              return updated;
+            }
+
+            return [...prev, payload.new];
+          });
+        }
+      )
+      // Settings changes
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'event_results_visibility',
+          filter: `event_id=eq.${eventId}`,
+        },
+        (payload) => {
+          console.log('Settings realtime payload:', payload);
+
+          if (!isMounted) return;
+
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const newSettings = {
+              overall_places: payload.new.overall_places ?? 3,
+              age_group_places: payload.new.age_group_places ?? 3,
+            };
+            console.log('Applying new award settings:', newSettings);
+            setAwardSettings(newSettings);
+          }
+
+          if (payload.eventType === 'DELETE') {
+            console.log('Settings row deleted → reverting to defaults');
+            setAwardSettings({ overall_places: 3, age_group_places: 3 });
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime channel status:', status);
+      });
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
   }, [eventId]);
 
-  // Back to top
+  // Back to top button visibility
   useEffect(() => {
     const handleScroll = () => setShowBackToTop(window.scrollY > 500);
     window.addEventListener('scroll', handleScroll);
@@ -164,25 +188,28 @@ export default function AwardsAnnouncerView() {
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   const markAnnounced = (entryId) => {
-    console.log('Marking announced:', entryId);
-    setAnnounced(prev => {
-      const newSet = new Set(prev);
-      newSet.has(entryId) ? newSet.delete(entryId) : newSet.add(entryId);
-      return newSet;
+    setAnnounced((prev) => {
+      const next = new Set(prev);
+      next.has(entryId) ? next.delete(entryId) : next.add(entryId);
+      return next;
     });
   };
 
   const filteredFinishers = selectedRace
-    ? (selectedRace === 'all' ? finishers : finishers.filter(r => r.race_name === selectedRace))
+    ? selectedRace === 'all'
+      ? finishers
+      : finishers.filter((r) => r.race_name === selectedRace)
     : [];
-
-  console.log('Filtered finishers count:', filteredFinishers.length);
 
   const getDivisions = () => {
     if (!selectedRace) return [];
-    const ageGroups = [...new Set(filteredFinishers.map(r => r.age_group_name).filter(Boolean))];
-    const sorted = ageGroups
-      .filter(g => g !== 'Overall')
+
+    const ageGroups = [
+      ...new Set(filteredFinishers.map((r) => r.age_group_name).filter(Boolean)),
+    ];
+
+    const sortedAgeGroups = ageGroups
+      .filter((g) => g !== 'Overall')
       .sort((a, b) => {
         const ageA = parseInt(a.match(/\d+/)?.[0] || 99);
         const ageB = parseInt(b.match(/\d+/)?.[0] || 99);
@@ -193,56 +220,62 @@ export default function AwardsAnnouncerView() {
     if (awardSettings.overall_places > 0) {
       divisions.push('Male Overall', 'Female Overall');
     }
-    divisions.push(...sorted);
-    console.log('Divisions:', divisions);
+    divisions.push(...sortedAgeGroups);
+
     return divisions;
   };
 
   const divisions = getDivisions();
 
   const getRunnersInDivision = (div) => {
-    const places = div.includes('Overall') ? awardSettings.overall_places : awardSettings.age_group_places;
-    console.log(`Calculating ${div} with ${places} places`);
+    const places =
+      div.includes('Overall')
+        ? awardSettings.overall_places
+        : awardSettings.age_group_places;
 
     if (div === 'Male Overall') {
-      const runners = filteredFinishers
-        .filter(r => r.gender === 'M')
+      return filteredFinishers
+        .filter((r) => r.gender === 'M')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
-      console.log(`Male Overall runners: ${runners.length}`);
-      return runners;
     }
     if (div === 'Female Overall') {
-      const runners = filteredFinishers
-        .filter(r => r.gender === 'F')
+      return filteredFinishers
+        .filter((r) => r.gender === 'F')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
-      console.log(`Female Overall runners: ${runners.length}`);
-      return runners;
     }
-    const runners = filteredFinishers
-      .filter(r => r.age_group_name === div)
+
+    return filteredFinishers
+      .filter((r) => r.age_group_name === div)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
       .slice(0, places);
-    console.log(`${div} runners: ${runners.length}`);
-    return runners;
   };
 
   const onCourseInDivision = (div) => {
-    const runners = div.includes('Overall')
-      ? filteredFinishers.filter(r => (div === 'Male Overall' ? r.gender === 'M' : r.gender === 'F'))
-      : filteredFinishers.filter(r => r.age_group_name === div);
-    return runners.filter(r => !r.chip_time || r.chip_time.trim() === '').length;
+    const allInDiv =
+      div.includes('Overall')
+        ? filteredFinishers.filter((r) =>
+            div === 'Male Overall' ? r.gender === 'M' : r.gender === 'F'
+          )
+        : filteredFinishers.filter((r) => r.age_group_name === div);
+
+    return allInDiv.filter(
+      (r) => !r.chip_time || r.chip_time.trim() === ''
+    ).length;
   };
 
-  const totalToAnnounce = divisions.reduce((sum, div) => sum + getRunnersInDivision(div).length, 0);
+  const totalToAnnounce = divisions.reduce(
+    (sum, div) => sum + getRunnersInDivision(div).length,
+    0
+  );
   const announcedCount = divisions.reduce((sum, div) => {
     const runners = getRunnersInDivision(div);
-    return sum + runners.filter(r => announced.has(r.entry_id)).length;
+    return sum + runners.filter((r) => announced.has(r.entry_id)).length;
   }, 0);
-  const progress = totalToAnnounce > 0 ? (announcedCount / totalToAnnounce) * 100 : 0;
 
-  console.log('Progress:', announcedCount, '/', totalToAnnounce, `(${Math.round(progress)}%)`);
+  const progress =
+    totalToAnnounce > 0 ? (announcedCount / totalToAnnounce) * 100 : 0;
 
   if (loading) {
     return (
@@ -268,17 +301,18 @@ export default function AwardsAnnouncerView() {
           </label>
           <select
             value={selectedRace}
-            onChange={(e) => {
-              console.log('Race changed to:', e.target.value);
-              setSelectedRace(e.target.value);
-            }}
+            onChange={(e) => setSelectedRace(e.target.value)}
             className="px-10 py-6 rounded-2xl border-4 border-primary text-2xl font-bold focus:outline-none focus:ring-8 focus:ring-primary/30"
           >
             <option value="">Choose a race...</option>
             <option value="all">All Races</option>
-            {races.filter(r => r !== 'all').map(race => (
-              <option key={race} value={race}>{race}</option>
-            ))}
+            {races
+              .filter((r) => r !== 'all')
+              .map((race) => (
+                <option key={race} value={race}>
+                  {race}
+                </option>
+              ))}
           </select>
 
           {selectedRace && (
@@ -287,9 +321,14 @@ export default function AwardsAnnouncerView() {
                 Progress: {announcedCount} / {totalToAnnounce} announced
               </p>
               <div className="w-full bg-gray-300 rounded-full h-12 overflow-hidden">
-                <div className="bg-primary h-full transition-all duration-700" style={{ width: `${progress}%` }} />
+                <div
+                  className="bg-primary h-full transition-all duration-700"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
-              <p className="text-2xl text-gray-600 mt-4">{Math.round(progress)}% Complete</p>
+              <p className="text-2xl text-gray-600 mt-4">
+                {Math.round(progress)}% Complete
+              </p>
             </div>
           )}
         </div>
@@ -306,7 +345,9 @@ export default function AwardsAnnouncerView() {
                     className="px-8 py-5 bg-primary text-white rounded-full text-xl font-bold hover:bg-primary/90 transition"
                   >
                     {div}
-                    {onCourse > 0 && <span className="ml-3 text-yellow-300">+{onCourse}</span>}
+                    {onCourse > 0 && (
+                      <span className="ml-3 text-yellow-300">+{onCourse}</span>
+                    )}
                   </a>
                 );
               })}
@@ -314,6 +355,7 @@ export default function AwardsAnnouncerView() {
 
             {divisions.map((div) => {
               const runners = getRunnersInDivision(div);
+              const onCourse = onCourseInDivision(div);
 
               return (
                 <div
@@ -323,25 +365,31 @@ export default function AwardsAnnouncerView() {
                 >
                   <h2 className="text-5xl md:text-6xl font-black text-center text-gray-800 mb-16">
                     {div}
-                    {onCourseInDivision(div) > 0 && (
+                    {onCourse > 0 && (
                       <p className="text-2xl md:text-3xl text-orange-600 mt-6">
-                        {onCourseInDivision(div)} still on course
+                        {onCourse} still on course
                       </p>
                     )}
                   </h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-16 max-w-6xl mx-auto">
                     {runners.length === 0 ? (
-                      <p className="col-span-3 text-center text-3xl text-gray-500">No finishers yet</p>
+                      <p className="col-span-3 text-center text-3xl text-gray-500">
+                        No finishers yet
+                      </p>
                     ) : (
                       runners.map((runner, i) => (
                         <div
                           key={runner.entry_id}
                           className={`bg-white rounded-3xl shadow-2xl p-12 text-center transition-all duration-500 ${
-                            announced.has(runner.entry_id) ? 'opacity-40 grayscale' : ''
+                            announced.has(runner.entry_id)
+                              ? 'opacity-40 grayscale'
+                              : ''
                           }`}
                         >
-                          <p className="text-8xl md:text-9xl font-black text-primary mb-8">#{i + 1}</p>
+                          <p className="text-8xl md:text-9xl font-black text-primary mb-8">
+                            #{i + 1}
+                          </p>
                           <h3 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6">
                             {runner.first_name} {runner.last_name}
                           </h3>
@@ -354,9 +402,9 @@ export default function AwardsAnnouncerView() {
                             {formatChronoTime(runner.chip_time)}
                           </p>
                           <p className="text-xl md:text-2xl text-gray-600 mb-12">
-                            {runner.city && `${runner.city}, `}{runner.state}
+                            {runner.city && `${runner.city}, `}
+                            {runner.state}
                           </p>
-
                           <button
                             onClick={() => markAnnounced(runner.entry_id)}
                             className={`w-full max-w-md mx-auto px-16 py-8 rounded-full text-3xl md:text-4xl font-bold transition ${
@@ -365,7 +413,9 @@ export default function AwardsAnnouncerView() {
                                 : 'bg-primary text-white hover:bg-primary/90'
                             }`}
                           >
-                            {announced.has(runner.entry_id) ? 'Announced ✓' : 'Mark Announced'}
+                            {announced.has(runner.entry_id)
+                              ? 'Announced ✓'
+                              : 'Mark Announced'}
                           </button>
                         </div>
                       ))

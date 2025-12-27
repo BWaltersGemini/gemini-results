@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Auto-save places (working) + Superadmin visibility + all features
+// FINAL — Auto-save places with visible confirmation toast + all existing features
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -19,6 +19,9 @@ export default function AwardsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
   const [copiedTable, setCopiedTable] = useState(false);
+
+  // Auto-save confirmation toast
+  const [saveToast, setSaveToast] = useState(null); // { message: string }
 
   // Superadmin visibility
   const [visibilitySettings, setVisibilitySettings] = useState({
@@ -56,11 +59,9 @@ export default function AwardsPage() {
         .select('*')
         .eq('event_id', selectedEventId)
         .order('place', { ascending: true });
-
       setFinishers(data || []);
       setLoading(false);
     };
-
     fetchInitial();
 
     const channel = supabase
@@ -93,7 +94,6 @@ export default function AwardsPage() {
   // Load director awards state
   useEffect(() => {
     if (!currentUser) return;
-
     const loadState = async () => {
       const { data } = await supabase
         .from('director_awards_state')
@@ -110,11 +110,10 @@ export default function AwardsPage() {
       });
       setAwardsState(state);
     };
-
     loadState();
   }, [selectedEventId, currentUser]);
 
-  // === AUTO-SAVE AWARD PLACES — FIXED & RELIABLE ===
+  // === AUTO-SAVE AWARD PLACES WITH TOAST CONFIRMATION ===
   useEffect(() => {
     if (!selectedEventId || !currentUser) return;
 
@@ -133,17 +132,25 @@ export default function AwardsPage() {
 
         if (error) {
           console.error('Save error:', error);
+          setSaveToast({ message: 'Failed to save award settings', error: true });
         } else {
-          console.log('✅ Award places saved:', { overallPlaces, ageGroupPlaces });
+          const message =
+            overallPlaces === 0
+              ? `Saved: No overall awards, Top ${ageGroupPlaces} per age group`
+              : `Saved: Top ${overallPlaces} overall, Top ${ageGroupPlaces} per age group`;
+          setSaveToast({ message });
         }
+
+        // Auto-clear toast after 4 seconds
+        setTimeout(() => setSaveToast(null), 4000);
       } catch (err) {
         console.error('Failed to save award places:', err);
+        setSaveToast({ message: 'Save failed', error: true });
+        setTimeout(() => setSaveToast(null), 4000);
       }
     };
 
-    // Debounce to avoid rapid saves
     const timeoutId = setTimeout(savePlaces, 500);
-
     return () => clearTimeout(timeoutId);
   }, [selectedEventId, overallPlaces, ageGroupPlaces, currentUser]);
 
@@ -153,7 +160,6 @@ export default function AwardsPage() {
       setLoadingVisibility(false);
       return;
     }
-
     const load = async () => {
       setLoadingVisibility(true);
       try {
@@ -173,7 +179,7 @@ export default function AwardsPage() {
           .select('race_name')
           .eq('event_id', selectedEventId);
 
-        const unique = [...new Set(results?.map(r => r.race_name).filter(Boolean))];
+        const unique = [...new Set(results?.map((r) => r.race_name).filter(Boolean))];
         setRaces(unique);
       } catch (err) {
         console.warn('Failed to load visibility/races:', err);
@@ -183,7 +189,6 @@ export default function AwardsPage() {
         setLoadingVisibility(false);
       }
     };
-
     load();
   }, [isSuperAdmin, selectedEventId]);
 
@@ -204,9 +209,10 @@ export default function AwardsPage() {
 
   const saveState = async (division, entryId, type) => {
     const field = type === 'announced' ? 'announced' : 'picked_up';
-    const current = type === 'announced'
-      ? awardsState[division]?.announced?.has(entryId) || false
-      : awardsState[division]?.pickedUp?.has(entryId) || false;
+    const current =
+      type === 'announced'
+        ? awardsState[division]?.announced?.has(entryId) || false
+        : awardsState[division]?.pickedUp?.has(entryId) || false;
 
     await supabase
       .from('director_awards_state')
@@ -230,17 +236,16 @@ export default function AwardsPage() {
     });
   };
 
-  // Divisions
+  // Divisions logic (unchanged)
   const getDivisions = () => {
-    const ageGroups = [...new Set(finishers.map(r => r.age_group_name).filter(Boolean))];
+    const ageGroups = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
     const sorted = ageGroups
-      .filter(g => g !== 'Overall')
+      .filter((g) => g !== 'Overall')
       .sort((a, b) => {
         const ageA = parseInt(a.match(/\d+/)?.[0] || 99);
         const ageB = parseInt(b.match(/\d+/)?.[0] || 99);
         return ageA - ageB;
       });
-
     const divisions = [];
     if (overallPlaces > 0) {
       divisions.push('Male Overall', 'Female Overall');
@@ -253,40 +258,40 @@ export default function AwardsPage() {
 
   const getRunnersInDivision = (div) => {
     const places = div.includes('Overall') ? overallPlaces : ageGroupPlaces;
-
     if (div === 'Male Overall') {
       return finishers
-        .filter(r => r.gender === 'M')
+        .filter((r) => r.gender === 'M')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
     }
     if (div === 'Female Overall') {
       return finishers
-        .filter(r => r.gender === 'F')
+        .filter((r) => r.gender === 'F')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
     }
     return finishers
-      .filter(r => r.age_group_name === div)
+      .filter((r) => r.age_group_name === div)
       .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
       .slice(0, places);
   };
 
   const onCourseInDivision = (div) => {
     const allInDiv = div.includes('Overall')
-      ? finishers.filter(r => (div === 'Male Overall' ? r.gender === 'M' : r.gender === 'F'))
-      : finishers.filter(r => r.age_group_name === div);
-    return allInDiv.filter(r => !r.chip_time || r.chip_time.trim() === '').length;
+      ? finishers.filter((r) => (div === 'Male Overall' ? r.gender === 'M' : r.gender === 'F'))
+      : finishers.filter((r) => r.age_group_name === div);
+    return allInDiv.filter((r) => !r.chip_time || r.chip_time.trim() === '').length;
   };
 
   const visibleDivisions = divisions.filter((div) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     const runners = getRunnersInDivision(div);
-    return runners.some(r =>
-      `${r.first_name} ${r.last_name}`.toLowerCase().includes(term) ||
-      r.city?.toLowerCase().includes(term) ||
-      r.state?.toLowerCase().includes(term)
+    return runners.some(
+      (r) =>
+        `${r.first_name} ${r.last_name}`.toLowerCase().includes(term) ||
+        r.city?.toLowerCase().includes(term) ||
+        r.state?.toLowerCase().includes(term)
     );
   });
 
@@ -308,8 +313,19 @@ export default function AwardsPage() {
 
   return (
     <DirectorLayout>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto relative">
         <h1 className="text-4xl font-bold text-text-dark mb-8">Awards Management</h1>
+
+        {/* Auto-save Toast */}
+        {saveToast && (
+          <div
+            className={`fixed bottom-8 right-8 px-8 py-5 rounded-2xl shadow-2xl text-white font-bold text-lg z-50 transition-all duration-500 ${
+              saveToast.error ? 'bg-red-600' : 'bg-green-600'
+            }`}
+          >
+            {saveToast.error ? '⚠️ ' : '✓ '} {saveToast.message}
+          </div>
+        )}
 
         {/* Superadmin Visibility Panel */}
         {isSuperAdmin && (
@@ -320,7 +336,6 @@ export default function AwardsPage() {
             <p className="text-lg text-gray-700 mb-6">
               Hide awards from public views until ready.
             </p>
-
             {loadingVisibility ? (
               <p>Loading settings...</p>
             ) : (
@@ -338,12 +353,11 @@ export default function AwardsPage() {
                     className="h-8 w-8 text-primary rounded focus:ring-primary"
                   />
                 </label>
-
                 {races.length > 0 && (
                   <div className="bg-white rounded-xl p-6 shadow">
                     <p className="text-sm font-medium text-gray-600 mb-4">Per-Race Visibility</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {races.map(race => {
+                      {races.map((race) => {
                         const isVisible = visibilitySettings.race_visibility?.[race] ?? true;
                         return (
                           <label key={race} className="flex items-center justify-between">
@@ -384,26 +398,51 @@ export default function AwardsPage() {
               <h3 className="text-2xl font-bold text-primary mb-4">Announcer View</h3>
               <p className="text-text-muted mb-6">Large cards for reading during ceremony.</p>
               <div className="flex gap-4 mb-4">
-                <input type="text" value={announcerUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
-                <button onClick={() => handleCopy(announcerUrl, 'announcer')} className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90">
+                <input
+                  type="text"
+                  value={announcerUrl}
+                  readOnly
+                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50"
+                />
+                <button
+                  onClick={() => handleCopy(announcerUrl, 'announcer')}
+                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90"
+                >
                   {copiedAnnouncer ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <a href={announcerUrl} target="_blank" rel="noopener noreferrer" className="block text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700">
+              <a
+                href={announcerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700"
+              >
                 Open Announcer View
               </a>
             </div>
-
             <div className="bg-white rounded-2xl shadow-xl p-8">
               <h3 className="text-2xl font-bold text-primary mb-4">Awards Table View</h3>
               <p className="text-text-muted mb-6">Table for volunteer pickup tracking.</p>
               <div className="flex gap-4 mb-4">
-                <input type="text" value={tableUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
-                <button onClick={() => handleCopy(tableUrl, 'table')} className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90">
+                <input
+                  type="text"
+                  value={tableUrl}
+                  readOnly
+                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50"
+                />
+                <button
+                  onClick={() => handleCopy(tableUrl, 'table')}
+                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90"
+                >
                   {copiedTable ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <a href={tableUrl} target="_blank" rel="noopener noreferrer" className="block text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700">
+              <a
+                href={tableUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700"
+              >
                 Open Table View
               </a>
             </div>
@@ -421,12 +460,13 @@ export default function AwardsPage() {
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
               >
                 <option value={0}>None</option>
-                {placeOptions.map(n => (
-                  <option key={n} value={n}>Top {n}</option>
+                {placeOptions.map((n) => (
+                  <option key={n} value={n}>
+                    Top {n}
+                  </option>
                 ))}
               </select>
             </div>
-
             <div>
               <label className="block text-text-dark font-semibold mb-2">Age Group Awards</label>
               <select
@@ -434,12 +474,13 @@ export default function AwardsPage() {
                 onChange={(e) => setAgeGroupPlaces(Number(e.target.value))}
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
               >
-                {placeOptions.map(n => (
-                  <option key={n} value={n}>Top {n}</option>
+                {placeOptions.map((n) => (
+                  <option key={n} value={n}>
+                    Top {n}
+                  </option>
                 ))}
               </select>
             </div>
-
             <div>
               <label className="block text-text-dark font-semibold mb-2">View Mode</label>
               <div className="flex gap-4">
@@ -462,7 +503,6 @@ export default function AwardsPage() {
               </div>
             </div>
           </div>
-
           <input
             type="text"
             placeholder="Search by name, city, state..."
@@ -487,9 +527,7 @@ export default function AwardsPage() {
                 key={div}
                 href={`#division-${div.replace(/\s+/g, '-')}`}
                 className={`px-6 py-4 rounded-full font-bold transition ${
-                  isComplete
-                    ? 'bg-gray-500 text-white'
-                    : 'bg-primary text-text-light hover:bg-primary/90'
+                  isComplete ? 'bg-gray-500 text-white' : 'bg-primary text-text-light hover:bg-primary/90'
                 }`}
               >
                 {div} ({announcedCount}/{topCount})
@@ -500,68 +538,69 @@ export default function AwardsPage() {
         </div>
 
         {/* Announcer Mode */}
-        {mode === 'announcer' && visibleDivisions.map((div) => {
-          const runners = getRunnersInDivision(div);
-          const announcedSet = awardsState[div]?.announced || new Set();
-          const onCourse = onCourseInDivision(div);
+        {mode === 'announcer' &&
+          visibleDivisions.map((div) => {
+            const runners = getRunnersInDivision(div);
+            const announcedSet = awardsState[div]?.announced || new Set();
+            const onCourse = onCourseInDivision(div);
 
-          return (
-            <div
-              key={div}
-              id={`division-${div.replace(/\s+/g, '-')}`}
-              className="mb-20 scroll-mt-32"
-            >
-              <h2 className="text-4xl font-bold text-center text-text-dark mb-8">
-                {div}
-                {onCourse > 0 && (
-                  <p className="text-2xl text-orange-600 mt-4">{onCourse} still on course</p>
-                )}
-              </h2>
+            return (
+              <div
+                key={div}
+                id={`division-${div.replace(/\s+/g, '-')}`}
+                className="mb-20 scroll-mt-32"
+              >
+                <h2 className="text-4xl font-bold text-center text-text-dark mb-8">
+                  {div}
+                  {onCourse > 0 && (
+                    <p className="text-2xl text-orange-600 mt-4">{onCourse} still on course</p>
+                  )}
+                </h2>
+                <div className="space-y-12">
+                  {runners.length === 0 ? (
+                    <p className="text-center text-2xl text-gray-500">
+                      No finishers in this division yet
+                    </p>
+                  ) : (
+                    runners.map((r, i) => {
+                      const place = div.includes('Overall') ? r.place : r.age_group_place || i + 1;
+                      const raceName = r.race_name || '';
 
-              <div className="space-y-12">
-                {runners.length === 0 ? (
-                  <p className="text-center text-2xl text-gray-500">No finishers in this division yet</p>
-                ) : (
-                  runners.map((r, i) => {
-                    const place = div.includes('Overall') ? r.place : r.age_group_place || i + 1;
-                    const raceName = r.race_name || '';
-
-                    return (
-                      <div
-                        key={r.entry_id}
-                        className={`bg-white rounded-3xl shadow-2xl p-12 text-center max-w-3xl mx-auto transition-all ${
-                          announcedSet.has(r.entry_id) ? 'opacity-60' : ''
-                        }`}
-                      >
-                        <p className="text-8xl font-black text-primary mb-6">#{place}</p>
-                        <h3 className="text-5xl font-bold text-text-dark mb-4">
-                          {r.first_name} {r.last_name}
-                        </h3>
-                        {raceName && (
-                          <p className="text-3xl text-accent mb-4">{raceName}</p>
-                        )}
-                        <p className="text-4xl text-gray-700 mb-6">{r.chip_time || '—'}</p>
-                        <p className="text-2xl text-gray-600">
-                          {r.city && `${r.city}, `}{r.state}
-                        </p>
-                        <button
-                          onClick={() => saveState(div, r.entry_id, 'announced')}
-                          className={`mt-8 px-16 py-6 rounded-full text-3xl font-bold transition ${
-                            announcedSet.has(r.entry_id)
-                              ? 'bg-gray-500 text-white'
-                              : 'bg-primary text-text-light hover:bg-primary/90'
+                      return (
+                        <div
+                          key={r.entry_id}
+                          className={`bg-white rounded-3xl shadow-2xl p-12 text-center max-w-3xl mx-auto transition-all ${
+                            announcedSet.has(r.entry_id) ? 'opacity-60' : ''
                           }`}
                         >
-                          {announcedSet.has(r.entry_id) ? 'Announced ✓' : 'Mark Announced'}
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
+                          <p className="text-8xl font-black text-primary mb-6">#{place}</p>
+                          <h3 className="text-5xl font-bold text-text-dark mb-4">
+                            {r.first_name} {r.last_name}
+                          </h3>
+                          {raceName && <p className="text-3xl text-accent mb-4">{raceName}</p>}
+                          <p className="text-4xl text-gray-700 mb-6">{r.chip_time || '—'}</p>
+                          <p className="text-2xl text-gray-600">
+                            {r.city && `${r.city}, `}
+                            {r.state}
+                          </p>
+                          <button
+                            onClick={() => saveState(div, r.entry_id, 'announced')}
+                            className={`mt-8 px-16 py-6 rounded-full text-3xl font-bold transition ${
+                              announcedSet.has(r.entry_id)
+                                ? 'bg-gray-500 text-white'
+                                : 'bg-primary text-text-light hover:bg-primary/90'
+                            }`}
+                          >
+                            {announcedSet.has(r.entry_id) ? 'Announced ✓' : 'Mark Announced'}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
         {/* Table Mode */}
         {mode === 'table' && (
@@ -581,7 +620,7 @@ export default function AwardsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {visibleDivisions.map((div) => {
+                  {visibleDivisions.flatMap((div) => {
                     const runners = getRunnersInDivision(div);
                     return runners.length > 0
                       ? runners.map((r) => (
@@ -590,10 +629,15 @@ export default function AwardsPage() {
                             <td className="px-8 py-6 font-bold text-xl text-primary">
                               {div.includes('Overall') ? r.place || '-' : r.age_group_place || '-'}
                             </td>
-                            <td className="px-8 py-6 font-semibold">{r.first_name} {r.last_name}</td>
+                            <td className="px-8 py-6 font-semibold">
+                              {r.first_name} {r.last_name}
+                            </td>
                             <td className="px-8 py-6 text-accent font-medium">{r.race_name || '-'}</td>
                             <td className="px-8 py-6">{r.chip_time || '-'}</td>
-                            <td className="px-8 py-6">{r.city && `${r.city}, `}{r.state}</td>
+                            <td className="px-8 py-6">
+                              {r.city && `${r.city}, `}
+                              {r.state}
+                            </td>
                             <td className="px-8 py-6 text-center">
                               <input
                                 type="checkbox"
@@ -604,7 +648,7 @@ export default function AwardsPage() {
                             </td>
                           </tr>
                         ))
-                      : null;
+                      : [];
                   })}
                 </tbody>
               </table>
