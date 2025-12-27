@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Top 3 Overall Male/Female only + full topPlaces for age groups
+// FINAL — Separate Overall (1 or 3) and Age Group (3/5/10) award controls
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -13,7 +13,8 @@ export default function AwardsPage() {
   const [finishers, setFinishers] = useState([]);
   const [awardsState, setAwardsState] = useState({});
   const [loading, setLoading] = useState(true);
-  const [topPlaces, setTopPlaces] = useState(3);
+  const [overallPlaces, setOverallPlaces] = useState(1); // 0 = none, 1 = 1st, 3 = top 3
+  const [ageGroupPlaces, setAgeGroupPlaces] = useState(3); // 3, 5, or 10
   const [mode, setMode] = useState('announcer');
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
@@ -38,6 +39,7 @@ export default function AwardsPage() {
     return null;
   }
 
+  // Load live results
   useEffect(() => {
     const fetchInitial = async () => {
       setLoading(true);
@@ -80,6 +82,7 @@ export default function AwardsPage() {
     return () => supabase.removeChannel(channel);
   }, [selectedEventId]);
 
+  // Load awards state
   useEffect(() => {
     if (!currentUser) return;
 
@@ -131,7 +134,7 @@ export default function AwardsPage() {
     });
   };
 
-  // Division ordering: Male Overall → Female Overall → age groups
+  // Division ordering
   const getDivisions = () => {
     const ageGroups = [...new Set(finishers.map(r => r.age_group_name).filter(Boolean))];
     const sorted = ageGroups
@@ -141,7 +144,13 @@ export default function AwardsPage() {
         const ageB = parseInt(b.match(/\d+/)?.[0] || 99);
         return ageA - ageB;
       });
-    return ['Male Overall', 'Female Overall', ...sorted];
+
+    const divisions = [];
+    if (overallPlaces > 0) {
+      divisions.push('Male Overall', 'Female Overall');
+    }
+    divisions.push(...sorted);
+    return divisions;
   };
 
   const divisions = getDivisions();
@@ -150,20 +159,26 @@ export default function AwardsPage() {
     if (div === 'Male Overall') {
       return finishers
         .filter(r => r.gender === 'M')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
+        .slice(0, overallPlaces);
     }
     if (div === 'Female Overall') {
       return finishers
         .filter(r => r.gender === 'F')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
+        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
+        .slice(0, overallPlaces);
     }
     return finishers
       .filter(r => r.age_group_name === div)
-      .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity));
+      .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
+      .slice(0, ageGroupPlaces);
   };
 
   const onCourseInDivision = (div) => {
-    return getRunnersInDivision(div).filter(r => !r.chip_time || r.chip_time.trim() === '').length;
+    const allInDiv = div.includes('Overall')
+      ? finishers.filter(r => (div === 'Male Overall' ? r.gender === 'M' : r.gender === 'F'))
+      : finishers.filter(r => r.age_group_name === div);
+    return allInDiv.filter(r => !r.chip_time || r.chip_time.trim() === '').length;
   };
 
   const visibleDivisions = divisions.filter((div) => {
@@ -202,13 +217,10 @@ export default function AwardsPage() {
           <div className="grid md:grid-cols-2 gap-8">
             <div className="bg-white rounded-2xl shadow-xl p-8">
               <h3 className="text-2xl font-bold text-primary mb-4">Announcer View</h3>
-              <p className="text-text-muted mb-6">Large cards — perfect for reading on phone/tablet during ceremony.</p>
+              <p className="text-text-muted mb-6">Large cards — perfect for reading during ceremony.</p>
               <div className="flex gap-4 mb-4">
                 <input type="text" value={announcerUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
-                <button
-                  onClick={() => handleCopy(announcerUrl, 'announcer')}
-                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90"
-                >
+                <button onClick={() => handleCopy(announcerUrl, 'announcer')} className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90">
                   {copiedAnnouncer ? 'Copied!' : 'Copy'}
                 </button>
               </div>
@@ -216,16 +228,12 @@ export default function AwardsPage() {
                 Open Announcer View
               </a>
             </div>
-
             <div className="bg-white rounded-2xl shadow-xl p-8">
               <h3 className="text-2xl font-bold text-primary mb-4">Awards Table View</h3>
-              <p className="text-text-muted mb-6">Full table for volunteers to mark pickups.</p>
+              <p className="text-text-muted mb-6">Full table for pickup tracking.</p>
               <div className="flex gap-4 mb-4">
                 <input type="text" value={tableUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
-                <button
-                  onClick={() => handleCopy(tableUrl, 'table')}
-                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90"
-                >
+                <button onClick={() => handleCopy(tableUrl, 'table')} className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90">
                   {copiedTable ? 'Copied!' : 'Copy'}
                 </button>
               </div>
@@ -239,19 +247,35 @@ export default function AwardsPage() {
         {/* Controls */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-12">
           <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {/* Overall Awards */}
             <div>
-              <label className="block text-text-dark font-semibold mb-2">Top Places (Age Groups)</label>
+              <label className="block text-text-dark font-semibold mb-2">Overall Awards</label>
               <select
-                value={topPlaces}
-                onChange={(e) => setTopPlaces(Number(e.target.value))}
+                value={overallPlaces}
+                onChange={(e) => setOverallPlaces(Number(e.target.value))}
+                className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
+              >
+                <option value={0}>None</option>
+                <option value={1}>1st Place Only</option>
+                <option value={3}>Top 3</option>
+              </select>
+            </div>
+
+            {/* Age Group Awards */}
+            <div>
+              <label className="block text-text-dark font-semibold mb-2">Age Group Awards</label>
+              <select
+                value={ageGroupPlaces}
+                onChange={(e) => setAgeGroupPlaces(Number(e.target.value))}
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
               >
                 <option value={3}>Top 3</option>
                 <option value={5}>Top 5</option>
                 <option value={10}>Top 10</option>
               </select>
-              <p className="text-sm text-gray-600 mt-2">Overall awards fixed at top 3</p>
             </div>
+
+            {/* View Mode */}
             <div>
               <label className="block text-text-dark font-semibold mb-2">View Mode</label>
               <div className="flex gap-4">
@@ -273,24 +297,22 @@ export default function AwardsPage() {
                 </button>
               </div>
             </div>
-            <div>
-              <label className="block text-text-dark font-semibold mb-2">Search Runners</label>
-              <input
-                type="text"
-                placeholder="Name, city, state..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
-              />
-            </div>
           </div>
+
+          <input
+            type="text"
+            placeholder="Search by name, city, state..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-4 border border-gray-300 rounded-xl"
+          />
         </div>
 
-        {/* Division Jump Links — Includes Overall Male/Female */}
+        {/* Jump Links */}
         <div className="flex flex-wrap justify-center gap-4 mb-12">
           {divisions.map((div) => {
             const runners = getRunnersInDivision(div);
-            const maxPlaces = div.includes('Overall') ? 3 : topPlaces; // Force 3 for overall
+            const maxPlaces = div.includes('Overall') ? overallPlaces : ageGroupPlaces;
             const topCount = Math.min(maxPlaces, runners.length);
             const announcedCount = awardsState[div]?.announced?.size || 0;
             const onCourse = onCourseInDivision(div);
@@ -315,8 +337,7 @@ export default function AwardsPage() {
 
         {/* Announcer Mode */}
         {mode === 'announcer' && visibleDivisions.map((div) => {
-          const maxPlaces = div.includes('Overall') ? 3 : topPlaces;
-          const top = getRunnersInDivision(div).slice(0, maxPlaces);
+          const runners = getRunnersInDivision(div);
           const announcedSet = awardsState[div]?.announced || new Set();
           const onCourse = onCourseInDivision(div);
 
@@ -334,10 +355,10 @@ export default function AwardsPage() {
               </h2>
 
               <div className="space-y-12">
-                {top.length === 0 ? (
+                {runners.length === 0 ? (
                   <p className="text-center text-2xl text-gray-500">No finishers in this division yet</p>
                 ) : (
-                  top.map((r, i) => {
+                  runners.map((r, i) => {
                     const place = div.includes('Overall') ? r.place : r.age_group_place || i + 1;
                     const raceName = r.race_name || '';
 
@@ -397,8 +418,7 @@ export default function AwardsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {visibleDivisions.map((div) => {
-                    const maxPlaces = div.includes('Overall') ? 3 : topPlaces;
-                    const runners = getRunnersInDivision(div).slice(0, maxPlaces);
+                    const runners = getRunnersInDivision(div);
                     return runners.length > 0
                       ? runners.map((r) => (
                           <tr key={r.entry_id} className="hover:bg-bg-light transition">
