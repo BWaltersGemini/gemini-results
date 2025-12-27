@@ -1,5 +1,5 @@
 // src/pages/public/AwardsTableView.jsx
-// FINAL — Fixed realtime + correct gender_place + mobile UX
+// FIXED — Immediate UI update when marking "Picked Up" + correct gender_place + mobile UX
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -112,7 +112,7 @@ export default function AwardsTableView() {
       )
       .subscribe();
 
-    // Realtime: settings (place totals)
+    // Realtime: settings
     const settingsChannel = supabase
       .channel(`table-settings-${eventId}`)
       .on(
@@ -173,6 +173,7 @@ export default function AwardsTableView() {
     };
   }, [eventId]);
 
+  // FIXED: Now updates local state immediately on success
   const togglePickup = async (entryId) => {
     const current = pickupStatus[entryId] || false;
     const newStatus = !current;
@@ -191,6 +192,9 @@ export default function AwardsTableView() {
     if (error) {
       console.error('Failed to save pickup status:', error);
       alert('Failed to update pickup status');
+    } else {
+      // Immediate UI update — this was missing before!
+      setPickupStatus((prev) => ({ ...prev, [entryId]: newStatus }));
     }
   };
 
