@@ -1,5 +1,5 @@
 // src/pages/director/AwardsPage.jsx
-// FINAL — Auto-save places + Superadmin visibility panel + full flexibility
+// FINAL — Auto-save places (working) + Superadmin visibility + all features
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -114,25 +114,37 @@ export default function AwardsPage() {
     loadState();
   }, [selectedEventId, currentUser]);
 
-  // Auto-save places when changed
+  // === AUTO-SAVE AWARD PLACES — FIXED & RELIABLE ===
   useEffect(() => {
     if (!selectedEventId || !currentUser) return;
 
     const savePlaces = async () => {
       try {
-        await supabase
+        const { error } = await supabase
           .from('event_results_visibility')
-          .upsert({
-            event_id: selectedEventId,
-            overall_places: overallPlaces,
-            age_group_places: ageGroupPlaces,
-          });
+          .upsert(
+            {
+              event_id: selectedEventId,
+              overall_places: overallPlaces,
+              age_group_places: ageGroupPlaces,
+            },
+            { onConflict: 'event_id' }
+          );
+
+        if (error) {
+          console.error('Save error:', error);
+        } else {
+          console.log('✅ Award places saved:', { overallPlaces, ageGroupPlaces });
+        }
       } catch (err) {
         console.error('Failed to save award places:', err);
       }
     };
 
-    savePlaces();
+    // Debounce to avoid rapid saves
+    const timeoutId = setTimeout(savePlaces, 500);
+
+    return () => clearTimeout(timeoutId);
   }, [selectedEventId, overallPlaces, ageGroupPlaces, currentUser]);
 
   // Superadmin: Load visibility + races
