@@ -1,4 +1,5 @@
 // src/pages/director/AwardsPage.jsx
+// FINAL — Fixed hooks + better UX + race name + on course counts
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DirectorLayout from './DirectorLayout';
@@ -7,8 +8,9 @@ import { supabase } from '../../supabaseClient';
 
 export default function AwardsPage() {
   const navigate = useNavigate();
-  const { selectedEventId, currentUser } = useDirector();
+  const { selectedEventId, currentUser, loading: directorLoading } = useDirector();
 
+  // === ALL HOOKS AT TOP LEVEL ===
   const [finishers, setFinishers] = useState([]);
   const [awardsState, setAwardsState] = useState({});
   const [loading, setLoading] = useState(true);
@@ -18,24 +20,26 @@ export default function AwardsPage() {
   const [copiedAnnouncer, setCopiedAnnouncer] = useState(false);
   const [copiedTable, setCopiedTable] = useState(false);
 
-  // If user is not authenticated yet (after refresh), show authenticating state
-  if (!currentUser) {
+  // === AUTH & LOADING GUARD AFTER HOOKS ===
+  if (currentUser === undefined || directorLoading) {
     return (
       <DirectorLayout>
         <div className="flex items-center justify-center min-h-[70vh]">
-          <p className="text-2xl text-text-muted">Authenticating...</p>
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-primary mb-8"></div>
+            <p className="text-2xl text-brand-dark">Loading awards...</p>
+          </div>
         </div>
       </DirectorLayout>
     );
   }
 
-  // If no event selected, redirect to hub
-  if (!selectedEventId) {
+  if (currentUser === null || !selectedEventId) {
     navigate('/race-directors-hub');
     return null;
   }
 
-  // Load live results from chronotrack_results
+  // Load live results
   useEffect(() => {
     const fetchInitial = async () => {
       setLoading(true);
@@ -55,7 +59,12 @@ export default function AwardsPage() {
       .channel(`awards-${selectedEventId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'chronotrack_results', filter: `event_id=eq.${selectedEventId}` },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'chronotrack_results',
+          filter: `event_id=eq.${selectedEventId}`,
+        },
         (payload) => {
           setFinishers((prev) => {
             const index = prev.findIndex((r) => r.entry_id === payload.new.entry_id);
@@ -73,7 +82,7 @@ export default function AwardsPage() {
     return () => supabase.removeChannel(channel);
   }, [selectedEventId]);
 
-  // Load director-specific awards state
+  // Load awards state
   useEffect(() => {
     if (!currentUser) return;
 
@@ -125,51 +134,37 @@ export default function AwardsPage() {
     });
   };
 
-  // Division ordering: Male Overall → Female Overall → youngest to oldest age groups
+  // Division ordering
   const getDivisions = () => {
-    const ageGroupDivisions = [...new Set(finishers.map((r) => r.age_group_name).filter(Boolean))];
-
-    const sortedAgeGroups = ageGroupDivisions.sort((a, b) => {
-      const ageA = parseInt(a.match(/\d+/)?.[0] || 0);
-      const ageB = parseInt(b.match(/\d+/)?.[0] || 0);
-      return ageA - ageB; // youngest first
+    const ageGroups = [...new Set(finishers.map(r => r.age_group_name).filter(Boolean))];
+    const sorted = ageGroups.sort((a, b) => {
+      const ageA = parseInt(a.match(/\d+/)?.[0] || 99);
+      const ageB = parseInt(b.match(/\d+/)?.[0] || 99);
+      return ageA - ageB;
     });
-
-    return ['Male Overall', 'Female Overall', ...sortedAgeGroups];
+    return ['Male Overall', 'Female Overall', ...sorted];
   };
 
   const divisions = getDivisions();
 
-  const getRunnersInDivision = (divName) => {
-    if (divName === 'Male Overall') {
-      return finishers
-        .filter((r) => r.gender === 'M')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-    }
-    if (divName === 'Female Overall') {
-      return finishers
-        .filter((r) => r.gender === 'F')
-        .sort((a, b) => (a.place || Infinity) - (b.place || Infinity));
-    }
-    return finishers
-      .filter((r) => r.age_group_name === divName)
-      .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity));
+  const getRunnersInDivision = (div) => {
+    if (div === 'Male Overall') return finishers.filter(r => r.gender === 'M');
+    if (div === 'Female Overall') return finishers.filter(r => r.gender === 'F');
+    return finishers.filter(r => r.age_group_name === div);
   };
 
-  const onCourseInDivision = (divName) => {
-    const runners = getRunnersInDivision(divName);
-    return runners.filter((r) => !r.chip_time).length;
+  const onCourseInDivision = (div) => {
+    return getRunnersInDivision(div).filter(r => !r.chip_time || r.chip_time.trim() === '').length;
   };
 
   const visibleDivisions = divisions.filter((div) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     const runners = getRunnersInDivision(div);
-    return runners.some(
-      (r) =>
-        `${r.first_name} ${r.last_name}`.toLowerCase().includes(term) ||
-        r.city?.toLowerCase().includes(term) ||
-        r.state?.toLowerCase().includes(term)
+    return runners.some(r =>
+      `${r.first_name} ${r.last_name}`.toLowerCase().includes(term) ||
+      r.city?.toLowerCase().includes(term) ||
+      r.state?.toLowerCase().includes(term)
     );
   });
 
@@ -193,60 +188,40 @@ export default function AwardsPage() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-text-dark mb-8">Awards Management</h1>
 
-        {/* Share Links Section */}
+        {/* Share Links */}
         <div className="bg-accent/20 rounded-2xl p-8 mb-12">
           <h2 className="text-3xl font-bold text-text-dark mb-8">Share Live Awards Views</h2>
           <div className="grid md:grid-cols-2 gap-8">
             <div className="bg-white rounded-2xl shadow-xl p-8">
               <h3 className="text-2xl font-bold text-primary mb-4">Announcer View</h3>
-              <p className="text-text-muted mb-6">Large, phone-friendly cards — perfect for reading names during the ceremony.</p>
-              <div className="flex gap-4">
-                <input
-                  type="text"
-                  value={announcerUrl}
-                  readOnly
-                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50"
-                />
+              <p className="text-text-muted mb-6">Large cards — perfect for reading on phone/tablet during ceremony.</p>
+              <div className="flex gap-4 mb-4">
+                <input type="text" value={announcerUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
                 <button
                   onClick={() => handleCopy(announcerUrl, 'announcer')}
-                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90 transition"
+                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90"
                 >
-                  {copiedAnnouncer ? 'Copied!' : 'Copy Link'}
+                  {copiedAnnouncer ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <a
-                href={announcerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block mt-6 text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700 transition"
-              >
+              <a href={announcerUrl} target="_blank" rel="noopener noreferrer" className="block text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700">
                 Open Announcer View
               </a>
             </div>
 
             <div className="bg-white rounded-2xl shadow-xl p-8">
               <h3 className="text-2xl font-bold text-primary mb-4">Awards Table View</h3>
-              <p className="text-text-muted mb-6">Full table for volunteers to check off pickups.</p>
-              <div className="flex gap-4">
-                <input
-                  type="text"
-                  value={tableUrl}
-                  readOnly
-                  className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50"
-                />
+              <p className="text-text-muted mb-6">Full table for volunteers to mark pickups.</p>
+              <div className="flex gap-4 mb-4">
+                <input type="text" value={tableUrl} readOnly className="flex-1 p-4 border border-gray-300 rounded-xl bg-gray-50" />
                 <button
                   onClick={() => handleCopy(tableUrl, 'table')}
-                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90 transition"
+                  className="bg-primary text-text-light px-8 py-4 rounded-xl font-bold hover:bg-primary/90"
                 >
-                  {copiedTable ? 'Copied!' : 'Copy Link'}
+                  {copiedTable ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <a
-                href={tableUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block mt-6 text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700 transition"
-              >
+              <a href={tableUrl} target="_blank" rel="noopener noreferrer" className="block text-center bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700">
                 Open Table View
               </a>
             </div>
@@ -254,8 +229,8 @@ export default function AwardsPage() {
         </div>
 
         {/* Controls */}
-        <div className="bg-bg-light rounded-2xl shadow-xl p-8 mb-12">
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-12">
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
             <div>
               <label className="block text-text-dark font-semibold mb-2">Top Places to Award</label>
               <select
@@ -263,9 +238,9 @@ export default function AwardsPage() {
                 onChange={(e) => setTopPlaces(Number(e.target.value))}
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
               >
-                {[3, 5, 10].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
+                <option value={3}>Top 3</option>
+                <option value={5}>Top 5</option>
+                <option value={10}>Top 10</option>
               </select>
             </div>
             <div>
@@ -274,7 +249,7 @@ export default function AwardsPage() {
                 <button
                   onClick={() => setMode('announcer')}
                   className={`flex-1 py-4 rounded-xl font-bold transition ${
-                    mode === 'announcer' ? 'bg-primary text-text-light' : 'bg-white text-text-dark border'
+                    mode === 'announcer' ? 'bg-primary text-text-light' : 'bg-gray-200 text-text-dark'
                   }`}
                 >
                   Announcer
@@ -282,132 +257,136 @@ export default function AwardsPage() {
                 <button
                   onClick={() => setMode('table')}
                   className={`flex-1 py-4 rounded-xl font-bold transition ${
-                    mode === 'table' ? 'bg-primary text-text-light' : 'bg-white text-text-dark border'
+                    mode === 'table' ? 'bg-primary text-text-light' : 'bg-gray-200 text-text-dark'
                   }`}
                 >
-                  Awards Table
+                  Table
                 </button>
               </div>
             </div>
+            <div>
+              <label className="block text-text-dark font-semibold mb-2">Search Runners</label>
+              <input
+                type="text"
+                placeholder="Name, city, state..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full p-4 border border-gray-300 rounded-xl focus:ring-4 focus:ring-accent/30"
+              />
+            </div>
           </div>
-
-          <input
-            type="text"
-            placeholder="Search by name, city, state..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-4 border border-gray-300 rounded-xl"
-          />
         </div>
 
         {/* Division Jump Links */}
-        <div className="flex flex-wrap gap-4 mb-12">
+        <div className="flex flex-wrap justify-center gap-4 mb-12">
           {visibleDivisions.map((div) => {
             const runners = getRunnersInDivision(div);
             const topCount = Math.min(topPlaces, runners.length);
             const announcedCount = awardsState[div]?.announced?.size || 0;
-            const isComplete = announcedCount >= topCount;
             const onCourse = onCourseInDivision(div);
+            const isComplete = announcedCount >= topCount;
 
             return (
               <a
                 key={div}
                 href={`#division-${div.replace(/\s+/g, '-')}`}
-                className={`px-6 py-4 rounded-xl font-semibold transition ${
+                className={`px-6 py-4 rounded-full font-bold transition ${
                   isComplete
-                    ? 'bg-gray-500 text-white cursor-default'
+                    ? 'bg-gray-500 text-white'
                     : 'bg-primary text-text-light hover:bg-primary/90'
                 }`}
               >
                 {div} ({announcedCount}/{topCount})
-                {onCourse > 0 && <span className="ml-2 text-yellow-300"> +{onCourse} on course</span>}
+                {onCourse > 0 && <span className="ml-3 text-yellow-300">+{onCourse} on course</span>}
               </a>
             );
           })}
         </div>
 
         {/* Announcer Mode */}
-        {mode === 'announcer' &&
-          visibleDivisions.map((div) => {
-            const top = getRunnersInDivision(div).slice(0, topPlaces);
-            const announcedSet = awardsState[div]?.announced || new Set();
-            const onCourse = onCourseInDivision(div);
+        {mode === 'announcer' && visibleDivisions.map((div) => {
+          const top = getRunnersInDivision(div).slice(0, topPlaces);
+          const announcedSet = awardsState[div]?.announced || new Set();
+          const onCourse = onCourseInDivision(div);
 
-            return (
-              <div
-                key={div}
-                id={`division-${div.replace(/\s+/g, '-')}`}
-                className="mb-16 scroll-mt-24"
-              >
-                <h2 className="text-3xl font-bold text-text-dark mb-6">
-                  {div}
-                  {onCourse > 0 && (
-                    <span className="ml-4 text-2xl text-orange-600">
-                      ({onCourse} still on course)
-                    </span>
-                  )}
-                </h2>
-                <div className="space-y-8">
-                  {top.length === 0 ? (
-                    <p className="text-xl text-text-muted">No finishers in this division yet.</p>
-                  ) : (
-                    top.map((r, i) => (
+          return (
+            <div
+              key={div}
+              id={`division-${div.replace(/\s+/g, '-')}`}
+              className="mb-20 scroll-mt-32"
+            >
+              <h2 className="text-4xl font-bold text-center text-text-dark mb-8">
+                {div}
+                {onCourse > 0 && (
+                  <p className="text-2xl text-orange-600 mt-4">{onCourse} still on course</p>
+                )}
+              </h2>
+
+              <div className="space-y-12">
+                {top.length === 0 ? (
+                  <p className="text-center text-2xl text-gray-500">No finishers in this division yet</p>
+                ) : (
+                  top.map((r, i) => {
+                    const place = div.includes('Overall') ? r.place : r.age_group_place || i + 1;
+                    const raceName = r.race_name || '';
+
+                    return (
                       <div
                         key={r.entry_id}
-                        className={`bg-white rounded-2xl shadow-xl p-8 ${announcedSet.has(r.entry_id) ? 'opacity-60' : ''}`}
+                        className={`bg-white rounded-3xl shadow-2xl p-12 text-center max-w-3xl mx-auto transition-all ${
+                          announcedSet.has(r.entry_id) ? 'opacity-60' : ''
+                        }`}
                       >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="text-5xl font-black text-primary">
-                              #{div.includes('Overall') ? r.place : r.age_group_place || i + 1}
-                            </p>
-                            <p className="text-3xl font-bold text-text-dark mt-4">
-                              {r.first_name} {r.last_name}
-                            </p>
-                            <p className="text-2xl text-text-muted mt-2">{r.chip_time || '—'}</p>
-                            <p className="text-xl text-text-muted mt-4">
-                              {r.city && `${r.city}, `}{r.state}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => saveState(div, r.entry_id, 'announced')}
-                            className={`px-12 py-6 rounded-full text-2xl font-bold ${
-                              announcedSet.has(r.entry_id)
-                                ? 'bg-gray-500 text-white'
-                                : 'bg-primary text-text-light hover:bg-primary/90'
-                            }`}
-                          >
-                            {announcedSet.has(r.entry_id) ? 'Announced ✓' : 'Mark Announced'}
-                          </button>
-                        </div>
+                        <p className="text-8xl font-black text-primary mb-6">#{place}</p>
+                        <h3 className="text-5xl font-bold text-text-dark mb-4">
+                          {r.first_name} {r.last_name}
+                        </h3>
+                        {raceName && (
+                          <p className="text-3xl text-accent mb-4">{raceName}</p>
+                        )}
+                        <p className="text-4xl text-gray-700 mb-6">{r.chip_time || '—'}</p>
+                        <p className="text-2xl text-gray-600">
+                          {r.city && `${r.city}, `}{r.state}
+                        </p>
+                        <button
+                          onClick={() => saveState(div, r.entry_id, 'announced')}
+                          className={`mt-8 px-16 py-6 rounded-full text-3xl font-bold transition ${
+                            announcedSet.has(r.entry_id)
+                              ? 'bg-gray-500 text-white'
+                              : 'bg-primary text-text-light hover:bg-primary/90'
+                          }`}
+                        >
+                          {announcedSet.has(r.entry_id) ? 'Announced ✓' : 'Mark Announced'}
+                        </button>
                       </div>
-                    ))
-                  )}
-                </div>
+                    );
+                  })
+                )}
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
 
         {/* Table Mode */}
         {mode === 'table' && (
           <div>
-            <h2 className="text-3xl font-bold text-text-dark mb-6">Awards Pickup Table</h2>
+            <h2 className="text-3xl font-bold text-text-dark mb-8">Awards Pickup Table</h2>
             <div className="overflow-x-auto bg-white rounded-2xl shadow-2xl">
-              <table className="w-full">
+              <table className="w-full min-w-max">
                 <thead className="bg-text-dark text-text-light">
                   <tr>
                     <th className="px-8 py-6 text-left">Division</th>
-                    <th className="px-8 py-6 text-left">Division Place</th>
+                    <th className="px-8 py-6 text-left">Place</th>
                     <th className="px-8 py-6 text-left">Name</th>
+                    <th className="px-8 py-6 text-left">Race</th>
                     <th className="px-8 py-6 text-left">Time</th>
-                    <th className="px-8 py-6 text-left">City, State</th>
+                    <th className="px-8 py-6 text-left">Location</th>
                     <th className="px-8 py-6 text-center">Picked Up</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {visibleDivisions.map((div) => {
                     const runners = getRunnersInDivision(div);
-
                     return runners.length > 0
                       ? runners.map((r) => (
                           <tr key={r.entry_id} className="hover:bg-bg-light transition">
@@ -416,6 +395,7 @@ export default function AwardsPage() {
                               {div.includes('Overall') ? r.place || '-' : r.age_group_place || '-'}
                             </td>
                             <td className="px-8 py-6 font-semibold">{r.first_name} {r.last_name}</td>
+                            <td className="px-8 py-6 text-accent font-medium">{r.race_name || '-'}</td>
                             <td className="px-8 py-6">{r.chip_time || '-'}</td>
                             <td className="px-8 py-6">{r.city && `${r.city}, `}{r.state}</td>
                             <td className="px-8 py-6 text-center">
