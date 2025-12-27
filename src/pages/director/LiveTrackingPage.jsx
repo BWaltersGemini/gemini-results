@@ -52,7 +52,7 @@ export default function LiveTrackingPage() {
         .from('live_tracking_cache')
         .select('data, last_updated, fetch_status')
         .eq('event_id', eventId)
-        .single();
+        .maybeSingle();
 
       if (supabaseError || !data) {
         throw supabaseError || new Error('No cached data found');
