@@ -1,24 +1,25 @@
 // src/pages/director/LiveTrackingPage.jsx
-// UPDATED: Uses cached data from Supabase for instant, reliable load
+// FINAL — Uses cached data from Supabase for instant, reliable live tracking
+// All type annotations removed for .jsx compatibility
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../supabaseClient'; // ← Your existing client
+import { supabase } from '../../supabaseClient';
 
 export default function LiveTrackingPage() {
   const navigate = useNavigate();
-  const [trackingData, setTrackingData] = useState<any>(null);
+  const [trackingData, setTrackingData] = useState(null);
   const [eventName, setEventName] = useState('Loading event...');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Extract eventId from URL query param
   const urlParams = new URLSearchParams(window.location.search);
   const eventId = urlParams.get('eventId');
 
-  // Fetch event name (unchanged — still direct API for name only)
+  // Fetch event name (direct API — only for display name)
   useEffect(() => {
     if (!eventId) return;
 
@@ -82,12 +83,12 @@ export default function LiveTrackingPage() {
     loadData();
 
     if (autoRefresh) {
-      const interval = setInterval(loadData, 15000); // Every 15 seconds — feels real-time
+      const interval = setInterval(loadData, 15000); // Every 15 seconds
       return () => clearInterval(interval);
     }
   }, [eventId, autoRefresh]);
 
-  const formatTime = (date: Date | null) => {
+  const formatTime = (date) => {
     if (!date) return '';
     return date.toLocaleTimeString([], {
       hour: '2-digit',
@@ -204,7 +205,7 @@ export default function LiveTrackingPage() {
                 Progress by Race
               </h2>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-                {trackingData.races.map((race: any) => (
+                {trackingData.races.map((race) => (
                   <div key={race.raceId} className="bg-white rounded-3xl shadow-2xl overflow-hidden">
                     <div className="bg-gradient-to-r from-accent to-brand-turquoise text-text-dark py-8 px-12">
                       <h3 className="text-4xl font-black">{race.raceName}</h3>
@@ -230,7 +231,7 @@ export default function LiveTrackingPage() {
                           <h4 className="text-3xl font-bold text-text-dark text-center mb-8">
                             Split Progress
                           </h4>
-                          {race.splitProgress.map((split: any) => (
+                          {race.splitProgress.map((split) => (
                             <div key={split.name} className="space-y-3">
                               <div className="flex justify-between items-center">
                                 <span className="text-xl font-semibold">{split.name}</span>
