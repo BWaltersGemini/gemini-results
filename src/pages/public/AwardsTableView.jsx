@@ -1,5 +1,5 @@
 // src/pages/public/AwardsTableView.jsx
-// FINAL — Dual award support with separate Overall & AG pickup tracking + mobile UX
+// FINAL — Dual award support + mobile-optimized UX + correct checkboxes per division
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -9,7 +9,7 @@ export default function AwardsTableView() {
   const { eventId } = useParams();
 
   const [finishers, setFinishers] = useState([]);
-  const [pickupStatus, setPickupStatus] = useState({}); // { entry_id: { picked_up, is_overall_winner, overall_picked_up } }
+  const [pickupStatus, setPickupStatus] = useState({});
   const [eventName, setEventName] = useState('Awards Pickup Table');
   const [races, setRaces] = useState([]);
   const [selectedRace, setSelectedRace] = useState('all');
@@ -87,7 +87,7 @@ export default function AwardsTableView() {
 
     loadData();
 
-    // Realtime: results
+    // Realtime channels
     const resultsChannel = supabase
       .channel(`table-results-${eventId}`)
       .on(
@@ -116,7 +116,6 @@ export default function AwardsTableView() {
       )
       .subscribe();
 
-    // Realtime: settings
     const settingsChannel = supabase
       .channel(`table-settings-${eventId}`)
       .on(
@@ -139,7 +138,6 @@ export default function AwardsTableView() {
       )
       .subscribe();
 
-    // Realtime: pickup status
     const pickupChannel = supabase
       .channel(`table-pickup-${eventId}`)
       .on(
@@ -181,7 +179,6 @@ export default function AwardsTableView() {
     };
   }, [eventId]);
 
-  // Toggle Age Group pickup
   const toggleAGPickup = async (entryId) => {
     const current = pickupStatus[entryId]?.picked_up || false;
     const newStatus = !current;
@@ -205,7 +202,6 @@ export default function AwardsTableView() {
     }
   };
 
-  // Toggle Overall pickup
   const toggleOverallPickup = async (entryId) => {
     const current = pickupStatus[entryId]?.overall_picked_up || false;
     const newStatus = !current;
@@ -378,6 +374,8 @@ export default function AwardsTableView() {
             const runners = getRunnersInDivision(div);
             if (runners.length === 0) return null;
 
+            const isOverall = div.includes('Overall');
+
             return (
               <div key={div} className="bg-white rounded-2xl shadow-xl overflow-hidden">
                 <div className="bg-primary text-white px-6 py-4">
@@ -387,9 +385,9 @@ export default function AwardsTableView() {
                 {/* Mobile Cards */}
                 <div className="md:hidden divide-y divide-gray-200">
                   {runners.map((r) => {
-                    const place = div.includes('Overall') ? r.gender_place : r.age_group_place;
+                    const place = isOverall ? r.gender_place : r.age_group_place;
                     const status = pickupStatus[r.entry_id] || {};
-                    const isOverall = div.includes('Overall');
+                    const isDual = status.is_overall_winner && !isOverall;
 
                     return (
                       <div
@@ -403,27 +401,32 @@ export default function AwardsTableView() {
                               {r.first_name} {r.last_name}
                             </div>
                             <div className="text-sm text-gray-600 mt-1">Bib: {r.bib || '-'}</div>
+                            {isDual && (
+                              <p className="text-sm font-bold text-purple-600 mt-2">
+                                ⭐ Also Overall Winner
+                              </p>
+                            )}
                           </div>
-                          <div className="space-y-3 text-right">
+                          <div className="space-y-4">
                             {!isOverall && (
-                              <div>
-                                <label className="text-sm font-medium">Age Group</label>
+                              <div className="text-center">
+                                <label className="block text-sm font-medium text-gray-700">Age Group</label>
                                 <input
                                   type="checkbox"
                                   checked={status.picked_up || false}
                                   onChange={() => toggleAGPickup(r.entry_id)}
-                                  className="block mt-1 h-8 w-8 text-green-600 rounded focus:ring-green-500"
+                                  className="mt-1 h-8 w-8 text-green-600 rounded focus:ring-green-500"
                                 />
                               </div>
                             )}
                             {status.is_overall_winner && (
-                              <div>
-                                <label className="text-sm font-medium text-purple-700">Overall</label>
+                              <div className="text-center">
+                                <label className="block text-sm font-medium text-purple-700">Overall</label>
                                 <input
                                   type="checkbox"
                                   checked={status.overall_picked_up || false}
                                   onChange={() => toggleOverallPickup(r.entry_id)}
-                                  className="block mt-1 h-8 w-8 text-purple-600 rounded focus:ring-purple-500"
+                                  className="mt-1 h-8 w-8 text-purple-600 rounded focus:ring-purple-500"
                                 />
                               </div>
                             )}
@@ -446,11 +449,6 @@ export default function AwardsTableView() {
                             {r.city && `${r.city}, `}{r.state}
                           </div>
                         </div>
-                        {status.is_overall_winner && !isOverall && (
-                          <p className="text-center text-purple-700 font-bold mt-4">
-                            ⭐ Dual Winner (Overall + Age Group)
-                          </p>
-                        )}
                       </div>
                     );
                   })}
@@ -466,15 +464,21 @@ export default function AwardsTableView() {
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Name</th>
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Race</th>
                         <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Time</th>
-                        <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Age Group Picked Up</th>
-                        <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Overall Picked Up</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">Location</th>
+                        {!isOverall && (
+                          <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">Age Group Picked Up</th>
+                        )}
+                        <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">
+                          Overall Picked Up
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {runners.map((r) => {
-                        const place = div.includes('Overall') ? r.gender_place : r.age_group_place;
+                        const place = isOverall ? r.gender_place : r.age_group_place;
                         const status = pickupStatus[r.entry_id] || {};
-                        const isOverall = div.includes('Overall');
+                        const showAG = !isOverall;
+                        const showOverall = status.is_overall_winner || isOverall;
 
                         return (
                           <tr
@@ -487,32 +491,37 @@ export default function AwardsTableView() {
                             <td className="px-6 py-4 font-bold">{r.bib || '-'}</td>
                             <td className="px-6 py-4 font-semibold">
                               {r.first_name} {r.last_name}
-                              {status.is_overall_winner && !isOverall && (
+                              {(status.is_overall_winner && !isOverall) && (
                                 <span className="block text-sm font-bold text-purple-600">Dual Winner</span>
                               )}
                             </td>
                             <td className="px-6 py-4">{r.race_name || '-'}</td>
                             <td className="px-6 py-4">{formatChronoTime(r.chip_time)}</td>
-                            <td className="px-6 py-4 text-center">
-                              <input
-                                type="checkbox"
-                                checked={status.picked_up || false}
-                                onChange={() => toggleAGPickup(r.entry_id)}
-                                className="h-7 w-7 text-green-600 rounded focus:ring-green-500 cursor-pointer"
-                              />
+                            <td className="px-6 py-4">
+                              {r.city && `${r.city}, `}
+                              {r.state}
                             </td>
-                            <td className="px-6 py-4 text-center">
-                              {status.is_overall_winner || isOverall ? (
+                            {showAG && (
+                              <td className="px-6 py-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={status.picked_up || false}
+                                  onChange={() => toggleAGPickup(r.entry_id)}
+                                  className="h-7 w-7 text-green-600 rounded focus:ring-green-500 cursor-pointer"
+                                />
+                              </td>
+                            )}
+                            {showOverall && (
+                              <td className="px-6 py-4 text-center">
                                 <input
                                   type="checkbox"
                                   checked={status.overall_picked_up || false}
                                   onChange={() => toggleOverallPickup(r.entry_id)}
                                   className="h-7 w-7 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
                                 />
-                              ) : (
-                                <span className="text-gray-400">—</span>
-                              )}
-                            </td>
+                              </td>
+                            )}
+                            {!showAG && !showOverall && <td colSpan="2"></td>}
                           </tr>
                         );
                       })}
