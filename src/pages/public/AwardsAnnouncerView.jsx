@@ -1,5 +1,5 @@
 // src/pages/public/AwardsAnnouncerView.jsx
-// FINAL + FULL DEBUG LOGGING — Realtime places update diagnosis
+// FINAL + CONSOLE LOGGING — Realtime places update + hide until race selected
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -16,7 +16,7 @@ export default function AwardsAnnouncerView() {
   const [loading, setLoading] = useState(true);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  console.log('🔄 AwardsAnnouncerView mounted/re-rendered with eventId:', eventId);
+  console.log('🔄 AwardsAnnouncerView rendered with eventId:', eventId);
   console.log('Current selectedRace:', selectedRace);
   console.log('Current awardSettings:', awardSettings);
 
@@ -37,7 +37,6 @@ export default function AwardsAnnouncerView() {
         console.log('🏆 Event name fetched:', eventData?.name);
         setEventName(eventData?.name || 'Awards Ceremony');
 
-        // Load races
         const { data: results } = await supabase
           .from('chronotrack_results')
           .select('race_name')
@@ -63,7 +62,7 @@ export default function AwardsAnnouncerView() {
     fetchInfo();
   }, [eventId]);
 
-  // Load results + realtime subscriptions
+  // Load results + realtime for results AND settings
   useEffect(() => {
     if (!eventId) return;
 
@@ -108,21 +107,19 @@ export default function AwardsAnnouncerView() {
         { event: '*', schema: 'public', table: 'event_results_visibility', filter: `event_id=eq.${Number(eventId)}` },
         (payload) => {
           console.log('⚙️ SETTINGS REALTIME PAYLOAD RECEIVED:', payload);
-          console.log('Payload new:', payload.new);
           console.log('New overall_places:', payload.new.overall_places);
           console.log('New age_group_places:', payload.new.age_group_places);
 
           const newSettings = {
-            overall_places: payload.new.overall_places ?? 3,
-            age_group_places: payload.new.age_group_places ?? 3,
+            overall_places: payload.new.overall_places || 3,
+            age_group_places: payload.new.age_group_places || 3,
           };
           console.log('🎯 Updating awardSettings to:', newSettings);
           setAwardSettings(newSettings);
         }
       )
-      .subscribe((status, err) => {
+      .subscribe((status) => {
         console.log('Channel status:', status);
-        if (err) console.error('Channel error:', err);
       });
 
     return () => {
@@ -137,20 +134,20 @@ export default function AwardsAnnouncerView() {
 
     console.log('Loading initial award settings...');
     const loadInitial = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('event_results_visibility')
         .select('overall_places, age_group_places')
         .eq('event_id', eventId)
         .single();
 
-      if (error) {
-        console.warn('Initial settings error (likely no row):', error.message);
-      } else {
+      if (data) {
         console.log('Initial settings loaded:', data);
         setAwardSettings({
           overall_places: data.overall_places || 3,
           age_group_places: data.age_group_places || 3,
         });
+      } else {
+        console.log('No settings row — using defaults');
       }
     };
 
@@ -207,24 +204,26 @@ export default function AwardsAnnouncerView() {
     const places = div.includes('Overall') ? awardSettings.overall_places : awardSettings.age_group_places;
     console.log(`Calculating ${div} with ${places} places`);
 
-    let runners;
     if (div === 'Male Overall') {
-      runners = filteredFinishers
+      const runners = filteredFinishers
         .filter(r => r.gender === 'M')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
-    } else if (div === 'Female Overall') {
-      runners = filteredFinishers
+      console.log(`Male Overall runners: ${runners.length}`);
+      return runners;
+    }
+    if (div === 'Female Overall') {
+      const runners = filteredFinishers
         .filter(r => r.gender === 'F')
         .sort((a, b) => (a.place || Infinity) - (b.place || Infinity))
         .slice(0, places);
-    } else {
-      runners = filteredFinishers
-        .filter(r => r.age_group_name === div)
-        .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
-        .slice(0, places);
+      console.log(`Female Overall runners: ${runners.length}`);
+      return runners;
     }
-
+    const runners = filteredFinishers
+      .filter(r => r.age_group_name === div)
+      .sort((a, b) => (a.age_group_place || Infinity) - (b.age_group_place || Infinity))
+      .slice(0, places);
     console.log(`${div} runners: ${runners.length}`);
     return runners;
   };
